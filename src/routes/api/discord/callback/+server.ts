@@ -3,16 +3,19 @@ import type { RequestHandler } from './$types';
 import axios from 'axios';
 import { generateApiKeyForDiscordId } from '$lib/telegramStorage';
 
-const ALLOWED_IDS = new Set([process.env.OWNER_ID!]);
-
-const BASE_URL =
-  process.env.PUBLIC_BASE_URL ?? 'http://localhost:5173';
-
-const CLIENT_ID = process.env.DISCORD_CLIENT_ID ?? '';
-const CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET ?? '';
-
-export const GET: RequestHandler = async ({ url }) => {
+export const GET: RequestHandler = async ({ url, platform }) => {
   try {
+    const env = platform?.env;
+
+    const OWNER_ID = env?.OWNER_ID ?? '';
+    const BASE_URL = env?.PUBLIC_BASE_URL ?? 'http://localhost:5173';
+    const CLIENT_ID = env?.DISCORD_CLIENT_ID ?? '';
+    const CLIENT_SECRET = env?.DISCORD_CLIENT_SECRET ?? '';
+
+    if (!CLIENT_ID || !CLIENT_SECRET) {
+      return new Response(JSON.stringify({ error: 'Missing Discord env vars' }), { status: 500 });
+    }
+
     const code = url.searchParams.get('code');
     if (!code) return new Response('Missing code', { status: 400 });
 
@@ -47,7 +50,7 @@ export const GET: RequestHandler = async ({ url }) => {
 
     const user = userRes.data;
 
-    if (!ALLOWED_IDS.has(user.id)) {
+    if (user.id !== OWNER_ID) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 403
       });
