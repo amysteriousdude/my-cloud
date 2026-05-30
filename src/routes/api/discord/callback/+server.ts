@@ -12,20 +12,13 @@ export const GET: RequestHandler = async ({ url }) => {
     const CLIENT_SECRET = env.DISCORD_CLIENT_SECRET ?? '';
 
     if (!CLIENT_ID || !CLIENT_SECRET) {
-      return new Response(JSON.stringify({
-        error: 'Missing Discord env vars',
-        debug: {
-          has_CLIENT_ID: !!env.DISCORD_CLIENT_ID,
-          has_CLIENT_SECRET: !!env.DISCORD_CLIENT_SECRET,
-          allKeys: Object.keys(env)
-        }
-      }), { status: 500 });
+      return new Response(JSON.stringify({ error: 'Missing Discord env vars' }), { status: 500 });
     }
 
     const code = url.searchParams.get('code');
     if (!code) return new Response('Missing code', { status: 400 });
 
-    const redirectUri = `${BASE_URL}/api/discord/callback`;
+    const redirectUri = `${PUBLIC_BASE_URL}/api/discord/callback`;
 
     const params = new URLSearchParams({
       client_id: CLIENT_ID,
