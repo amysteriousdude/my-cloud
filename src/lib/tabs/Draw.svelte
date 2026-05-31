@@ -42,14 +42,14 @@
     sx?: number; sy?: number; ex?: number; ey?: number;
   };
 
-  let strokes: Stroke[] = [];
-  let historyIdx = -1;
+  let strokes: Stroke[] = $state([]);
+  let historyIdx = $state(-1);
   const MAX_HISTORY = 50;
 
   let drawing = false;
-  let currentStroke: Stroke | null = null;
-  let currentPoints: Point[] = [];
-  let pencilPaths: string[] = [];
+  let currentStroke: Stroke | null = $state(null);
+  let currentPoints: Point[] = $state([]);
+  let pencilPaths: string[] = $state([]);
 
   // ── SVG coords ──────────────────────────────────────────────────────────
   function svgPoint(e: PointerEvent): Point {
@@ -417,7 +417,7 @@
       <button class="tb-btn" class:active={tool==='eraser'} onclick={() => tool='eraser'} title="Eraser"><IconEraser size={15}/></button>
     </div>
 
-    <div class="tb-sep"/>
+    <div class="tb-sep"></div>
 
     <div class="tb-group">
       <button class="tb-btn" class:active={tool==='line'} onclick={() => tool='line'} title="Line"><IconMinus size={15}/></button>
@@ -425,6 +425,15 @@
       <button class="tb-btn" class:active={tool==='ellipse'} onclick={() => tool='ellipse'} title="Ellipse"><IconCircle size={15}/></button>
       <button class="tb-btn" class:active={tool==='arrow'} onclick={() => tool='arrow'} title="Arrow"><IconArrowBadgeRight size={15}/></button>
       <button class="tb-btn" class:active={tool==='triangle'} onclick={() => tool='triangle'} title="Triangle"><IconTriangle size={15}/></button>
+    </div>
+
+    <div class="tb-sep"></div>
+
+    <div class="tb-group tb-colors">
+      <label class="color-label" title="Stroke color">
+        <span class="color-swatch" style="background:{color}"></span>
+        <input type="color" bind:value={color} class="color-input"/>
+      </label>
     </div>
 
     <div class="tb-sep"/>
