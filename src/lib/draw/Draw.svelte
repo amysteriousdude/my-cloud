@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import {
     IconPencil, IconEraser, IconSquare, IconCircle,
     IconMinus, IconArrowBack, IconArrowForward,
@@ -104,8 +104,8 @@
   }
 
   // ── Colors ──────────────────────────────────────────────────────────
-  let fgColor = $state("#ffffff");
-  let bgColor2 = $state("#000000");
+  let fgColor = $state("#000000");
+  let bgColor2 = $state("#ffffff");
   let recentColors = $state<string[]>([
     "#ff0000","#00ff00","#0000ff","#ffff00","#ff00ff","#00ffff","#ff8800","#8800ff",
     "#ffffff","#888888","#444444","#000000","#ff4444","#44ff44","#4444ff","#ffaa00",
@@ -574,6 +574,13 @@
 
   // ── Init ────────────────────────────────────────────────────────────
   onMount(() => {
+    tick().then(() => {
+      if (!canvasWrap) return;
+      const rect = canvasWrap.getBoundingClientRect();
+      wrapW = rect.width;
+      wrapH = rect.height;
+      fitToScreen();
+    });
     const ro = new ResizeObserver(() => {
       if (!canvasWrap) return;
       const rect = canvasWrap.getBoundingClientRect();
@@ -581,9 +588,6 @@
       wrapH = rect.height;
     });
     ro.observe(canvasWrap);
-    const rect = canvasWrap?.getBoundingClientRect();
-    if (rect) { wrapW = rect.width; wrapH = rect.height; }
-    fitToScreen();
     return () => ro.disconnect();
   });
 
@@ -1015,19 +1019,17 @@
   .ob-preset.active { border-color: #6366f1; background: #2a2a3e; color: #fff; }
 
   /* ═══ Canvas container (rulers + canvas) ═══ */
-  .canvas-container { flex: 1; display: grid; overflow: hidden; min-height: 0; }
-  .canvas-container:has(.ruler) { grid-template-columns: 20px 1fr; grid-template-rows: 20px 1fr; }
-  .canvas-container:not(:has(.ruler)) { grid-template-columns: 1fr; grid-template-rows: 1fr; }
-  .ruler { background: #26262a; overflow: hidden; }
-  .ruler-h { grid-column: 2; grid-row: 1; }
-  .ruler-v { grid-column: 1; grid-row: 2; }
-  .ruler-corner { grid-column: 1; grid-row: 1; background: #26262a; border-right: 1px solid #333; border-bottom: 1px solid #333; }
+  .canvas-container { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 0; position: relative; }
+  .ruler { background: #26262a; overflow: hidden; flex-shrink: 0; }
+  .ruler-h { height: 20px; width: 100%; }
+  .ruler-v { position: absolute; left: 0; top: 20px; bottom: 0; width: 20px; z-index: 2; }
+  .ruler-corner { position: absolute; left: 0; top: 0; width: 20px; height: 20px; background: #26262a; border-right: 1px solid #333; border-bottom: 1px solid #333; z-index: 3; }
   .ruler-canvas { width: 100%; height: 100%; display: block; }
 
-  .canvas-wrap { grid-column: 2; grid-row: 2; overflow: hidden; position: relative; background: #1a1a1e; }
+  .canvas-wrap { flex: 1; overflow: hidden; position: relative; background: #1a1a1e; min-height: 0; }
   .canvas-wrap.panning { cursor: grab !important; }
-  .draw-svg { display: block; position: absolute; box-shadow: 0 0 0 1px rgba(255,255,255,.04), 0 2px 16px rgba(0,0,0,.5); cursor: crosshair; }
-  .grid-overlay { position: absolute; pointer-events: none; z-index: 1; }
+  .draw-svg { display: block; position: absolute; left: 0; top: 0; box-shadow: 0 0 0 1px rgba(255,255,255,.04), 0 2px 16px rgba(0,0,0,.5); cursor: crosshair; }
+  .grid-overlay { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 1; }
 
   .brush-cursor { position: absolute; pointer-events: none; border: 1.5px solid; border-radius: 50%; transform: translate(-50%, -50%); z-index: 10; transition: width .05s, height .05s, opacity .15s; }
 
