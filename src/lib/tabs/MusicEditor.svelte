@@ -5,7 +5,7 @@
     IconPlayerSkipBack, IconPlayerSkipForward,
     IconUpload, IconDownload, IconTrash, IconPlus,
     IconVolume, IconVolume3, IconMicrophone,
-    IconSettings, IconMusic, IconPiano, IconMixer,
+    IconSettings, IconMusic, IconPiano, IconAdjustments,
     IconHeadphones, IconMetronome, IconKeyboard,
     IconCloudUpload, IconPlug, IconWaveSine,
   } from "@tabler/icons-svelte";
@@ -565,7 +565,7 @@
     <div class="me-view-tabs">
       <button class="me-vtab" class:active={view === "timeline"} onclick={() => view = "timeline"}><IconMusic size={14}/> Timeline</button>
       <button class="me-vtab" class:active={view === "pianoroll"} onclick={() => view = "pianoroll"}><IconPiano size={14}/> Piano Roll</button>
-      <button class="me-vtab" class:active={view === "mixer"} onclick={() => view = "mixer"}><IconMixer size={14}/> Mixer</button>
+      <button class="me-vtab" class:active={view === "mixer"} onclick={() => view = "mixer"}><IconAdjustments size={14}/> Mixer</button>
       <button class="me-vtab" class:active={view === "plugins"} onclick={() => view = "plugins"}><IconPlug size={14}/> Plugins</button>
     </div>
 
