@@ -14,8 +14,8 @@
     type MixerChannel, type EffectNode, type EffectType,
     createDefaultSong, uid, noteToFreq, noteName, NOTE_NAMES,
     MIN_NOTE, MAX_NOTE,
-  } from "./engine";
-  import { AudioEngine } from "./audio";
+  } from "$lib/music/engine";
+  import { AudioEngine } from "$lib/music/audio";
 
   let { apiKey }: { apiKey: string } = $props();
 
