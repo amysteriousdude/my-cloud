@@ -280,6 +280,7 @@
     }
 
     if (tool === "eyedropper") { pickColor(e); return; }
+    if (tool === "select") return;
 
     if (tool === "text") {
       const pt = svgPoint(e);
@@ -501,20 +502,30 @@
     return `<path d="${d}" fill="none" stroke="black" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" opacity="1"/>`;
   }
 
+  function renderLayerEraserSvg(layer: Layer): string {
+    let out = "";
+    let inEraser = false;
+    for (const s of layer.strokes) {
+      if (isEraserStroke(s)) {
+        if (!inEraser) { out += `<g style="mix-blend-mode:destination-out">`; inEraser = true; }
+        out += renderEraserInMask(s, false);
+      } else {
+        if (inEraser) { out += `</g>`; inEraser = false; }
+        out += renderStroke(s, false);
+      }
+    }
+    if (inEraser) out += `</g>`;
+    return out;
+  }
+
   function renderSvgString(withBg = false): string {
     const filterDef = `<filter id="eraser-artistic-filter" x="-20%" y="-20%" width="140%" height="140%"><feTurbulence type="fractalNoise" baseFrequency="0.06" numOctaves="3" seed="5" result="noise"/><feDisplacementMap in="SourceGraphic" in2="noise" scale="4" xChannelSelector="R" yChannelSelector="G"/></filter>`;
     let defs = filterDef;
     let inner = "";
     for (const layer of layers) {
       if (!layer.visible) continue;
-      const hasEraser = layer.strokes.some(s => isEraserStroke(s));
-      if (hasEraser) {
-        defs += `<mask id="mask-${layer.id}"><rect width="100%" height="100%" fill="white"/>`;
-        for (const s of layer.strokes) { if (isEraserStroke(s)) defs += renderEraserInMask(s, false); }
-        defs += `</mask>`;
-      }
-      inner += `<g opacity="${layer.opacity / 100}"${hasEraser ? ` mask="url(#mask-${layer.id})"` : ""}>`;
-      for (const s of layer.strokes) { if (!isEraserStroke(s)) inner += renderStroke(s, false); }
+      inner += `<g style="isolation:isolate" opacity="${layer.opacity / 100}">`;
+      inner += renderLayerEraserSvg(layer);
       inner += "</g>";
     }
     if (currentStroke && !isEraserStroke(currentStroke)) inner += renderStroke(currentStroke, true);
@@ -1016,17 +1027,6 @@
                 <feTurbulence type="fractalNoise" baseFrequency="0.06" numOctaves="3" seed="5" result="noise"/>
                 <feDisplacementMap in="SourceGraphic" in2="noise" scale="4" xChannelSelector="R" yChannelSelector="G"/>
               </filter>
-              {#each layers as layer (layer.id)}
-                <mask id="mask-{layer.id}">
-                  <rect width="100%" height="100%" fill="white"/>
-                  {#each layer.strokes.filter(s => isEraserStroke(s)) as s (s.id)}
-                    {@html renderEraserInMask(s, false)}
-                  {/each}
-                  {#if currentStroke && isEraserStroke(currentStroke) && currentStroke.layerId === layer.id}
-                    {@html renderEraserInMask(currentStroke, true)}
-                  {/if}
-                </mask>
-              {/each}
             </defs>
             <rect width="100%" height="100%" fill={bgColor2}/>
             {#if settings.checkerBg}
@@ -1035,13 +1035,13 @@
 
             {#each layers as layer (layer.id)}
               {#if layer.visible}
-                {@const hasEraser = layer.strokes.some(s => isEraserStroke(s)) || (currentStroke && isEraserStroke(currentStroke) && currentStroke.layerId === layer.id)}
-                <g opacity={layer.opacity / 100} mask={hasEraser ? `url(#mask-${layer.id})` : undefined}>
-                  {#each layer.strokes as s (s.id)}
-                    {#if !isEraserStroke(s)}
-                      {@html renderStroke(s, false)}
-                    {/if}
-                  {/each}
+                <g style="isolation: isolate" opacity={layer.opacity / 100}>
+                  {@html renderLayerEraserSvg(layer)}
+                  {#if currentStroke && isEraserStroke(currentStroke) && currentStroke.layerId === layer.id}
+                    <g style="mix-blend-mode:destination-out">
+                      {@html renderEraserInMask(currentStroke, true)}
+                    </g>
+                  {/if}
                 </g>
               {/if}
             {/each}
