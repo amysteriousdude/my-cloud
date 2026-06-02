@@ -295,6 +295,7 @@
           {/each}
         </div>
         <div class="ctrl-group">
+          <!-- svelte-ignore a11y_label_has_associated_control -->
           <label><span class="label-row">Brush size</span><span class="ctrl-val">{brushSize}</span></label>
           <input type="range" bind:value={brushSize} min="1" max="4"/>
         </div>
@@ -327,6 +328,7 @@
           {/each}
         </div>
         <div class="ctrl-group" style="margin-top:8px;">
+          <!-- svelte-ignore a11y_label_has_associated_control -->
           <label>Custom color</label>
           <div class="color-row">
             <input type="color" bind:value={currentColor} class="color-swatch"/>

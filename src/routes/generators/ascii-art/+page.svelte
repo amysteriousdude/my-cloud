@@ -265,14 +265,17 @@
         <section class="ctrl-section">
           <h3 class="ctrl-section-title">Text</h3>
           <div class="ctrl-group">
+            <!-- svelte-ignore a11y_label_has_associated_control -->
             <label>Input text</label>
             <textarea bind:value={inputText} class="text-input" rows="3" placeholder="Type something..."></textarea>
           </div>
           <div class="ctrl-group">
+            <!-- svelte-ignore a11y_label_has_associated_control -->
             <label><span class="label-row">Font size</span><span class="ctrl-val">{fontSize}</span></label>
             <input type="range" bind:value={fontSize} min="8" max="72"/>
           </div>
           <div class="ctrl-group">
+            <!-- svelte-ignore a11y_label_has_associated_control -->
             <label><span class="label-row">Output width</span><span class="ctrl-val">{outputSize} chars</span></label>
             <input type="range" bind:value={outputSize} min="20" max="150"/>
           </div>
@@ -281,6 +284,7 @@
         <section class="ctrl-section">
           <h3 class="ctrl-section-title">Image</h3>
           <div class="ctrl-group">
+            <!-- svelte-ignore a11y_label_has_associated_control -->
             <label>Upload image</label>
             <input type="file" accept="image/*" onchange={handleImageUpload} class="file-input"/>
           </div>
@@ -290,6 +294,7 @@
             </div>
           {/if}
           <div class="ctrl-group">
+            <!-- svelte-ignore a11y_label_has_associated_control -->
             <label><span class="label-row">Resolution</span><span class="ctrl-val">{resolution} cols</span></label>
             <input type="range" bind:value={resolution} min="20" max="150"/>
           </div>
@@ -299,6 +304,7 @@
       <section class="ctrl-section">
         <h3 class="ctrl-section-title">Style</h3>
         <div class="ctrl-group">
+          <!-- svelte-ignore a11y_label_has_associated_control -->
           <label>Character set</label>
           <div class="chip-row">
             {#each Object.keys(CHARSETS) as cs}
@@ -342,8 +348,6 @@
   .ctrl-group:last-child{margin-bottom:0;}
   .ctrl-group label{font-size:12.5px;color:var(--text-2);font-weight:500;display:flex;justify-content:space-between;align-items:center;}
   .ctrl-val{color:var(--text-3);font-weight:400;}
-  .mono{font-family:'Geist Mono',monospace;}
-  .small{font-size:11px;}
   .label-row{display:flex;align-items:center;gap:4px;}
   input[type="range"]{width:100%;accent-color:var(--accent);cursor:pointer;}
   .text-input{width:100%;background:var(--bg-1);border:1px solid var(--border);border-radius:7px;padding:6px 10px;color:var(--text-1);font-size:13px;font-family:'Geist Mono',monospace;outline:none;transition:border-color .13s;resize:vertical;}

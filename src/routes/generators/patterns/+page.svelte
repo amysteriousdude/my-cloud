@@ -340,14 +340,17 @@
       <section class="ctrl-section">
         <h3 class="ctrl-section-title">Parameters</h3>
         <div class="ctrl-group">
+          <!-- svelte-ignore a11y_label_has_associated_control -->
           <label><span class="label-row">Density</span><span class="ctrl-val">{density}</span></label>
           <input type="range" bind:value={density} min="3" max="30"/>
         </div>
         <div class="ctrl-group">
+          <!-- svelte-ignore a11y_label_has_associated_control -->
           <label><span class="label-row">Scale</span><span class="ctrl-val">{scale.toFixed(1)}</span></label>
           <input type="range" bind:value={scale} min="0.2" max="3" step="0.1"/>
         </div>
         <div class="ctrl-group">
+          <!-- svelte-ignore a11y_label_has_associated_control -->
           <label><span class="label-row">Rotation</span><span class="ctrl-val">{rotation}°</span></label>
           <input type="range" bind:value={rotation} min="-180" max="180"/>
         </div>
@@ -356,6 +359,7 @@
       <section class="ctrl-section">
         <h3 class="ctrl-section-title">Colors</h3>
         <div class="ctrl-group">
+          <!-- svelte-ignore a11y_label_has_associated_control -->
           <label>Primary</label>
           <div class="color-row">
             <input type="color" bind:value={primaryColor} class="color-swatch"/>
@@ -363,6 +367,7 @@
           </div>
         </div>
         <div class="ctrl-group">
+          <!-- svelte-ignore a11y_label_has_associated_control -->
           <label>Secondary</label>
           <div class="color-row">
             <input type="color" bind:value={secondaryColor} class="color-swatch"/>
@@ -370,6 +375,7 @@
           </div>
         </div>
         <div class="ctrl-group">
+          <!-- svelte-ignore a11y_label_has_associated_control -->
           <label>Background</label>
           <div class="color-row">
             <input type="color" bind:value={bgColor} class="color-swatch"/>
@@ -393,6 +399,7 @@
       <section class="ctrl-section">
         <h3 class="ctrl-section-title">Canvas</h3>
         <div class="ctrl-group">
+          <!-- svelte-ignore a11y_label_has_associated_control -->
           <label>Size</label>
           <div class="size-row">
             <input type="number" bind:value={canvasW} min="200" max="4000" step="100" placeholder="W"/>

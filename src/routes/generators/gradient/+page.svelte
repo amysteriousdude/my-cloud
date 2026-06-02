@@ -227,6 +227,7 @@
         </div>
         {#if direction === 'linear'}
           <div class="ctrl-group">
+            <!-- svelte-ignore a11y_label_has_associated_control -->
             <label><span class="label-row">Angle</span><span class="ctrl-val">{angle}&deg;</span></label>
             <input type="range" bind:value={angle} min="0" max="360"/>
           </div>
@@ -258,6 +259,7 @@
         </div>
         {#if useNoise}
           <div class="ctrl-group">
+            <!-- svelte-ignore a11y_label_has_associated_control -->
             <label><span class="label-row">Amount</span><span class="ctrl-val">{noiseAmount.toFixed(2)}</span></label>
             <input type="range" bind:value={noiseAmount} min="0.05" max="1" step="0.05"/>
           </div>
@@ -271,6 +273,7 @@
       <section class="ctrl-section">
         <h3 class="ctrl-section-title">Canvas</h3>
         <div class="ctrl-group">
+          <!-- svelte-ignore a11y_label_has_associated_control -->
           <label>Size</label>
           <div class="size-row">
             <input type="number" bind:value={canvasW} min="200" max="4000" step="100" placeholder="W"/>

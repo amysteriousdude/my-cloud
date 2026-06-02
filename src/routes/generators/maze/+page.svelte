@@ -439,13 +439,9 @@
   .color-swatch{width:30px;height:30px;border-radius:7px;border:1px solid var(--border);padding:2px;background:var(--bg-1);cursor:pointer;flex-shrink:0;}
   .color-row .mono{font-size:11.5px;color:var(--text-3);}
 
-  .chip-row{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;}
   .chip{padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg-3);color:var(--text-2);font-size:12px;font-family:'Geist',sans-serif;cursor:pointer;transition:.13s;}
-  .chip.active{border-color:var(--accent);color:var(--accent);background:rgba(99,102,241,.1);}
   .chip.small{padding:3px 8px;font-size:11px;}
   .chip:hover{border-color:var(--border-hover);color:var(--text-1);}
-
-  .range-labels{display:flex;justify-content:space-between;font-size:10px;color:var(--text-3);font-family:'Geist Mono',monospace;margin-top:2px;}
 
   .toggle-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
   .toggle-label{font-size:12.5px;color:var(--text-2);}

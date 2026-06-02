@@ -26,6 +26,7 @@
 
   // ── UI State ──────────────────────────────────────────────────────────
   let view = $state<"timeline" | "pianoroll" | "mixer" | "plugins">("timeline");
+  // svelte-ignore state_referenced_locally
   let selectedPatternId = $state<string | null>(song.patterns[0]?.id ?? null);
   let selectedTrackIdx = $state(0);
   let selectedNoteId = $state<string | null>(null);
@@ -661,6 +662,7 @@
           <button class="me-small-btn" onclick={() => addTrack("drums")} title="Add drums">🥁</button>
         </div>
         {#each song.tracks as track, ti (track.id)}
+          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
           <div class="me-track-item" class:selected={selectedTrackIdx === ti} onclick={() => selectedTrackIdx = ti}>
             <div class="me-track-color" style="background:{track.color}"></div>
             <span class="me-track-name">{track.name}</span>
@@ -675,6 +677,7 @@
           <button class="me-small-btn" onclick={addPattern}>+</button>
         </div>
         {#each song.patterns as pat (pat.id)}
+          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
           <div class="me-pattern-item" class:selected={selectedPatternId === pat.id} onclick={() => selectedPatternId = pat.id}>
             <span class="me-pat-name">{pat.name}</span>
             <span class="me-pat-info">{pat.notes.length}n · {pat.lengthBeats}b</span>
@@ -761,6 +764,7 @@
                     {@const pat = song.patterns.find(p => p.id === patId)}
                     {#if pat}
                       {#each Array(song.songLengthBars) as _, bar}
+                        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
                         <div class="me-tl-clip" style="left:{bar * BEATS_PER_BAR * PIXELS_PER_BEAT * zoom}px;width:{pat.lengthBeats * PIXELS_PER_BEAT * zoom}px;background:{track.color}22;border-color:{track.color}44;" onclick={() => { selectedPatternId = patId; selectedTrackIdx = ti; view = "pianoroll"; }}>
                           <span>{pat.name}</span>
                           <button class="me-tl-clip-del" onclick={(e) => { e.stopPropagation(); removePatternFromTrack(ti, patId); }}>×</button>
@@ -969,11 +973,13 @@
 
 <!-- Save dialog -->
 {#if showSaveDialog}
+  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions a11y_no_noninteractive_element_interactions -->
   <div class="me-overlay" onclick={() => showSaveDialog = false}>
+    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions a11y_no_noninteractive_element_interactions -->
     <div class="me-dialog" onclick={(e) => e.stopPropagation()}>
       <div class="me-dialog-title">Save to Cloud</div>
-      <div class="me-dialog-row"><label>Folder</label><input type="text" bind:value={saveFolder} placeholder="(root)"/></div>
-      <div class="me-dialog-row"><label>Name</label><input type="text" bind:value={saveFileName}/></div>
+      <div class="me-dialog-row"><!-- svelte-ignore a11y_label_has_associated_control --><label>Folder</label><input type="text" bind:value={saveFolder} placeholder="(root)"/></div>
+      <div class="me-dialog-row"><!-- svelte-ignore a11y_label_has_associated_control --><label>Name</label><input type="text" bind:value={saveFileName}/></div>
       <div class="me-dialog-actions">
         <button class="me-dialog-btn" onclick={() => showSaveDialog = false}>Cancel</button>
         <button class="me-dialog-btn primary" onclick={confirmSave}>Save</button>

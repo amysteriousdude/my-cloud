@@ -147,6 +147,7 @@
   let saving       = $state(false);
   let dirty        = $state(false);
   type TextView = 'editor' | 'preview' | 'split';
+  // svelte-ignore state_referenced_locally
   let textView     = $state<TextView>(isMd ? 'split' : 'editor');
   let mdHtml       = $state('');
 

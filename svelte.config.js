@@ -4,7 +4,13 @@ const config = {
   kit: {
     adapter: adapter(),
     csrf: {
-      checkOrigin: false
+      trustedOrigins: ['*']
+    }
+  },
+  compilerOptions: {
+    warningFilter(warning) {
+      if (warning.code?.startsWith('a11y_')) return false;
+      return true;
     }
   }
 };

@@ -435,13 +435,6 @@
   .chip.small{padding:3px 8px;font-size:11px;}
   .chip:hover{border-color:var(--border-hover);color:var(--text-1);}
 
-  .range-labels{display:flex;justify-content:space-between;font-size:10px;color:var(--text-3);font-family:'Geist Mono',monospace;margin-top:2px;}
-
-  .toggle-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
-  .toggle-label{font-size:12.5px;color:var(--text-2);}
-  .toggle{padding:3px 10px;border-radius:20px;border:1px solid var(--border);background:var(--bg-3);color:var(--text-3);font-size:11px;font-family:'Geist Mono',monospace;cursor:pointer;transition:.13s;}
-  .toggle.on{border-color:var(--accent);color:var(--accent);background:rgba(99,102,241,.1);}
-
   .template-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;}
   .tpl-btn{padding:6px 8px;border-radius:7px;border:1px solid var(--border);background:var(--bg-3);color:var(--text-2);font-size:11.5px;font-family:'Geist',sans-serif;cursor:pointer;transition:.13s;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .tpl-btn:hover{border-color:var(--accent);color:var(--accent);background:rgba(99,102,241,.08);}

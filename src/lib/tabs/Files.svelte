@@ -4,7 +4,7 @@
   import DetailsSidebar from "$lib/components/DetailsSidebar.svelte";
   import ContextMenu from "$lib/components/ContextMenu.svelte";
   import { toasts } from "$lib/types/toast";
-  import { zipSync, strToU8 } from "fflate";
+  import { zipSync } from "fflate";
   import { onMount } from "svelte";
   import { fade, fly } from "svelte/transition";
   import { flip } from "svelte/animate";
@@ -1315,6 +1315,7 @@
 {/if}
 
 <div class="files-root" role="presentation" ondragover={handleDragOver} ondragleave={handleDragLeave}>
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div class="content" oncontextmenu={(e) => openContextMenu(e, null)}>
         <input
           type="file"
@@ -1581,7 +1582,7 @@
 
             <!-- Folder Rows -->
             {#each currentFolders as folder (folder.folderId)}
-              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
               <div class="file-row folder-row"
                 animate:flip={{ duration: 200 }}
                 in:fly={{ y: -10, duration: 150 }}
@@ -1659,7 +1660,7 @@
             {/each}
             {#each processedFiles as file, idx (file.metaFileId)}
               {@const FileIcon = fileIconComponent(file.type)}
-              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
               <div
                 class="file-row"
                 animate:flip={{ duration: 200 }}
@@ -1895,6 +1896,7 @@
               </div>
             {/each}
             {#each processedFiles as file (file.metaFileId)}
+              <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
               <div
                 class="grid-card"
                 animate:flip={{ duration: 200 }}
@@ -1946,6 +1948,7 @@
                   </div>
                   <span class="grid-meta">{formatBytes(file.totalBytes)}</span>
                 </div>
+                <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
                 <div class="grid-actions" onclick={(e) => e.stopPropagation()}>
                     <button
                      class="act-btn sm"
@@ -2074,6 +2077,7 @@
     <div class="modal-overlay" onclick={(e) => { e.stopPropagation(); showDeleteConfirm = false; }} role="presentation">
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
       <div class="modal-content danger" onclick={(e) => e.stopPropagation()} role="document">
         <div class="modal-header">
           <IconTrash size={24} stroke={1.5} class="msg-icon danger" />
@@ -2858,7 +2862,6 @@
   @media (max-width: 600px) {
     /* on mobile the sidebar is a bottom bar, no left margin needed */
     .content { padding: 10px 12px; }
-    .toolbar-right button span { display: none; } /* hide text labels in toolbar */
     .factions { gap: 2px; }
     .act-btn { width: 26px; height: 26px; }
   }

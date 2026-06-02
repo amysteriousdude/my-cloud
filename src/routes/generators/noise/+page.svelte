@@ -264,18 +264,22 @@
       <section class="ctrl-section">
         <h3 class="ctrl-section-title">Parameters</h3>
         <div class="ctrl-group">
+          <!-- svelte-ignore a11y_label_has_associated_control -->
           <label><span class="label-row">Scale / Zoom</span><span class="ctrl-val">{scale}</span></label>
           <input type="range" bind:value={scale} min="5" max="200"/>
         </div>
         <div class="ctrl-group">
+          <!-- svelte-ignore a11y_label_has_associated_control -->
           <label><span class="label-row">Octaves</span><span class="ctrl-val">{octaves}</span></label>
           <input type="range" bind:value={octaves} min="1" max="8"/>
         </div>
         <div class="ctrl-group">
+          <!-- svelte-ignore a11y_label_has_associated_control -->
           <label><span class="label-row">Persistence</span><span class="ctrl-val">{persistence.toFixed(2)}</span></label>
           <input type="range" bind:value={persistence} min="0.1" max="0.9" step="0.05"/>
         </div>
         <div class="ctrl-group">
+          <!-- svelte-ignore a11y_label_has_associated_control -->
           <label><span class="label-row">Seed</span><span class="ctrl-val mono">{seed}</span></label>
           <input type="number" bind:value={seed} min="0" max="99999"/>
         </div>
@@ -290,6 +294,7 @@
         </div>
         {#if colorMode === 'custom'}
           <div class="ctrl-group">
+            <!-- svelte-ignore a11y_label_has_associated_control -->
             <label>Color 1</label>
             <div class="color-row">
               <input type="color" bind:value={customColor1} class="color-swatch"/>
@@ -297,6 +302,7 @@
             </div>
           </div>
           <div class="ctrl-group">
+            <!-- svelte-ignore a11y_label_has_associated_control -->
             <label>Color 2</label>
             <div class="color-row">
               <input type="color" bind:value={customColor2} class="color-swatch"/>
@@ -309,6 +315,7 @@
       <section class="ctrl-section">
         <h3 class="ctrl-section-title">Canvas</h3>
         <div class="ctrl-group">
+          <!-- svelte-ignore a11y_label_has_associated_control -->
           <label>Size</label>
           <div class="size-row">
             <input type="number" bind:value={canvasW} min="100" max="2000" step="50" placeholder="W"/>

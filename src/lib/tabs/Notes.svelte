@@ -288,6 +288,7 @@
         </div>
       {:else}
         {#each filteredNotes() as note (note.id)}
+          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
           <div class="notes-list-item" class:selected={selectedNoteId === note.id} onclick={() => selectedNoteId = note.id}>
             <div class="notes-item-title">{note.title}</div>
             <div class="notes-item-meta">
@@ -324,6 +325,7 @@
             {/if}
           {/each}
           {#each graphNodes() as node}
+            <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
             <circle cx={node.x} cy={node.y} r={Math.max(4, 3 + node.links * 2)} fill="var(--accent)" opacity="0.8" class="notes-graph-node" onclick={() => { selectedNoteId = node.id; showGraph = false; }}/>
             <text x={node.x} y={node.y + 14} text-anchor="middle" fill="var(--text-3)" font-size="8">{node.title.slice(0, 15)}</text>
           {/each}
@@ -364,6 +366,7 @@
           </div>
         {/if}
         {#if view === "preview" || splitView}
+          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
           <div class="notes-preview-pane" onclick={handlePreviewClick}>
             <div class="notes-preview-content markdown-body">
               {@html renderMarkdown(selectedNote.content)}

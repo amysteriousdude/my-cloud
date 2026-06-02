@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  let { entry, onready }: { entry: any; onready: (urls?: any) => void } = $props();
+  let { entry, onready, children }: { entry: any; onready: (urls?: any) => void; children?: any } = $props();
   onMount(() => { onready(); });
 </script>
-<slot/>
+{@render children?.()}

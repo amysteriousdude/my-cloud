@@ -475,8 +475,7 @@
     margin-bottom: 12px;
   }
 
-  .vault-head h1,
-  .vault-head h2 {
+  .vault-head h1 {
     font-size: 18px;
     font-weight: 600;
     letter-spacing: -0.03em;

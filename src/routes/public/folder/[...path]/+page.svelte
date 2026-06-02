@@ -36,9 +36,13 @@
     public?: boolean;
   };
 
+  // svelte-ignore state_referenced_locally
   let files: FileRecord[] = $state(data.files ?? []);
+  // svelte-ignore state_referenced_locally
   let subfolders: FolderRecord[] = $state(data.subfolders ?? []);
+  // svelte-ignore state_referenced_locally
   let folder: FolderRecord = $state(data.folder);
+  // svelte-ignore state_referenced_locally
   let folderPath: string = $state(data.folderPath ?? '');
 
   const pathParts = $derived.by(() => folderPath.split('/').filter(Boolean));

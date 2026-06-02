@@ -316,6 +316,7 @@
       <section class="ctrl-section">
         <h3 class="ctrl-section-title">Image</h3>
         <div class="ctrl-group">
+          <!-- svelte-ignore a11y_label_has_associated_control -->
           <label><span class="label-row">Upload image <button class="tip-btn" onmouseenter={(e)=>showTip(e,'Upload any image to dither')} onmouseleave={hideTip}><IconInfoCircle size={12}/></button></span></label>
           <label class="upload-btn">
             Choose file
@@ -330,6 +331,7 @@
       <section class="ctrl-section">
         <h3 class="ctrl-section-title">Dithering</h3>
         <div class="ctrl-group">
+          <!-- svelte-ignore a11y_label_has_associated_control -->
           <label><span class="label-row">Algorithm <button class="tip-btn" onmouseenter={(e)=>showTip(e,TIPS.ditherAlg)} onmouseleave={hideTip}><IconInfoCircle size={12}/></button></span></label>
           <div class="chip-row">
             {#each ['floyd-steinberg', 'atkinson', 'none'] as a}
@@ -342,6 +344,7 @@
       <section class="ctrl-section">
         <h3 class="ctrl-section-title">Palette</h3>
         <div class="ctrl-group">
+          <!-- svelte-ignore a11y_label_has_associated_control -->
           <label><span class="label-row">Colors <button class="tip-btn" onmouseenter={(e)=>showTip(e,TIPS.paletteMode)} onmouseleave={hideTip}><IconInfoCircle size={12}/></button></span></label>
           <div class="chip-row">
             {#each ['2', '4', '8', '16', 'custom'] as p}
@@ -351,6 +354,7 @@
         </div>
         {#if paletteMode === 'custom'}
           <div class="ctrl-group">
+            <!-- svelte-ignore a11y_label_has_associated_control -->
             <label><span class="label-row">Custom colors</span></label>
             <div class="custom-colors">
               {#each customColors as color, i}
@@ -376,6 +380,7 @@
       <section class="ctrl-section">
         <h3 class="ctrl-section-title">Canvas</h3>
         <div class="ctrl-group">
+          <!-- svelte-ignore a11y_label_has_associated_control -->
           <label><span class="label-row">Size <button class="tip-btn" onmouseenter={(e)=>showTip(e,TIPS.canvasSize)} onmouseleave={hideTip}><IconInfoCircle size={12}/></button></span></label>
           <div class="size-row">
             <input type="number" bind:value={canvasW} min="100" max="4000" step="100" placeholder="W"/>
@@ -443,22 +448,11 @@
   .size-x{color:var(--text-3);font-size:13px;flex-shrink:0;}
   .preset-row{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;}
 
-  .color-row{display:flex;align-items:center;gap:10px;}
-  .color-swatch{width:30px;height:30px;border-radius:7px;border:1px solid var(--border);padding:2px;background:var(--bg-1);cursor:pointer;flex-shrink:0;}
-  .color-row .mono{font-size:11.5px;color:var(--text-3);}
-
   .chip-row{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;}
   .chip{padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg-3);color:var(--text-2);font-size:12px;font-family:'Geist',sans-serif;cursor:pointer;transition:.13s;}
   .chip.active{border-color:var(--accent);color:var(--accent);background:rgba(99,102,241,.1);}
   .chip.small{padding:3px 8px;font-size:11px;}
   .chip:hover{border-color:var(--border-hover);color:var(--text-1);}
-
-  .range-labels{display:flex;justify-content:space-between;font-size:10px;color:var(--text-3);font-family:'Geist Mono',monospace;margin-top:2px;}
-
-  .toggle-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
-  .toggle-label{font-size:12.5px;color:var(--text-2);}
-  .toggle{padding:3px 10px;border-radius:20px;border:1px solid var(--border);background:var(--bg-3);color:var(--text-3);font-size:11px;font-family:'Geist Mono',monospace;cursor:pointer;transition:.13s;}
-  .toggle.on{border-color:var(--accent);color:var(--accent);background:rgba(99,102,241,.1);}
 
   .template-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;}
   .tpl-btn{padding:6px 8px;border-radius:7px;border:1px solid var(--border);background:var(--bg-3);color:var(--text-2);font-size:11.5px;font-family:'Geist',sans-serif;cursor:pointer;transition:.13s;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}

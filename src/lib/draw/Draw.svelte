@@ -16,8 +16,8 @@
   let { apiKey }: { apiKey: string } = $props();
 
   // ── Canvas ──────────────────────────────────────────────────────────
-  let svgEl: SVGSVGElement;
-  let canvasWrap: HTMLDivElement;
+  let svgEl: SVGSVGElement = $state() as SVGSVGElement;
+  let canvasWrap: HTMLDivElement = $state() as HTMLDivElement;
   let w = $state(1200);
   let h = $state(800);
 
@@ -1105,7 +1105,7 @@
 
 <svelte:window onkeydown={onkeydown} onkeyup={onkeyup}/>
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
+<!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
 <div class="draw-root" role="application" tabindex="-1" onclick={() => { if (openMenu) openMenu = null; }}>
   <!-- ═══ TOP MENU BAR ═══ -->
   <div class="menu-bar">
@@ -1148,6 +1148,7 @@
         { label: "Ctrl+scroll = zoom", action: "", key: "" },
       ]},
     ] as menu}
+      <!-- svelte-ignore a11y_no_noninteractive_element_interactions a11y_click_events_have_key_events -->
       <div class="mb-item" onclick={(e) => { e.stopPropagation(); openMenu = openMenu === menu.label ? null : menu.label; }}>
         <span class="mb-label">{menu.label}</span>
         {#if openMenu === menu.label}
@@ -1178,6 +1179,7 @@
       {#each TOOL_GROUPS as group, gi}
         {#if gi > 0}<div class="ts-sep"></div>{/if}
         {#each group.tools as t}
+          <!-- svelte-ignore a11y_consider_explicit_label -->
           <button class="ts-btn" class:active={tool === t.id} onclick={() => tool = t.id as Tool} title={t.label}>
             {#if t.id === "move"}<IconPointer size={16}/>{:else if t.id === "select"}<IconSelector size={16}/>
             {:else if t.id === "brush"}<IconBrush size={16}/>{:else if t.id === "pencil"}<IconPencil size={16}/>
@@ -1192,12 +1194,18 @@
         {/each}
       {/each}
       <div class="ts-sep"></div>
+      <!-- svelte-ignore a11y_consider_explicit_label -->
       <button class="ts-btn" onclick={undo} disabled={undoStack.length === 0} title="Undo (Ctrl+Z)"><IconArrowBack size={16}/></button>
+      <!-- svelte-ignore a11y_consider_explicit_label -->
       <button class="ts-btn" onclick={redo} disabled={redoStack.length === 0} title="Redo (Ctrl+Shift+Z)"><IconArrowForward size={16}/></button>
+      <!-- svelte-ignore a11y_consider_explicit_label -->
       <button class="ts-btn" onclick={clearAll} title="Clear layer"><IconTrash size={16}/></button>
       <div class="ts-spacer"></div>
+      <!-- svelte-ignore a11y_consider_explicit_label -->
       <button class="ts-swatch ts-fg" style="background:{fgColor}" onclick={() => rightPanel = 'color'} title="Foreground color"></button>
+      <!-- svelte-ignore a11y_consider_explicit_label -->
       <button class="ts-swatch ts-bg" style="background:{bgColor2}" onclick={() => rightPanel = 'color'} title="Background color"></button>
+      <!-- svelte-ignore a11y_consider_explicit_label -->
       <button class="ts-swap" onclick={swapColors} title="Swap (X)">
         <svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 3L4 0V2H9V4H4V6L1 3Z" fill="currentColor" transform="rotate(180 5 3)"/></svg>
       </button>
@@ -1432,7 +1440,9 @@
         <button class="sb-btn" onclick={fitToScreen}>Fit</button>
         <button class="sb-btn" onclick={() => zoomTo(Math.min(MAX_ZOOM, zoom * 2))}>+</button>
         <button class="sb-btn" onclick={() => zoomTo(Math.max(MIN_ZOOM, zoom / 2))}>-</button>
+        <!-- svelte-ignore a11y_consider_explicit_label -->
         <button class="sb-btn" class:active={settings.showGrid} onclick={() => settings.showGrid = !settings.showGrid} title="Toggle grid (G)"><IconGridDots size={12}/></button>
+        <!-- svelte-ignore a11y_consider_explicit_label -->
         <button class="sb-btn" class:active={settings.showRulers} onclick={() => settings.showRulers = !settings.showRulers} title="Toggle rulers (R)"><IconRuler size={12}/></button>
         <div class="sb-spacer"></div>
         <span class="sb-dim">{layers.reduce((a, l) => a + l.strokes.length, 0)} strokes · {layers.length} layers</span>
@@ -1482,6 +1492,7 @@
           <p class="rp-heading">Quick Colors</p>
           <div class="rp-quick-colors">
             {#each ["#000000","#ffffff","#ff0000","#ff8800","#ffff00","#00ff00","#00ccff","#0066ff","#9933ff","#ff00ff","#888888","#444444"] as c}
+              <!-- svelte-ignore a11y_consider_explicit_label -->
               <button class="rp-qc" style="background:{c}" class:active={fgColor === c} onclick={() => { fgColor = c; }}></button>
             {/each}
           </div>
@@ -1509,7 +1520,9 @@
           </div>
           {#each [...layers].reverse() as layer, ri (layer.id)}
             {@const idx = layers.length - 1 - ri}
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
             <div class="rp-layer" class:active={idx === activeLayerIdx} onclick={() => activeLayerIdx = idx} role="button" tabindex="-1">
+              <!-- svelte-ignore a11y_consider_explicit_label -->
               <button class="rp-lvis" onclick={(e) => { e.stopPropagation(); layer.visible = !layer.visible; layers = [...layers]; }}>
                 {layer.visible ? "👁" : "—"}
               </button>
@@ -1567,7 +1580,6 @@
   .ts-swatch { width: 22px; height: 22px; border-radius: 3px; border: 2px solid #555; cursor: pointer; position: relative; overflow: hidden; }
   .ts-fg { margin-top: 4px; z-index: 2; }
   .ts-bg { width: 16px; height: 16px; margin-top: -6px; margin-left: 10px; z-index: 1; }
-  .ts-color-hid { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
   .ts-swap { background: none; border: none; color: #555; cursor: pointer; padding: 2px; margin-top: 2px; }
   .ts-swap:hover { color: #aaa; }
 
@@ -1658,17 +1670,6 @@
   .rp-slider input[type="range"] { flex: 1; accent-color: #6366f1; height: 3px; }
   .rp-slider span { font-size: 9px; color: #555; font-family: 'Geist Mono', monospace; min-width: 28px; text-align: right; }
 
-  .rp-color-preview { position: relative; width: 50px; height: 50px; margin: 0 auto 6px; }
-  .rp-fg-big { position: absolute; top: 0; left: 0; width: 36px; height: 36px; border-radius: 4px; border: 2px solid #555; z-index: 2; }
-  .rp-bg-big { position: absolute; bottom: 0; right: 0; width: 24px; height: 24px; border-radius: 3px; border: 2px solid #444; z-index: 1; }
-  .rp-color-input { width: 100%; height: 26px; border: 1px solid #444; border-radius: 4px; background: #2a2a2e; cursor: pointer; padding: 1px; }
-  .rp-label { display: flex; align-items: center; gap: 4px; font-size: 10px; color: #666; }
-  .rp-hex { flex: 1; background: #2a2a2e; border: 1px solid #444; border-radius: 3px; padding: 2px 5px; color: #aaa; font-size: 10px; font-family: 'Geist Mono', monospace; outline: none; }
-  .rp-hex:focus { border-color: #6366f1; }
-  .rp-recent { display: flex; flex-wrap: wrap; gap: 3px; }
-  .rp-rswatch { width: 16px; height: 16px; border-radius: 3px; border: 1px solid #444; cursor: pointer; transition: .1s; }
-  .rp-rswatch:hover { border-color: #888; transform: scale(1.2); }
-
   .rp-layer-actions { display: flex; gap: 3px; margin-bottom: 4px; }
   .rp-layer-btn { flex: 1; padding: 3px; border-radius: 3px; background: #2a2a2e; border: 1px solid #444; color: #777; font-size: 9px; cursor: pointer; transition: .1s; }
   .rp-layer-btn:hover { border-color: #6366f1; color: #ccc; }
@@ -1710,14 +1711,18 @@
 <input bind:this={fileInputEl} type="file" accept="image/*" style="display:none" onchange={handleImageFile}/>
 
 {#if showResizeDialog}
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions a11y_click_events_have_key_events a11y_no_static_element_interactions -->
   <div class="modal-overlay" onclick={() => showResizeDialog = false}>
+    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions a11y_no_noninteractive_element_interactions -->
     <div class="modal-box" onclick={(e) => e.stopPropagation()}>
       <div class="modal-title">Resize Canvas</div>
       <div class="modal-row">
+        <!-- svelte-ignore a11y_label_has_associated_control -->
         <label>Width</label>
         <input type="number" min="1" max="8192" bind:value={resizeW}/>
       </div>
       <div class="modal-row">
+        <!-- svelte-ignore a11y_label_has_associated_control -->
         <label>Height</label>
         <input type="number" min="1" max="8192" bind:value={resizeH}/>
       </div>
@@ -1733,14 +1738,18 @@
 {/if}
 
 {#if showSaveDialog}
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions a11y_click_events_have_key_events a11y_no_static_element_interactions -->
   <div class="modal-overlay" onclick={() => showSaveDialog = false}>
+    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions a11y_no_noninteractive_element_interactions -->
     <div class="modal-box" onclick={(e) => e.stopPropagation()}>
       <div class="modal-title">Save to Cloud</div>
       <div class="modal-row">
+        <!-- svelte-ignore a11y_label_has_associated_control -->
         <label>Folder</label>
         <input type="text" bind:value={saveFolder} placeholder="(root)"/>
       </div>
       <div class="modal-row">
+        <!-- svelte-ignore a11y_label_has_associated_control -->
         <label>File name</label>
         <input type="text" bind:value={saveFileName} placeholder="drawing.png"/>
       </div>

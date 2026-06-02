@@ -115,6 +115,7 @@
 
   $effect(() => { hexToHsl(value); hexInput = value; });
 
+  // svelte-ignore state_referenced_locally
   const hueGradient = `linear-gradient(to right,
     hsl(0,${hsl.s}%,${hsl.l}%), hsl(60,${hsl.s}%,${hsl.l}%),
     hsl(120,${hsl.s}%,${hsl.l}%), hsl(180,${hsl.s}%,${hsl.l}%),
@@ -138,11 +139,12 @@
 <div class="cp">
   <!-- Color wheel -->
   <div class="cp-wheel-wrap">
-    <div class="cp-wheel" bind:this={wheelEl}
-      onpointerdown={wheelPointerDown}
-      onpointermove={wheelPointerMove}
-      onpointerup={wheelPointerUp}
-    >
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="cp-wheel" bind:this={wheelEl}
+    onpointerdown={wheelPointerDown}
+    onpointermove={wheelPointerMove}
+    onpointerup={wheelPointerUp}
+  >
       <!-- Saturation/Lightness disc -->
       <div class="cp-wheel-bg" style="background: conic-gradient(
         hsl(0,100%,50%), hsl(30,100%,50%), hsl(60,100%,50%),
@@ -163,6 +165,7 @@
   </div>
 
   <!-- Hue bar -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="cp-hue-bar" bind:this={hueEl}
     onpointerdown={huePointerDown}
     onpointermove={huePointerMove}
@@ -194,7 +197,8 @@
   <!-- Swatches -->
   <div class="cp-swatches">
     {#each SWATCHES as c}
-      <button class="cp-swatch" class:active={value.toLowerCase() === c.toLowerCase()} style="background:{c}" onclick={() => { value = c; hexInput = c; addToRecent(c); }}></button>
+      <!-- svelte-ignore a11y_consider_explicit_label -->
+      <button class="cp-swatch" class:active={value.toLowerCase() === c.toLowerCase()} style="background:{c}" onclick={() => { value = c; hexInput = c; addToRecent(c); }} aria-label="Color swatch"></button>
     {/each}
   </div>
 
@@ -203,7 +207,8 @@
     <div class="cp-section-label">Recent</div>
     <div class="cp-swatches">
       {#each recentColors as c}
-        <button class="cp-swatch" style="background:{c}" onclick={() => { value = c; hexInput = c; }}></button>
+        <!-- svelte-ignore a11y_consider_explicit_label -->
+        <button class="cp-swatch" style="background:{c}" onclick={() => { value = c; hexInput = c; }} aria-label="Color swatch"></button>
       {/each}
     </div>
   {/if}

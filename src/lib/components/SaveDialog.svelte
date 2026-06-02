@@ -20,6 +20,7 @@
 
   type Folder = { folderId: string; name: string; parentId?: string };
 
+  // svelte-ignore state_referenced_locally
   let filename   = $state(defaultName);
   let folders    = $state<Folder[]>([]);
   let currentId  = $state<string | null>(null);

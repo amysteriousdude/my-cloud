@@ -1,4 +1,5 @@
 import type { RequestHandler } from './$types';
+import type { VaultIndexPlain, VaultRegistryPlain } from '../_vault';
 import {
   deriveVaultKey,
   randomBytes,
@@ -6,9 +7,7 @@ import {
   saveVaultState,
   loadVaultIndex,
   exportVaultKey,
-  getPinnedFileId,
-  VaultIndexPlain,
-  VaultRegistryPlain
+  getPinnedFileId
 } from '../_vault';
 
 function cookieSecure(request: Request) {

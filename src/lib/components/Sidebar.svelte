@@ -168,7 +168,7 @@
 >
   <!-- Sheet (swipe up) -->
   <div class="mob-sheet" class:open={sheetOpen}>
-    <button class="sheet-handle" onclick={() => sheetOpen = !sheetOpen}></button>
+    <button class="sheet-handle" onclick={() => sheetOpen = !sheetOpen} aria-label="Toggle sidebar"></button>
 
     {#if user}
       <div class="sheet-user">
