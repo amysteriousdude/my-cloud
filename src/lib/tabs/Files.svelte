@@ -3,6 +3,7 @@
   import PreviewModal from "$lib/components/PreviewModal.svelte";
   import DetailsSidebar from "$lib/components/DetailsSidebar.svelte";
   import ContextMenu from "$lib/components/ContextMenu.svelte";
+  import { toasts } from "$lib/types/toast";
   import { zipSync, strToU8 } from "fflate";
   import { onMount } from "svelte";
   import { fade, fly } from "svelte/transition";
@@ -102,8 +103,7 @@
   async function copySharexCreds() {
     const url = `${window.location.origin}/api/sharex/creds?api_key=${encodeURIComponent(encryptedApiKey ?? '')}`;
     await navigator.clipboard.writeText(url);
-    uploadError = 'ShareX creds URL copied!';
-    setTimeout(() => { uploadError = null; }, 2500);
+    toasts.success('ShareX creds URL copied!');
   }
 
   // Auth state
@@ -129,12 +129,10 @@
   // Upload queue — supports multiple concurrent uploads
   type UploadJob = { id: string; name: string; progress: number; done: boolean; error: string | null };
   let uploadJobs = $state<UploadJob[]>([]);
-  let uploadError = $state<string | null>(null);  // legacy single-error kept for compat
   let uploading = $state(false);  // kept for toolbar button disabled state
-  let uploadMsg = $state("");    // kept for compat
-  let uploadProgress = $state(0); // kept for compat
 
   let searchQuery = $state("");
+  let selectedTags = $state<Set<string>>(new Set());
   let togglingPublic = $state<string | null>(null);
   let deleting = $state<string | null>(null);
   let renamingFileId = $state<string | null>(null);
@@ -292,6 +290,16 @@
   const CHUNK_SIZE = 18 * 1024 * 1024;
 
   // Sort & filter
+  let allTags = $derived(() => {
+    const tagMap = new Map<string, number>();
+    for (const f of files) {
+      for (const t of f.tags ?? []) {
+        tagMap.set(t, (tagMap.get(t) ?? 0) + 1);
+      }
+    }
+    return [...tagMap.entries()].sort((a, b) => b[1] - a[1]).map(([tag, count]) => ({ tag, count }));
+  });
+
   let processedFiles = $derived.by(() => {
     let arr = isSearching ? [...files] : files.filter(f => (f.folderId ?? undefined) === currentFolderId);
     // Filter by type
@@ -313,6 +321,13 @@
             f.type.includes("rar")
           );
         return true;
+      });
+    }
+    // Filter by tags
+    if (selectedTags.size > 0) {
+      arr = arr.filter(f => {
+        const fileTags = f.tags ?? [];
+        return [...selectedTags].some(t => fileTags.includes(t));
       });
     }
     // Sort
@@ -833,7 +848,7 @@
       loadFiles(searchQuery, { silent: true });
     } catch {
       optimisticUpdateFile(metaFileId, { fileName: oldName });
-      uploadError = "Rename failed";
+      toasts.error("Rename failed");
     }
   }
 
@@ -1144,6 +1159,17 @@
     }, 280);
   }
 
+  function toggleTag(tag: string) {
+    const s = new Set(selectedTags);
+    if (s.has(tag)) s.delete(tag);
+    else s.add(tag);
+    selectedTags = s;
+  }
+
+  function clearTagFilters() {
+    selectedTags = new Set();
+  }
+
   // Helpers
   function isTextLikeFile(file: FileRecord) {
     const ext = file.fileName.split('.').pop()?.toLowerCase() ?? '';
@@ -1380,6 +1406,23 @@
                 oninput={onSearch}
               />
             </div>
+            {#if allTags().length > 0}
+              <div class="tag-filter-bar">
+                {#each allTags() as { tag, count }}
+                  <button
+                    class="tag-filter-chip"
+                    class:active={selectedTags.has(tag)}
+                    onclick={() => toggleTag(tag)}
+                  >
+                    {tag}
+                    <span class="tag-count">{count}</span>
+                  </button>
+                {/each}
+                {#if selectedTags.size > 0}
+                  <button class="tag-clear" onclick={clearTagFilters}>clear</button>
+                {/if}
+              </div>
+            {/if}
           </div>
           <div class="toolbar-right">
             <label for="fi" class="tb-btn" title="Upload file"
@@ -2242,6 +2285,56 @@
     0%,100% { opacity: .7; }
     50%      { opacity: .15; }
   }
+
+  /* ── Tag filter bar ── */
+  .tag-filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+  }
+  .tag-filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 9px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--bg-3);
+    color: var(--text-3);
+    font-size: 11px;
+    font-family: 'Geist', sans-serif;
+    cursor: pointer;
+    transition: all 0.13s;
+    white-space: nowrap;
+  }
+  .tag-filter-chip:hover {
+    border-color: var(--border-hover);
+    color: var(--text-2);
+  }
+  .tag-filter-chip.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(99,102,241,.1);
+  }
+  .tag-count {
+    font-family: 'Geist Mono', monospace;
+    font-size: 9px;
+    opacity: 0.5;
+  }
+  .tag-clear {
+    background: none;
+    border: none;
+    color: var(--text-3);
+    font-size: 11px;
+    font-family: 'Geist', sans-serif;
+    cursor: pointer;
+    padding: 3px 6px;
+    border-radius: 6px;
+    transition: color 0.13s;
+  }
+  .tag-clear:hover { color: var(--red); }
 
   /* Toolbar */
   .toolbar {

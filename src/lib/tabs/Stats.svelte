@@ -10,6 +10,8 @@
     totalBytes: number;
     time: string;
     folderId?: string;
+    lastAccessed?: string;
+    accessCount?: number;
   };
 
   let files     = $state<FileRecord[]>([]);
@@ -33,7 +35,6 @@
       const cur = map.get(day) ?? { count: 0, bytes: 0 };
       map.set(day, { count: cur.count + 1, bytes: cur.bytes + (f.totalBytes ?? 0) });
     }
-    // Fill gaps
     const result: { day: string; count: number; bytes: number }[] = [];
     for (let i = 29; i >= 0; i--) {
       const d = new Date(now - i * 24 * 60 * 60 * 1000);
@@ -43,6 +44,43 @@
     }
     return result;
   });
+
+  // Upload heatmap (last 90 days, GitHub-style)
+  const heatmapData = $derived(() => {
+    const map = new Map<string, number>();
+    const now = Date.now();
+    const cutoff = now - 90 * 24 * 60 * 60 * 1000;
+    for (const f of files) {
+      const t = new Date(f.time).getTime();
+      if (t < cutoff) continue;
+      const day = f.time.slice(0, 10);
+      map.set(day, (map.get(day) ?? 0) + 1);
+    }
+    // Build 13 weeks x 7 days grid
+    const weeks: { day: string; count: number; col: number; row: number }[][] = [];
+    const startDate = new Date(now - 89 * 24 * 60 * 60 * 1000);
+    // Align to Sunday
+    const dayOfWeek = startDate.getDay();
+    startDate.setDate(startDate.getDate() - dayOfWeek);
+
+    let currentWeek: { day: string; count: number; col: number; row: number }[] = [];
+    for (let i = 0; i < 91; i++) {
+      const d = new Date(startDate);
+      d.setDate(d.getDate() + i);
+      const dayStr = d.toISOString().slice(0, 10);
+      const col = Math.floor(i / 7);
+      const row = d.getDay();
+      currentWeek.push({ day: dayStr, count: map.get(dayStr) ?? 0, col, row });
+      if (currentWeek.length === 7) {
+        weeks.push(currentWeek);
+        currentWeek = [];
+      }
+    }
+    if (currentWeek.length > 0) weeks.push(currentWeek);
+    return weeks;
+  });
+
+  const maxHeatmap = $derived(Math.max(1, ...heatmapData().flat().map(d => d.count)));
 
   // File type breakdown
   const typeBreakdown = $derived(() => {
@@ -66,6 +104,66 @@
   const recentFiles = $derived(
     [...files].sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()).slice(0, 10)
   );
+
+  // Most accessed files
+  const mostAccessed = $derived(
+    [...files].filter(f => (f.accessCount ?? 0) > 0).sort((a, b) => (b.accessCount ?? 0) - (a.accessCount ?? 0)).slice(0, 10)
+  );
+
+  // Storage growth (cumulative over time, sampled by day)
+  const storageGrowth = $derived(() => {
+    const sorted = [...files].sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+    const points: { day: string; bytes: number }[] = [];
+    let cumulative = 0;
+    const byDay = new Map<string, number>();
+    for (const f of sorted) {
+      const day = f.time.slice(0, 10);
+      byDay.set(day, (byDay.get(day) ?? 0) + (f.totalBytes ?? 0));
+    }
+    for (const [day, bytes] of byDay) {
+      cumulative += bytes;
+      points.push({ day, bytes: cumulative });
+    }
+    // Fill gaps
+    if (points.length > 0) {
+      const start = new Date(points[0].day);
+      const end = new Date();
+      const filled: { day: string; bytes: number }[] = [];
+      let lastVal = 0;
+      let pIdx = 0;
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        const dayStr = d.toISOString().slice(0, 10);
+        while (pIdx < points.length && points[pIdx].day <= dayStr) {
+          lastVal = points[pIdx].bytes;
+          pIdx++;
+        }
+        filled.push({ day: dayStr, bytes: lastVal });
+      }
+      return filled;
+    }
+    return points;
+  });
+
+  // Daily summary (today)
+  const todaySummary = $derived(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    const todayFiles = files.filter(f => f.time.startsWith(today));
+    return {
+      count: todayFiles.length,
+      bytes: todayFiles.reduce((s, f) => s + (f.totalBytes ?? 0), 0),
+    };
+  });
+
+  // Weekly summary (last 7 days)
+  const weeklySummary = $derived(() => {
+    const now = Date.now();
+    const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
+    const weekFiles = files.filter(f => new Date(f.time).getTime() >= weekAgo);
+    return {
+      count: weekFiles.length,
+      bytes: weekFiles.reduce((s, f) => s + (f.totalBytes ?? 0), 0),
+    };
+  });
 
   function typeCategory(type: string, fileName: string): string {
     if (type.startsWith("image/")) return "Images";
@@ -96,6 +194,82 @@
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   }
 
+  function heatmapColor(count: number): string {
+    if (count === 0) return "var(--bg-3)";
+    const ratio = count / maxHeatmap;
+    if (ratio < 0.25) return "#1a3a2a";
+    if (ratio < 0.5) return "#22663a";
+    if (ratio < 0.75) return "#2ea44f";
+    return "#39d353";
+  }
+
+  // ── SVG Donut chart ───────────────────────────────────────────────────
+  const donutData = $derived(() => {
+    const data = typeBreakdown();
+    const total = data.reduce((s, d) => s + d.bytes, 0) || 1;
+    let cumPercent = 0;
+    return data.map(d => {
+      const percent = d.bytes / total;
+      const startAngle = cumPercent * Math.PI * 2 - Math.PI / 2;
+      cumPercent += percent;
+      const endAngle = cumPercent * Math.PI * 2 - Math.PI / 2;
+      return { ...d, percent, startAngle, endAngle };
+    });
+  });
+
+  function donutPath(cx: number, cy: number, r: number, startAngle: number, endAngle: number): string {
+    const sweep = endAngle - startAngle;
+    if (sweep >= Math.PI * 2 - 0.001) {
+      // Full circle - draw two half arcs
+      const x1 = cx + r * Math.cos(startAngle);
+      const y1 = cy + r * Math.sin(startAngle);
+      const x2 = cx + r * Math.cos(startAngle + Math.PI);
+      const y2 = cy + r * Math.sin(startAngle + Math.PI);
+      return `M ${x1} ${y1} A ${r} ${r} 0 1 1 ${x2} ${y2} A ${r} ${r} 0 1 1 ${x1} ${y1}`;
+    }
+    const x1 = cx + r * Math.cos(startAngle);
+    const y1 = cy + r * Math.sin(startAngle);
+    const x2 = cx + r * Math.cos(endAngle);
+    const y2 = cy + r * Math.sin(endAngle);
+    const largeArc = sweep > Math.PI ? 1 : 0;
+    return `M ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2}`;
+  }
+
+  // ── SVG Line chart ────────────────────────────────────────────────────
+  const growthPoints = $derived(() => {
+    const data = storageGrowth();
+    if (data.length === 0) return "";
+    const maxBytes = Math.max(1, ...data.map(d => d.bytes));
+    const W = 400;
+    const H = 120;
+    const padX = 4;
+    const padY = 4;
+    const points = data.map((d, i) => {
+      const x = padX + (i / Math.max(1, data.length - 1)) * (W - padX * 2);
+      const y = H - padY - (d.bytes / maxBytes) * (H - padY * 2);
+      return `${x},${y}`;
+    });
+    return points.join(" ");
+  });
+
+  const growthAreaPath = $derived(() => {
+    const data = storageGrowth();
+    if (data.length === 0) return "";
+    const maxBytes = Math.max(1, ...data.map(d => d.bytes));
+    const W = 400;
+    const H = 120;
+    const padX = 4;
+    const padY = 4;
+    let path = `M ${padX},${H - padY}`;
+    for (let i = 0; i < data.length; i++) {
+      const x = padX + (i / Math.max(1, data.length - 1)) * (W - padX * 2);
+      const y = H - padY - (data[i].bytes / maxBytes) * (H - padY * 2);
+      path += ` L ${x},${y}`;
+    }
+    path += ` L ${padX + ((data.length - 1) / Math.max(1, data.length - 1)) * (W - padX * 2)},${H - padY} Z`;
+    return path;
+  });
+
   onMount(async () => {
     try {
       const res = await fetch(`/api/telegram/ls?api_key=${encodeURIComponent(apiKey)}`);
@@ -113,7 +287,6 @@
   // ── Chart helpers ──────────────────────────────────────────────────────────
   const chartDays = $derived(uploadsByDay());
   const maxCount  = $derived(Math.max(1, ...chartDays.map(d => d.count)));
-  const maxBytes  = $derived(Math.max(1, ...chartDays.map(d => d.bytes)));
   const typeData  = $derived(typeBreakdown());
   const totalTypeBytes = $derived(typeData.reduce((s, t) => s + t.bytes, 0) || 1);
 
@@ -159,6 +332,22 @@
         <span class="card-label">Total size</span>
       </div>
       <div class="card">
+        <span class="card-val">{todaySummary().count}</span>
+        <span class="card-label">Uploaded today</span>
+      </div>
+      <div class="card">
+        <span class="card-val">{fmtBytes(todaySummary().bytes)}</span>
+        <span class="card-label">Today's bytes</span>
+      </div>
+      <div class="card">
+        <span class="card-val">{weeklySummary().count}</span>
+        <span class="card-label">This week</span>
+      </div>
+      <div class="card">
+        <span class="card-val">{fmtBytes(weeklySummary().bytes)}</span>
+        <span class="card-label">Week's bytes</span>
+      </div>
+      <div class="card">
         <span class="card-val">{chartDays.filter(d => d.count > 0).length}</span>
         <span class="card-label">Active days (30d)</span>
       </div>
@@ -167,6 +356,29 @@
         <span class="card-label">Uploaded (30d)</span>
       </div>
     </div>
+
+    <!-- Upload heatmap (GitHub-style) -->
+    <section class="section">
+      <h2 class="section-title">Upload heatmap — last 90 days</h2>
+      <div class="heatmap-wrap">
+        <div class="heatmap-grid">
+          {#each heatmapData() as week}
+            {#each week as day}
+              <div class="heatmap-cell" style="background:{heatmapColor(day.count)};grid-column:{day.col + 2};grid-row:{day.row + 1};" title="{day.count} uploads on {day.day}"></div>
+            {/each}
+          {/each}
+        </div>
+        <div class="heatmap-legend">
+          <span class="heatmap-legend-label">Less</span>
+          <div class="heatmap-cell" style="background:var(--bg-3)"></div>
+          <div class="heatmap-cell" style="background:#1a3a2a"></div>
+          <div class="heatmap-cell" style="background:#22663a"></div>
+          <div class="heatmap-cell" style="background:#2ea44f"></div>
+          <div class="heatmap-cell" style="background:#39d353"></div>
+          <span class="heatmap-legend-label">More</span>
+        </div>
+      </div>
+    </section>
 
     <!-- Upload activity chart -->
     <section class="section">
@@ -187,7 +399,52 @@
       </div>
     </section>
 
-    <!-- Type breakdown -->
+    <div class="two-col">
+      <!-- Storage growth line chart -->
+      <section class="section">
+        <h2 class="section-title">Storage growth</h2>
+        {#if storageGrowth().length > 1}
+          <svg viewBox="0 0 400 120" class="growth-chart">
+            <defs>
+              <linearGradient id="growthGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.3"/>
+                <stop offset="100%" stop-color="var(--accent)" stop-opacity="0.02"/>
+              </linearGradient>
+            </defs>
+            <path d={growthAreaPath()} fill="url(#growthGrad)"/>
+            <polyline points={growthPoints()} fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linejoin="round"/>
+          </svg>
+        {:else}
+          <div class="chart-empty">Not enough data yet</div>
+        {/if}
+      </section>
+
+      <!-- Donut chart for file types -->
+      <section class="section">
+        <h2 class="section-title">File type distribution</h2>
+        <div class="donut-wrap">
+          <svg viewBox="0 0 120 120" class="donut-chart">
+            {#each donutData() as seg, i}
+              <path d={donutPath(60, 60, 40, seg.startAngle, seg.endAngle)} fill="none" stroke={TYPE_COLORS[seg.cat] ?? 'var(--text-3)'} stroke-width="18" stroke-linecap="round"/>
+            {/each}
+            <circle cx="60" cy="60" r="30" fill="var(--bg-2)"/>
+            <text x="60" y="58" text-anchor="middle" fill="var(--text-1)" font-size="12" font-weight="600" font-family="Geist Mono, monospace">{totalFiles}</text>
+            <text x="60" y="72" text-anchor="middle" fill="var(--text-3)" font-size="7">files</text>
+          </svg>
+          <div class="donut-legend">
+            {#each donutData() as seg}
+              <div class="donut-legend-item">
+                <span class="donut-legend-dot" style="background:{TYPE_COLORS[seg.cat] ?? 'var(--text-3)'}"></span>
+                <span class="donut-legend-name">{seg.cat}</span>
+                <span class="donut-legend-pct">{Math.round(seg.percent * 100)}%</span>
+              </div>
+            {/each}
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Type breakdown bars -->
     <section class="section">
       <h2 class="section-title">File types</h2>
       <div class="type-list">
@@ -234,13 +491,28 @@
       </section>
     </div>
 
+    {#if mostAccessed.length > 0}
+      <section class="section">
+        <h2 class="section-title">Most accessed files</h2>
+        <div class="file-list">
+          {#each mostAccessed as f, i}
+            <div class="file-row">
+              <span class="file-rank">{i + 1}</span>
+              <span class="file-name" title={f.fileName}>{f.fileName}</span>
+              <span class="file-size">{f.accessCount ?? 0} views</span>
+            </div>
+          {/each}
+        </div>
+      </section>
+    {/if}
+
   {/if}
 </div>
 
 <style>
   .stats-root {
     padding: 32px 28px;
-    max-width: 900px;
+    max-width: 1000px;
     margin: 0 auto;
     display: flex;
     flex-direction: column;
@@ -267,7 +539,7 @@
   /* ── Cards ── */
   .cards {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
     gap: 12px;
   }
   .card {
@@ -305,6 +577,37 @@
     font-weight: 500;
     color: var(--text-2);
     margin: 0;
+  }
+
+  /* ── Heatmap ── */
+  .heatmap-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .heatmap-grid {
+    display: grid;
+    grid-template-columns: repeat(14, 1fr);
+    grid-template-rows: repeat(7, 1fr);
+    gap: 3px;
+  }
+  .heatmap-cell {
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: 2px;
+    min-width: 10px;
+    min-height: 10px;
+  }
+  .heatmap-legend {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    justify-content: flex-end;
+  }
+  .heatmap-legend-label {
+    font-size: 9px;
+    color: var(--text-3);
+    margin: 0 2px;
   }
 
   /* ── Bar chart ── */
@@ -346,6 +649,22 @@
     height: 14px;
   }
 
+  /* ── Two col ── */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  /* ── Donut ── */
+  .donut-wrap { display: flex; align-items: center; gap: 16px; }
+  .donut-chart { width: 120px; height: 120px; flex-shrink: 0; }
+  .donut-legend { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+  .donut-legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+  .donut-legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .donut-legend-name { flex: 1; color: var(--text-2); }
+  .donut-legend-pct { color: var(--text-3); font-family: "Geist Mono", monospace; font-size: 10px; }
+
+  /* ── Growth chart ── */
+  .growth-chart { width: 100%; height: 120px; }
+  .chart-empty { text-align: center; color: var(--text-3); font-size: 11px; padding: 20px; }
+
   /* ── Type breakdown ── */
   .type-list { display: flex; flex-direction: column; gap: 8px; }
   .type-row {
@@ -366,9 +685,6 @@
   .type-bar-wrap { background: var(--bg-3); border-radius: 2px; height: 4px; overflow: hidden; }
   .type-bar { height: 100%; border-radius: 2px; transition: width 0.3s; }
   .type-bytes { color: var(--text-3); font-family: "Geist Mono", monospace; font-size: 11px; text-align: right; }
-
-  /* ── Two col ── */
-  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
   /* ── File list ── */
   .file-list { display: flex; flex-direction: column; gap: 6px; }
@@ -399,7 +715,7 @@
 
   @media (max-width: 700px) {
     .stats-root {
-      padding: 16px 12px 80px; /* bottom padding for mobile nav */
+      padding: 16px 12px 80px;
       gap: 16px;
     }
     .stats-title { font-size: 17px; }
@@ -411,18 +727,17 @@
     .card-val { font-size: 18px; }
     .two-col { grid-template-columns: 1fr; }
     .section { padding: 14px; }
-    /* type row: drop the bar, keep dot/name/count/bytes */
     .type-row {
       grid-template-columns: 10px 1fr auto auto;
       gap: 8px;
     }
     .type-bar-wrap { display: none; }
     .type-bytes { display: block; }
-    /* bar chart — fewer labels, shorter bars */
     .bar-chart { height: 80px; gap: 2px; }
     .bar-label { font-size: 8px; }
-    /* file list rows */
     .file-row { font-size: 11px; }
     .file-rank { min-width: 14px; }
+    .donut-wrap { flex-direction: column; align-items: center; }
+    .heatmap-grid { grid-template-columns: repeat(13, 1fr); }
   }
 </style>

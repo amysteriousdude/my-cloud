@@ -17,6 +17,54 @@
       banner: 2,
       href: '/generators/technical-difficulties',
     },
+    {
+      id: 'patterns',
+      title: 'Patterns',
+      desc: 'Generate seamless geometric patterns with tiling, symmetry, and color controls.',
+      icon: '🔷',
+      banner: 'patterns',
+      href: '/generators/patterns',
+    },
+    {
+      id: 'qr-code',
+      title: 'QR Code',
+      desc: 'Create customizable QR codes with colors, logos, and error correction levels.',
+      icon: '📱',
+      banner: 'qr',
+      href: '/generators/qr-code',
+    },
+    {
+      id: 'noise',
+      title: 'Noise',
+      desc: 'Generate Perlin, Simplex, and Voronoi noise patterns with custom scales.',
+      icon: '🌫️',
+      banner: 'noise',
+      href: '/generators/noise',
+    },
+    {
+      id: 'pixel-art',
+      title: 'Pixel Art',
+      desc: 'Create pixel art with a grid editor, palette, and export to PNG.',
+      icon: '👾',
+      banner: 'pixel',
+      href: '/generators/pixel-art',
+    },
+    {
+      id: 'ascii-art',
+      title: 'ASCII Art',
+      desc: 'Convert text or images to ASCII art with color and custom character sets.',
+      icon: '🔤',
+      banner: 'ascii',
+      href: '/generators/ascii-art',
+    },
+    {
+      id: 'gradient',
+      title: 'Gradient',
+      desc: 'Generate beautiful gradients with multiple stops, directions, and noise.',
+      icon: '🌈',
+      banner: 'gradient',
+      href: '/generators/gradient',
+    },
   ];
 </script>
 
@@ -78,6 +126,40 @@
       linear-gradient(135deg, #0d0d1a 0%, #111 100%);
   }
   .card-icon { font-size: 36px; line-height: 1; filter: drop-shadow(0 2px 8px rgba(0,0,0,.5)); }
+
+  .banner-patterns {
+    background: repeating-conic-gradient(var(--bg-2) 0% 25%, transparent 0% 50%) 0 0 / 20px 20px,
+      radial-gradient(circle at 30% 50%, rgba(99,102,241,.3) 0%, transparent 60%),
+      linear-gradient(135deg, #0d0d1a 0%, #111 100%);
+  }
+  .banner-qr {
+    background:
+      radial-gradient(circle at 50% 50%, rgba(34,197,94,.2) 0%, transparent 50%),
+      repeating-linear-gradient(0deg, transparent, transparent 8px, rgba(34,197,94,.1) 8px, rgba(34,197,94,.1) 9px),
+      repeating-linear-gradient(90deg, transparent, transparent 8px, rgba(34,197,94,.1) 8px, rgba(34,197,94,.1) 9px),
+      linear-gradient(135deg, #0d1a0f 0%, #111 100%);
+  }
+  .banner-noise {
+    background:
+      radial-gradient(circle at 20% 30%, rgba(139,92,246,.3) 0%, transparent 50%),
+      radial-gradient(circle at 80% 70%, rgba(236,72,153,.2) 0%, transparent 50%),
+      linear-gradient(135deg, #0d0d1a 0%, #111 100%);
+  }
+  .banner-pixel {
+    background:
+      repeating-conic-gradient(rgba(245,158,11,.15) 0% 25%, transparent 0% 50%) 0 0 / 12px 12px,
+      radial-gradient(circle at 50% 50%, rgba(245,158,11,.2) 0%, transparent 60%),
+      linear-gradient(135deg, #1a150d 0%, #111 100%);
+  }
+  .banner-ascii {
+    background:
+      radial-gradient(circle at 40% 50%, rgba(6,182,212,.25) 0%, transparent 55%),
+      linear-gradient(135deg, #0d1518 0%, #111 100%);
+  }
+  .banner-gradient {
+    background: linear-gradient(135deg, #6366f1 0%, #ec4899 50%, #f59e0b 100%);
+    opacity: 0.9;
+  }
 
   .card-body { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 6px; }
   .card-title { font-size: 14px; font-weight: 600; color: var(--text-1); letter-spacing: -.2px; }

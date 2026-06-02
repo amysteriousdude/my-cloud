@@ -9,11 +9,12 @@
     IconChartBar,
     IconVideo,
     IconMusic,
+    IconNote,
   } from '@tabler/icons-svelte';
   import { env } from '$env/dynamic/public';
   const NAME = env.PUBLIC_NAME ?? "Omar";
 
-  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'stats' | 'editor' | 'vault' | 'video' | 'music';
+  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'stats' | 'editor' | 'vault' | 'video' | 'music' | 'notes';
 
   let {
     user,
@@ -71,10 +72,11 @@
     { id: 'video',      icon: IconVideo,            label: 'Video'      },
     { id: 'music',      icon: IconMusic,            label: 'Music'      },
     { id: 'stats',      icon: IconChartBar,          label: 'Stats'      },
+    { id: 'notes',      icon: IconNote,               label: 'Notes'      },
     { id: 'vault',      icon: IconLock,                label: 'Vault' }
   ];
   // Mobile: primary tabs shown in bottom bar, secondary in sheet
-  const PRIMARY_TABS: Tab[] = ['files', 'draw', 'video', 'music', 'stats', 'vault'];
+  const PRIMARY_TABS: Tab[] = ['files', 'draw', 'video', 'music', 'stats', 'notes', 'vault'];
   const SECONDARY_TABS = TABS.filter(t => !PRIMARY_TABS.includes(t.id));
   const primaryTabs = TABS.filter(t => PRIMARY_TABS.includes(t.id));
 

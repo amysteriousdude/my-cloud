@@ -46,6 +46,7 @@
   let gridSize = $state(0.25);
   let hoveredBeat = $state(0);
   let hoveredNote = $state(0);
+  let openTrackPatternMenu = $state<number | null>(null);
 
   const PIXELS_PER_BEAT = 40;
   const NOTE_HEIGHT = 14;
@@ -56,6 +57,8 @@
 
   let analyserData = $state<Uint8Array | null>(null);
   let timeDomainData = $state<Uint8Array | null>(null);
+  let visCanvas: HTMLCanvasElement | null = null;
+  let visAnimFrame = 0;
 
   // ── Derived ──────────────────────────────────────────────────────────
   let currentBeat = $derived(engine.currentBeat);
@@ -82,6 +85,52 @@
   function updateEngineSong() {
     engine.setSong(song);
   }
+
+  // ── Visualizer ────────────────────────────────────────────────────────
+  function startVisualizer() {
+    if (!visCanvas) return;
+    const ctx = visCanvas.getContext("2d");
+    if (!ctx) return;
+    const W = visCanvas.width;
+    const H = visCanvas.height;
+    const BAR_COUNT = 32;
+    const barW = W / BAR_COUNT - 1;
+
+    const draw = () => {
+      visAnimFrame = requestAnimationFrame(draw);
+      ctx.clearRect(0, 0, W, H);
+
+      const data = analyserData;
+      if (!data || !isPlaying) {
+        // Draw idle bars
+        for (let i = 0; i < BAR_COUNT; i++) {
+          const h = 2 + Math.sin(Date.now() / 800 + i * 0.3) * 2;
+          const hue = (i / BAR_COUNT) * 60 + 260;
+          ctx.fillStyle = `hsla(${hue}, 70%, 60%, 0.3)`;
+          ctx.fillRect(i * (barW + 1), H - h, barW, h);
+        }
+        return;
+      }
+
+      const step = Math.floor(data.length / BAR_COUNT);
+      for (let i = 0; i < BAR_COUNT; i++) {
+        let sum = 0;
+        for (let j = 0; j < step; j++) sum += data[i * step + j];
+        const avg = sum / step;
+        const h = Math.max(2, (avg / 255) * H);
+        const hue = (i / BAR_COUNT) * 60 + 260;
+        const light = 40 + (avg / 255) * 30;
+        ctx.fillStyle = `hsl(${hue}, 75%, ${light}%)`;
+        ctx.fillRect(i * (barW + 1), H - h, barW, h);
+      }
+    };
+    draw();
+  }
+
+  $effect(() => {
+    if (visCanvas && audioReady) startVisualizer();
+    return () => cancelAnimationFrame(visAnimFrame);
+  });
 
   // ── Transport ─────────────────────────────────────────────────────────
   async function play() {
@@ -257,6 +306,26 @@
   function toggleSolo(idx: number) {
     const ch = song.mixerChannels[idx];
     if (ch) { ch.solo = !ch.solo; song.mixerChannels = [...song.mixerChannels]; }
+  }
+
+  // ── Pattern assignment to tracks ─────────────────────────────────────
+  function addPatternToTrack(trackIdx: number, patternId: string) {
+    const track = song.tracks[trackIdx];
+    if (!track) return;
+    if (!track.patterns.includes(patternId)) {
+      track.patterns = [...track.patterns, patternId];
+      song.tracks = [...song.tracks];
+      updateEngineSong();
+    }
+    openTrackPatternMenu = null;
+  }
+
+  function removePatternFromTrack(trackIdx: number, patternId: string) {
+    const track = song.tracks[trackIdx];
+    if (!track) return;
+    track.patterns = track.patterns.filter(p => p !== patternId);
+    song.tracks = [...song.tracks];
+    updateEngineSong();
   }
 
   // ── Import audio ──────────────────────────────────────────────────────
@@ -559,6 +628,8 @@
       {formatTime(currentBeat, song.bpm)}
     </div>
 
+    <canvas bind:this={visCanvas} width={192} height={28} class="me-vis-canvas"></canvas>
+
     <div class="me-transport-spacer"></div>
 
     <!-- View tabs -->
@@ -614,6 +685,20 @@
       </div>
 
       <div class="me-sidebar-section">
+        <div class="me-sidebar-header"><span>Song</span></div>
+        <label class="me-check">Bars
+          <input type="number" min="1" max="128" bind:value={song.songLengthBars} class="me-bpm-input" onchange={updateEngineSong}/>
+        </label>
+        <label class="me-check">Time Sig
+          <select bind:value={song.timeSignatureNum} onchange={updateEngineSong}>
+            <option value={3}>3/4</option>
+            <option value={4}>4/4</option>
+            <option value={6}>6/8</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="me-sidebar-section">
         <div class="me-sidebar-header"><span>Grid</span></div>
         <label class="me-check"><input type="checkbox" bind:checked={snapToGrid}/> Snap</label>
         <label class="me-check">Size
@@ -632,7 +717,15 @@
     <div class="me-center">
       {#if view === "timeline"}
         <!-- Timeline view -->
-        <div class="me-timeline">
+        <div class="me-timeline"
+          onwheel={(e) => {
+            e.preventDefault();
+            if (e.shiftKey) {
+              zoom = Math.max(0.25, Math.min(4, zoom + (e.deltaY > 0 ? -0.1 : 0.1)));
+            } else {
+              scrollX = Math.max(0, scrollX + e.deltaY);
+            }
+          }}>
           <div class="me-tl-ruler">
             {#each Array(song.songLengthBars + 1) as _, i}
               <div class="me-tl-tick" style="left:{i * BEATS_PER_BAR * PIXELS_PER_BEAT * zoom - scrollX}px">
@@ -647,6 +740,21 @@
               <div class="me-tl-track-row">
                 <div class="me-tl-track-label" style="border-left:3px solid {track.color}">
                   {track.name}
+                  <button class="me-tl-add-clip" onclick={() => openTrackPatternMenu = openTrackPatternMenu === ti ? null : ti} title="Add pattern">+</button>
+                  {#if openTrackPatternMenu === ti}
+                    <div class="me-tl-pattern-menu">
+                      {#each song.patterns as pat (pat.id)}
+                        {@const assigned = track.patterns.includes(pat.id)}
+                        <button class="me-tl-pat-option" class:assigned onclick={() => assigned ? removePatternFromTrack(ti, pat.id) : addPatternToTrack(ti, pat.id)}>
+                          {pat.name}
+                          {#if assigned}<span class="me-tl-pat-check">✓</span>{/if}
+                        </button>
+                      {/each}
+                      {#if song.patterns.length === 0}
+                        <div class="me-tl-pat-empty">No patterns yet</div>
+                      {/if}
+                    </div>
+                  {/if}
                 </div>
                 <div class="me-tl-track-clips">
                   {#each track.patterns as patId}
@@ -655,6 +763,7 @@
                       {#each Array(song.songLengthBars) as _, bar}
                         <div class="me-tl-clip" style="left:{bar * BEATS_PER_BAR * PIXELS_PER_BEAT * zoom}px;width:{pat.lengthBeats * PIXELS_PER_BEAT * zoom}px;background:{track.color}22;border-color:{track.color}44;" onclick={() => { selectedPatternId = patId; selectedTrackIdx = ti; view = "pianoroll"; }}>
                           <span>{pat.name}</span>
+                          <button class="me-tl-clip-del" onclick={(e) => { e.stopPropagation(); removePatternFromTrack(ti, patId); }}>×</button>
                         </div>
                       {/each}
                     {/if}
@@ -688,6 +797,14 @@
               const noteIdx = Math.floor((e.clientY - rect.top) / NOTE_HEIGHT);
               const noteNum = MAX_NOTE - noteIdx;
               addNote(beat, noteNum, 0.7, gridSize);
+            }}
+            onwheel={(e) => {
+              e.preventDefault();
+              if (e.shiftKey) {
+                pianoRollZoom = Math.max(0.25, Math.min(4, pianoRollZoom + (e.deltaY > 0 ? -0.1 : 0.1)));
+              } else {
+                scrollX = Math.max(0, scrollX + e.deltaY);
+              }
             }}>
             <!-- Grid lines -->
             {#each Array(selectedPattern.lengthBeats * 4 + 1) as _, i}
@@ -705,7 +822,38 @@
                 class="me-pr-note"
                 class:selected={selectedNoteId === note.id}
                 style="left:{x}px;top:{y}px;width:{w}px;height:{NOTE_HEIGHT - 1}px;opacity:{note.velocity}"
-                onmousedown={(e) => { e.stopPropagation(); selectedNoteId = note.id; }}
+                onmousedown={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  selectedNoteId = note.id;
+                  if (!audioReady) initAudio();
+                  engine.playNote(note.note, 0.7, 0.15);
+                  const gridEl = e.currentTarget.parentElement!;
+                  const gridRect = gridEl.getBoundingClientRect();
+                  const startClientX = e.clientX;
+                  const startClientY = e.clientY;
+                  const origBeat = note.startBeat;
+                  const origNote = note.note;
+                  let moved = false;
+                  const onMove = (me: MouseEvent) => {
+                    moved = true;
+                    const dx = me.clientX - startClientX;
+                    const dy = me.clientY - startClientY;
+                    let newBeat = origBeat + dx / PIXELS_PER_BEAT / zoom;
+                    let newNoteIdx = (MAX_NOTE - origNote) + Math.round(dy / NOTE_HEIGHT);
+                    newNoteIdx = Math.max(0, Math.min(TOTAL_NOTES - 1, newNoteIdx));
+                    const newNote = MAX_NOTE - newNoteIdx;
+                    if (snapToGrid) newBeat = Math.round(newBeat / gridSize) * gridSize;
+                    newBeat = Math.max(0, newBeat);
+                    moveNote(note.id, newBeat, newNote);
+                  };
+                  const onUp = () => {
+                    window.removeEventListener("mousemove", onMove);
+                    window.removeEventListener("mouseup", onUp);
+                  };
+                  window.addEventListener("mousemove", onMove);
+                  window.addEventListener("mouseup", onUp);
+                }}
               >
                 <span class="me-pr-note-label">{noteName(note.note)}</span>
                 <div class="me-pr-note-resize" onmousedown={(e) => {
@@ -856,6 +1004,8 @@
 
   .me-time-display { font-size: 12px; font-family: 'Geist Mono', monospace; color: #a78bfa; min-width: 80px; text-align: center; margin-left: 8px; }
 
+  .me-vis-canvas { height: 28px; border-radius: 4px; background: #0c0c10; margin-left: 8px; flex-shrink: 0; }
+
   .me-transport-spacer { flex: 1; }
   .me-view-tabs { display: flex; gap: 2px; }
   .me-vtab { display: flex; align-items: center; gap: 3px; padding: 4px 8px; border-radius: 4px; border: 1px solid transparent; background: none; color: #666; font-size: 10px; font-weight: 600; cursor: pointer; transition: .1s; }
@@ -913,6 +1063,18 @@
   .me-tl-track-clips { flex: 1; position: relative; }
   .me-tl-clip { position: absolute; top: 4px; height: 40px; border-radius: 3px; border: 1px solid; cursor: pointer; display: flex; align-items: center; padding: 0 6px; font-size: 9px; color: rgba(255,255,255,.6); }
   .me-tl-clip:hover { opacity: .8; }
+  .me-tl-clip-del { position: absolute; right: 2px; top: 50%; transform: translateY(-50%); background: none; border: none; color: rgba(255,255,255,.3); font-size: 10px; cursor: pointer; padding: 0 2px; opacity: 0; transition: opacity .1s; }
+  .me-tl-clip:hover .me-tl-clip-del { opacity: 1; }
+  .me-tl-clip-del:hover { color: #ef4444; }
+  .me-tl-add-clip { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; border-radius: 3px; border: 1px solid #333; background: #1a1a1e; color: #666; font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .me-tl-add-clip:hover { border-color: #a78bfa; color: #fff; }
+  .me-tl-track-label { position: relative; }
+  .me-tl-pattern-menu { position: absolute; top: 100%; left: 0; z-index: 20; background: #1a1a1e; border: 1px solid #333; border-radius: 4px; padding: 4px; min-width: 120px; box-shadow: 0 4px 12px rgba(0,0,0,.5); }
+  .me-tl-pat-option { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 4px 8px; border: none; background: none; color: #aaa; font-size: 10px; cursor: pointer; border-radius: 2px; text-align: left; }
+  .me-tl-pat-option:hover { background: #a78bfa22; color: #fff; }
+  .me-tl-pat-option.assigned { color: #a78bfa; }
+  .me-tl-pat-check { color: #22c55e; font-size: 10px; }
+  .me-tl-pat-empty { padding: 4px 8px; font-size: 9px; color: #444; }
   .me-tl-playhead-track { position: absolute; top: 0; width: 2px; height: 100%; background: #ef4444; z-index: 4; pointer-events: none; }
 
   /* Piano Roll */
