@@ -65,6 +65,38 @@
       banner: 'gradient',
       href: '/generators/gradient',
     },
+    {
+      id: 'maze',
+      title: 'Maze',
+      desc: 'Generate procedural mazes with recursive backtracking and color themes.',
+      icon: '🏃',
+      banner: 'maze',
+      href: '/generators/maze',
+    },
+    {
+      id: 'fractal',
+      title: 'Fractal',
+      desc: 'Explore Mandelbrot and Julia sets with zoom, pan, and color palettes.',
+      icon: '🌀',
+      banner: 'fractal',
+      href: '/generators/fractal',
+    },
+    {
+      id: 'waveform',
+      title: 'Waveform',
+      desc: 'Create audio waveform and oscilloscope-style art from text.',
+      icon: '📡',
+      banner: 'waveform',
+      href: '/generators/waveform',
+    },
+    {
+      id: 'dither',
+      title: 'Dither',
+      desc: 'Apply Floyd-Steinberg and Atkinson dithering with palette reduction.',
+      icon: '🖼️',
+      banner: 'dither',
+      href: '/generators/dither',
+    },
   ];
 </script>
 
@@ -159,6 +191,32 @@
   .banner-gradient {
     background: linear-gradient(135deg, #6366f1 0%, #ec4899 50%, #f59e0b 100%);
     opacity: 0.9;
+  }
+  .banner-maze {
+    background:
+      repeating-linear-gradient(0deg, transparent, transparent 10px, rgba(251,191,36,.08) 10px, rgba(251,191,36,.08) 11px),
+      repeating-linear-gradient(90deg, transparent, transparent 10px, rgba(251,191,36,.08) 10px, rgba(251,191,36,.08) 11px),
+      radial-gradient(circle at 50% 50%, rgba(251,191,36,.15) 0%, transparent 60%),
+      linear-gradient(135deg, #1a150d 0%, #111 100%);
+  }
+  .banner-fractal {
+    background:
+      radial-gradient(circle at 30% 40%, rgba(139,92,246,.3) 0%, transparent 40%),
+      radial-gradient(circle at 70% 60%, rgba(236,72,153,.2) 0%, transparent 40%),
+      radial-gradient(circle at 50% 50%, rgba(99,102,241,.15) 0%, transparent 60%),
+      linear-gradient(135deg, #0d0d1a 0%, #111 100%);
+  }
+  .banner-waveform {
+    background:
+      repeating-linear-gradient(90deg, transparent, transparent 4px, rgba(34,197,94,.08) 4px, rgba(34,197,94,.08) 5px),
+      radial-gradient(ellipse at 50% 50%, rgba(34,197,94,.2) 0%, transparent 60%),
+      linear-gradient(135deg, #0d1a0f 0%, #111 100%);
+  }
+  .banner-dither {
+    background:
+      repeating-conic-gradient(rgba(248,113,113,.08) 0% 25%, transparent 0% 50%) 0 0 / 8px 8px,
+      radial-gradient(circle at 50% 50%, rgba(248,113,113,.15) 0%, transparent 55%),
+      linear-gradient(135deg, #1a0d0d 0%, #111 100%);
   }
 
   .card-body { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 6px; }

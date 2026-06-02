@@ -241,12 +241,14 @@
     if (data.length === 0) return "";
     const maxBytes = Math.max(1, ...data.map(d => d.bytes));
     const W = 400;
-    const H = 120;
-    const padX = 4;
-    const padY = 4;
+    const H = 140;
+    const padX = 30;
+    const padRight = 5;
+    const padTop = 10;
+    const padBot = 28;
     const points = data.map((d, i) => {
-      const x = padX + (i / Math.max(1, data.length - 1)) * (W - padX * 2);
-      const y = H - padY - (d.bytes / maxBytes) * (H - padY * 2);
+      const x = padX + (i / Math.max(1, data.length - 1)) * (W - padX - padRight);
+      const y = H - padBot - (d.bytes / maxBytes) * (H - padTop - padBot);
       return `${x},${y}`;
     });
     return points.join(" ");
@@ -257,16 +259,18 @@
     if (data.length === 0) return "";
     const maxBytes = Math.max(1, ...data.map(d => d.bytes));
     const W = 400;
-    const H = 120;
-    const padX = 4;
-    const padY = 4;
-    let path = `M ${padX},${H - padY}`;
+    const H = 140;
+    const padX = 30;
+    const padRight = 5;
+    const padTop = 10;
+    const padBot = 28;
+    let path = `M ${padX},${H - padBot}`;
     for (let i = 0; i < data.length; i++) {
-      const x = padX + (i / Math.max(1, data.length - 1)) * (W - padX * 2);
-      const y = H - padY - (data[i].bytes / maxBytes) * (H - padY * 2);
+      const x = padX + (i / Math.max(1, data.length - 1)) * (W - padX - padRight);
+      const y = H - padBot - (data[i].bytes / maxBytes) * (H - padTop - padBot);
       path += ` L ${x},${y}`;
     }
-    path += ` L ${padX + ((data.length - 1) / Math.max(1, data.length - 1)) * (W - padX * 2)},${H - padY} Z`;
+    path += ` L ${padX + ((data.length - 1) / Math.max(1, data.length - 1)) * (W - padX - padRight)},${H - padBot} Z`;
     return path;
   });
 
@@ -404,13 +408,29 @@
       <section class="section">
         <h2 class="section-title">Storage growth</h2>
         {#if storageGrowth().length > 1}
-          <svg viewBox="0 0 400 120" class="growth-chart">
+          {@const growthData = storageGrowth()}
+          {@const maxGrowthBytes = Math.max(1, ...growthData.map(d => d.bytes))}
+          <svg viewBox="0 0 400 140" class="growth-chart">
             <defs>
               <linearGradient id="growthGrad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.3"/>
                 <stop offset="100%" stop-color="var(--accent)" stop-opacity="0.02"/>
               </linearGradient>
             </defs>
+            <!-- Y axis labels -->
+            <text x="2" y="12" fill="var(--text-3)" font-size="7" font-family="Geist Mono, monospace">{fmtBytes(maxGrowthBytes)}</text>
+            <text x="2" y="60" fill="var(--text-3)" font-size="7" font-family="Geist Mono, monospace">{fmtBytes(maxGrowthBytes / 2)}</text>
+            <text x="2" y="110" fill="var(--text-3)" font-size="7" font-family="Geist Mono, monospace">0</text>
+            <!-- Grid lines -->
+            <line x1="30" y1="10" x2="395" y2="10" stroke="var(--border)" stroke-width="0.5" opacity="0.5"/>
+            <line x1="30" y1="58" x2="395" y2="58" stroke="var(--border)" stroke-width="0.5" opacity="0.5"/>
+            <line x1="30" y1="106" x2="395" y2="106" stroke="var(--border)" stroke-width="0.5" opacity="0.5"/>
+            <!-- X axis month labels -->
+            {#each growthData as d, i}
+              {#if i === 0 || d.day.slice(8,10) === '01' || i === growthData.length - 1}
+                <text x={30 + (i / Math.max(1, growthData.length - 1)) * 365} y="132" fill="var(--text-3)" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle">{d.day.slice(5,7)}/{d.day.slice(8,10)}</text>
+              {/if}
+            {/each}
             <path d={growthAreaPath()} fill="url(#growthGrad)"/>
             <polyline points={growthPoints()} fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linejoin="round"/>
           </svg>
@@ -425,11 +445,11 @@
         <div class="donut-wrap">
           <svg viewBox="0 0 120 120" class="donut-chart">
             {#each donutData() as seg, i}
-              <path d={donutPath(60, 60, 40, seg.startAngle, seg.endAngle)} fill="none" stroke={TYPE_COLORS[seg.cat] ?? 'var(--text-3)'} stroke-width="18" stroke-linecap="round"/>
+              <path d={donutPath(60, 60, 42, seg.startAngle, seg.endAngle)} fill="none" stroke={TYPE_COLORS[seg.cat] ?? 'var(--text-3)'} stroke-width="20" stroke-linecap="round"/>
             {/each}
             <circle cx="60" cy="60" r="30" fill="var(--bg-2)"/>
-            <text x="60" y="58" text-anchor="middle" fill="var(--text-1)" font-size="12" font-weight="600" font-family="Geist Mono, monospace">{totalFiles}</text>
-            <text x="60" y="72" text-anchor="middle" fill="var(--text-3)" font-size="7">files</text>
+            <text x="60" y="57" text-anchor="middle" fill="var(--text-1)" font-size="14" font-weight="700" font-family="Geist Mono, monospace">{totalFiles}</text>
+            <text x="60" y="71" text-anchor="middle" fill="var(--text-3)" font-size="7">files</text>
           </svg>
           <div class="donut-legend">
             {#each donutData() as seg}
@@ -587,16 +607,15 @@
   }
   .heatmap-grid {
     display: grid;
-    grid-template-columns: repeat(14, 1fr);
-    grid-template-rows: repeat(7, 1fr);
+    grid-template-columns: repeat(14, 14px);
+    grid-template-rows: repeat(7, 14px);
     gap: 3px;
+    width: fit-content;
   }
   .heatmap-cell {
-    width: 100%;
-    aspect-ratio: 1;
+    width: 14px;
+    height: 14px;
     border-radius: 2px;
-    min-width: 10px;
-    min-height: 10px;
   }
   .heatmap-legend {
     display: flex;
