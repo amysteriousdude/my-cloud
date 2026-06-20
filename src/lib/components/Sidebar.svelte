@@ -11,11 +11,12 @@
     IconMusic,
     IconNote,
     IconTerminal,
+    IconBook,
   } from '@tabler/icons-svelte';
   import { env } from '$env/dynamic/public';
   const NAME = env.PUBLIC_NAME ?? "Omar";
 
-  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'stats' | 'editor' | 'vault' | 'video' | 'music' | 'notes' | 'console';
+  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'stats' | 'editor' | 'vault' | 'video' | 'music' | 'notes' | 'console' | 'dictionary';
 
   let {
     user,
@@ -75,11 +76,12 @@
     { id: 'stats',      icon: IconChartBar,          label: 'Stats'      },
     { id: 'notes',      icon: IconNote,               label: 'Notes'      },
     { id: 'vault',      icon: IconLock,                label: 'Vault' },
-    { id: 'console',   icon: IconTerminal,            label: 'Console' }
+    { id: 'console',   icon: IconTerminal,            label: 'Console' },
+    { id: 'dictionary', icon: IconBook,              label: 'Dictionary' }
   ];
   // Mobile: primary tabs shown in bottom bar, secondary in sheet
   const PRIMARY_TABS: Tab[] = ['files', 'draw', 'video', 'music', 'stats', 'notes', 'vault'];
-  const secondaryIds: Tab[] = ['generators', 'downloader', 'console'];
+  const secondaryIds: Tab[] = ['generators', 'downloader', 'console', 'dictionary'];
   const secondaryTabs = TABS.filter(t => secondaryIds.includes(t.id));
   const primaryTabs = TABS.filter(t => PRIMARY_TABS.includes(t.id));
 
