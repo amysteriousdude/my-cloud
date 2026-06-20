@@ -215,19 +215,19 @@
     transition: margin 0.22s cubic-bezier(.16,1,.3,1);
   }
 
-  /* Sidebar mode: classic left margin */
+  /* Sidebar mode: left margin */
   .app:not(.dock-mode) .main {
     margin-left: var(--sb-width, 52px);
   }
 
   /* Dock left/right: side margin */
-  .app.dock-left .main { margin-left: 72px; margin-right: 0; }
-  .app.dock-right .main { margin-left: 0; margin-right: 72px; }
+  .app.dock-left .main { margin-left: 80px; margin-right: 0; }
+  .app.dock-right .main { margin-left: 0; margin-right: 80px; }
 
-  /* Dock bottom/top: no side margin */
-  .app.dock-mode:not(.dock-left):not(.dock-right) .main { margin-left: 0; margin-right: 0; }
+  /* Dock bottom/top: no side margin, bottom padding for the dock bar */
+  .app.dock-mode:not(.dock-left):not(.dock-right) .main { margin-left: 0; margin-right: 0; padding-bottom: 90px; }
 
   @media (max-width: 600px) {
-    .main { margin-left: 0 !important; margin-right: 0 !important; padding-bottom: 80px; }
+    .main { margin-left: 0 !important; margin-right: 0 !important; padding-bottom: 90px; }
   }
 </style>

@@ -3,7 +3,7 @@
     IconFiles, IconSparkles, IconPencil, IconChartBar, IconNote,
     IconLock, IconTerminal, IconBook, IconLanguage, IconApi,
     IconSun, IconMoon, IconDeviceDesktop, IconLogout, IconCloud,
-    IconDots, IconX, IconGripVertical, IconSettings,
+    IconDots, IconX, IconSettings,
   } from '@tabler/icons-svelte';
   import { env } from '$env/dynamic/public';
   const NAME = env.PUBLIC_NAME ?? "Omar";
@@ -45,28 +45,36 @@
     { id: 'apitester',  icon: IconApi,         label: 'API Tester' },
   ];
 
-  const ICON_MAP: Record<string, any> = {
-    files: IconFiles, generators: IconSparkles, draw: IconPencil,
-    stats: IconChartBar, notes: IconNote, vault: IconLock,
-    console: IconTerminal, dictionary: IconBook, translator: IconLanguage,
-    apitester: IconApi,
-  };
-
   // ── State ──────────────────────────────────────────────────────
   let position = $state<'bottom'|'top'|'left'|'right'>('bottom');
-  let expanded = $state(false);
   let showMore = $state(false);
   let showUser = $state(false);
   let repositioning = $state(false);
   let dragIdx = $state<number>(-1);
   let dragOverIdx = $state<number>(-1);
 
-  // Main tabs: customizable, default [files, generators, translator, editor]
   let mainTabIds = $state<Tab[]>(['files', 'generators', 'translator', 'draw']);
   let mainTabs = $derived(ALL_TABS.filter(t => mainTabIds.includes(t.id)));
-  let moreTabs = $derived(ALL_TABS.filter(t => !mainTabIds.includes(t.id)));
 
-  // Load from localStorage
+  // ── Hover tooltip state ────────────────────────────────────────
+  let hoverTabId = $state<string | null>(null);
+  let hoverX = $state(0);
+  let hoverY = $state(0);
+  let hoverSide = $state<'top'|'bottom'|'left'|'right'>('top');
+
+  function onItemHover(tabId: string, e: MouseEvent) {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    hoverTabId = tabId;
+    hoverX = rect.left + rect.width / 2;
+    if (position === 'bottom') { hoverY = rect.top - 10; hoverSide = 'top'; }
+    else if (position === 'top') { hoverY = rect.bottom + 10; hoverSide = 'bottom'; }
+    else if (position === 'left') { hoverX = rect.right + 10; hoverY = rect.top + rect.height / 2; hoverSide = 'right'; }
+    else { hoverX = rect.left - 10; hoverY = rect.top + rect.height / 2; hoverSide = 'left'; }
+  }
+
+  function onItemLeave() { hoverTabId = null; }
+
+  // ── Load / Save ────────────────────────────────────────────────
   function loadState() {
     try {
       const pos = localStorage.getItem('dock-position');
@@ -85,25 +93,7 @@
     localStorage.setItem('dock-main-tabs', JSON.stringify(mainTabIds));
   }
 
-  // ── Tooltip ────────────────────────────────────────────────────
-  let tooltipText = $state('');
-  let tooltipX = $state(0);
-  let tooltipY = $state(0);
-  let showTooltip = $state(false);
-
-  function showTabTooltip(label: string, e: MouseEvent) {
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    tooltipText = label;
-    if (position === 'bottom') { tooltipX = rect.left + rect.width / 2; tooltipY = rect.top - 8; }
-    else if (position === 'top') { tooltipX = rect.left + rect.width / 2; tooltipY = rect.bottom + 8; }
-    else if (position === 'left') { tooltipX = rect.right + 8; tooltipY = rect.top + rect.height / 2; }
-    else { tooltipX = rect.left - 8; tooltipY = rect.top + rect.height / 2; }
-    showTooltip = true;
-  }
-
-  function hideTooltip() { showTooltip = false; }
-
-  // ── Drag reorder (main tabs) ───────────────────────────────────
+  // ── Drag reorder ───────────────────────────────────────────────
   function onDragStart(e: DragEvent, idx: number) {
     dragIdx = idx;
     if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
@@ -140,7 +130,7 @@
     }
   }
 
-  // ── Reposition (drag dock to edges) ────────────────────────────
+  // ── Reposition dock ────────────────────────────────────────────
   let longPressTimer: ReturnType<typeof setTimeout> | null = null;
   let isDraggingDock = $state(false);
   let dockDragX = $state(0);
@@ -197,9 +187,12 @@
     window.location.reload();
   }
 
+  function getTabLabel(tabId: string): string {
+    return ALL_TABS.find(t => t.id === tabId)?.label ?? tabId;
+  }
+
   $effect(() => { loadState(); });
 
-  // Close overlays on outside click
   function handleOutsideClick(e: MouseEvent) {
     const target = e.target as HTMLElement;
     if (!target.closest('.dock-more-overlay') && !target.closest('.dock-more-btn')) showMore = false;
@@ -226,11 +219,18 @@
   </div>
 {/if}
 
-<!-- ── Tooltip ─────────────────────────────────────────────────── -->
-{#if showTooltip}
-  <div class="dock-tooltip"
-    style="position:fixed; left:{tooltipX}px; top:{tooltipY}px; transform:translate(-50%,-100%);">
-    {tooltipText}
+<!-- ── Floating pill tooltip above hovered item ────────────────── -->
+{#if hoverTabId}
+  {@const side = hoverSide}
+  <div
+    class="dock-pill-tip"
+    class:tip-top={side === 'top'}
+    class:tip-bottom={side === 'bottom'}
+    class:tip-left={side === 'left'}
+    class:tip-right={side === 'right'}
+    style="left:{hoverX}px; top:{hoverY}px;"
+  >
+    {getTabLabel(hoverTabId)}
   </div>
 {/if}
 
@@ -295,29 +295,27 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class="dock pos-{position}"
-  class:expanded={expanded || showMore || showUser}
   class:repositioning
-  onmouseenter={() => { if (!repositioning) expanded = true; }}
-  onmouseleave={() => { if (!repositioning) { expanded = false; showTooltip = false; } }}
   onmousedown={startDockDrag}
   ontouchstart={startDockDrag}
   onmouseup={cancelDockDrag}
   ontouchend={cancelDockDrag}
   onmousemove={cancelDockDrag}
 >
-  <!-- Brand logo -->
+  <!-- Brand -->
   <div class="dock-brand">
-    <IconCloud size={18} stroke={1.5}/>
-    {#if expanded}<span class="dock-brand-text">{NAME}</span>{/if}
+    <IconCloud size={16} stroke={1.5}/>
   </div>
 
-  <!-- Main tab icons -->
+  <div class="dock-sep"></div>
+
+  <!-- Tab items: icon + stacked label -->
   <nav class="dock-tabs">
     {#each mainTabs as tab, i (tab.id)}
       {@const active = activeTab === tab.id}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
-        class="dock-tab"
+        class="dock-item"
         class:active
         class:drag-over={dragOverIdx === i}
         draggable="true"
@@ -325,24 +323,35 @@
         ondragover={(e) => onDragOver(e, i)}
         ondragend={onDragEnd}
         onclick={() => ontabchange(tab.id)}
-        onmouseenter={(e) => showTabTooltip(tab.label, e)}
-        onmouseleave={hideTooltip}
+        onmouseenter={(e) => onItemHover(tab.id, e)}
+        onmouseleave={onItemLeave}
         role="button"
         tabindex="-1"
       >
-        <tab.icon size={20} stroke={active ? 2.2 : 1.5}/>
-        {#if expanded}<span class="dock-tab-label">{tab.label}</span>{/if}
-        {#if active}<div class="dock-tab-dot"></div>{/if}
+        <div class="dock-item-icon">
+          <tab.icon size={20} stroke={active ? 2.2 : 1.5}/>
+        </div>
+        <span class="dock-item-label">{tab.label}</span>
       </div>
     {/each}
-
-    <!-- More button -->
-    <button class="dock-tab dock-more-btn" onclick={() => { showMore = !showMore; showUser = false; }}
-      onmouseenter={(e) => showTabTooltip('More', e)} onmouseleave={hideTooltip}>
-      <IconDots size={20} stroke={1.5}/>
-      {#if expanded}<span class="dock-tab-label">More</span>{/if}
-    </button>
   </nav>
+
+  <div class="dock-sep"></div>
+
+  <!-- More button -->
+  <button
+    class="dock-item dock-more-btn"
+    onclick={() => { showMore = !showMore; showUser = false; }}
+    onmouseenter={(e) => onItemHover('more', e)}
+    onmouseleave={onItemLeave}
+  >
+    <div class="dock-item-icon">
+      <IconDots size={20} stroke={1.5}/>
+    </div>
+    <span class="dock-item-label">More</span>
+  </button>
+
+  <div class="dock-sep"></div>
 
   <!-- User avatar -->
   {#if user}
@@ -350,8 +359,8 @@
     <div
       class="dock-avatar"
       onclick={(e) => { e.stopPropagation(); showUser = !showUser; showMore = false; }}
-      onmouseenter={(e) => showTabTooltip(user!.username, e)}
-      onmouseleave={hideTooltip}
+      onmouseenter={(e) => onItemHover('user', e)}
+      onmouseleave={onItemLeave}
       role="button"
       tabindex="-1"
     >
@@ -361,20 +370,32 @@
 </div>
 
 <style>
-  /* ── Tooltip ───────────────────────────────────────────────────── */
-  .dock-tooltip {
+  /* ── Floating pill tooltip ────────────────────────────────────── */
+  .dock-pill-tip {
+    position: fixed;
     z-index: 1000;
-    background: var(--bg-2);
-    border: 1px solid var(--border);
+    pointer-events: none;
+    background: color-mix(in srgb, var(--bg-2) 80%, transparent);
+    backdrop-filter: blur(16px) saturate(1.4);
+    border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
     color: var(--text-1);
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
     font-family: 'Geist', sans-serif;
-    padding: 4px 10px;
-    border-radius: 6px;
-    pointer-events: none;
+    padding: 5px 14px;
+    border-radius: 999px;
     white-space: nowrap;
-    box-shadow: 0 4px 12px rgba(0,0,0,.3);
+    box-shadow: 0 6px 20px rgba(0,0,0,.25);
+    transform: translate(-50%, -100%);
+    animation: pillIn .12s ease-out;
+  }
+  .dock-pill-tip.tip-bottom { transform: translate(-50%, 0); }
+  .dock-pill-tip.tip-left { transform: translate(0, -50%); }
+  .dock-pill-tip.tip-right { transform: translate(-100%, -50%); }
+
+  @keyframes pillIn {
+    from { opacity: 0; transform: translate(-50%, -100%) scale(.9); }
+    to { opacity: 1; transform: translate(-50%, -100%) scale(1); }
   }
 
   /* ── Reposition overlay ────────────────────────────────────────── */
@@ -463,16 +484,16 @@
   /* ── User panel ────────────────────────────────────────────────── */
   .dock-user-panel {
     position: fixed; z-index: 600;
-    bottom: 80px; right: 16px;
+    bottom: 100px; right: 16px;
     background: var(--bg-2); border: 1px solid var(--border);
     border-radius: 14px; width: 240px;
     box-shadow: 0 12px 40px rgba(0,0,0,.35);
     padding: 12px;
     animation: panelIn .15s ease-out;
   }
-  .dock-user-panel.pos-top { bottom: auto; top: 80px; }
-  .dock-user-panel.pos-left { right: auto; left: 80px; bottom: 16px; }
-  .dock-user-panel.pos-right { right: 80px; bottom: 16px; }
+  .dock-user-panel.pos-top { bottom: auto; top: 100px; }
+  .dock-user-panel.pos-left { right: auto; left: 100px; bottom: 16px; }
+  .dock-user-panel.pos-right { right: 100px; bottom: 16px; }
 
   @keyframes panelIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
@@ -496,88 +517,131 @@
   .dock-user-action:hover { background: var(--hover); color: var(--text-1); }
   .dock-user-danger:hover { background: rgba(220,38,38,.1); color: #f87171; }
 
-  /* ── Dock bar ──────────────────────────────────────────────────── */
+  /* ── Dock bar — glassmorphic pill ──────────────────────────────── */
   .dock {
     position: fixed; z-index: 200;
-    display: flex; align-items: center; gap: 4px;
-    background: color-mix(in srgb, var(--bg-2) 85%, transparent);
-    backdrop-filter: blur(20px) saturate(1.4);
-    border: 1px solid var(--border);
-    box-shadow: 0 8px 32px rgba(0,0,0,.25);
-    transition: all .25s cubic-bezier(.16,1,.3,1);
+    display: flex; align-items: center; gap: 0;
+    background: color-mix(in srgb, var(--bg-2) 60%, transparent);
+    backdrop-filter: blur(24px) saturate(1.6);
+    -webkit-backdrop-filter: blur(24px) saturate(1.6);
+    border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+    box-shadow:
+      0 8px 32px rgba(0,0,0,.2),
+      inset 0 1px 0 color-mix(in srgb, var(--bg-1) 30%, transparent);
+    transition: all .3s cubic-bezier(.16,1,.3,1);
     user-select: none;
+    padding: 6px 8px;
   }
   .dock.repositioning { opacity: .7; cursor: grabbing; }
 
   /* Position variants */
   .dock.pos-bottom {
-    bottom: 12px; left: 50%; transform: translateX(-50%);
-    border-radius: 16px; padding: 6px 10px; flex-direction: row;
+    bottom: 16px; left: 50%; transform: translateX(-50%);
+    border-radius: 999px;
   }
   .dock.pos-top {
-    top: 12px; left: 50%; transform: translateX(-50%);
-    border-radius: 16px; padding: 6px 10px; flex-direction: row;
+    top: 16px; left: 50%; transform: translateX(-50%);
+    border-radius: 999px;
   }
   .dock.pos-left {
-    left: 12px; top: 50%; transform: translateY(-50%);
-    border-radius: 16px; padding: 10px 6px; flex-direction: column;
+    left: 16px; top: 50%; transform: translateY(-50%);
+    border-radius: 999px; flex-direction: column;
   }
   .dock.pos-right {
-    right: 12px; top: 50%; transform: translateY(-50%);
-    border-radius: 16px; padding: 10px 6px; flex-direction: column;
+    right: 16px; top: 50%; transform: translateY(-50%);
+    border-radius: 999px; flex-direction: column;
   }
 
   /* Brand */
   .dock-brand {
     display: flex; align-items: center; justify-content: center;
     color: var(--accent); flex-shrink: 0;
-    min-width: 32px; min-height: 32px;
+    width: 32px; height: 40px;
   }
-  .dock.pos-bottom .dock-brand, .dock.pos-top .dock-brand { gap: 8px; }
-  .dock.pos-left .dock-brand, .dock.pos-right .dock-brand { gap: 8px; }
-  .dock-brand-text { font-size: 13px; font-weight: 700; white-space: nowrap; }
 
-  /* Tabs */
+  /* Separator */
+  .dock-sep {
+    width: 1px; height: 24px;
+    background: color-mix(in srgb, var(--border) 50%, transparent);
+    margin: 0 4px;
+    flex-shrink: 0;
+  }
+  .dock.pos-left .dock-sep, .dock.pos-right .dock-sep {
+    width: 24px; height: 1px; margin: 4px 0;
+  }
+
+  /* Tabs container */
   .dock-tabs {
     display: flex; align-items: center; gap: 2px;
   }
   .dock.pos-left .dock-tabs, .dock.pos-right .dock-tabs {
     flex-direction: column;
   }
-  .dock-tab {
-    display: flex; align-items: center; gap: 6px;
-    padding: 7px 8px; border-radius: 10px;
+
+  /* Individual item: icon + label stacked */
+  .dock-item {
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    padding: 4px 10px 3px; border-radius: 12px;
     color: var(--text-2); cursor: pointer;
-    transition: .13s; position: relative;
-    min-width: 32px; min-height: 32px; justify-content: center;
+    transition: all .15s cubic-bezier(.16,1,.3,1);
+    position: relative;
+    min-width: 44px;
   }
-  .dock-tab:hover { background: var(--hover); color: var(--text-1); }
-  .dock-tab.active { background: var(--hover); color: var(--text-1); }
-  .dock-tab.drag-over { border-top: 2px solid var(--accent); }
-  .dock-tab-label { font-size: 12px; font-weight: 500; white-space: nowrap; }
-  .dock-tab-dot {
-    position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%);
-    width: 4px; height: 4px; border-radius: 50%; background: var(--accent);
+
+  .dock-item:hover {
+    background: color-mix(in srgb, var(--text-1) 8%, transparent);
+    color: var(--text-1);
+    transform: translateY(-2px);
   }
+
+  .dock-item.active {
+    background: color-mix(in srgb, var(--text-1) 12%, transparent);
+    color: var(--text-1);
+  }
+
+  .dock-item.drag-over {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+
+  .dock-item-icon {
+    display: flex; align-items: center; justify-content: center;
+    width: 24px; height: 24px;
+  }
+
+  .dock-item-label {
+    font-size: 10px;
+    font-weight: 500;
+    font-family: 'Geist', sans-serif;
+    white-space: nowrap;
+    line-height: 1;
+    letter-spacing: .01em;
+  }
+
+  .dock-more-btn {
+    color: var(--text-3);
+  }
+  .dock-more-btn:hover { color: var(--text-1); }
 
   /* Avatar */
   .dock-avatar {
-    width: 32px; height: 32px; border-radius: 10px;
+    width: 32px; height: 32px; border-radius: 50%;
     background: var(--accent); color: #fff;
     display: flex; align-items: center; justify-content: center;
     font-size: 13px; font-weight: 700; cursor: pointer;
-    transition: .13s; flex-shrink: 0;
+    transition: all .15s cubic-bezier(.16,1,.3,1);
+    flex-shrink: 0;
+    margin-left: 4px;
   }
-  .dock-avatar:hover { opacity: .85; transform: scale(1.05); }
-
-  /* Expanded state */
-  .dock.expanded { gap: 2px; }
+  .dock-avatar:hover { transform: scale(1.1); box-shadow: 0 2px 12px rgba(99,102,241,.4); }
 
   /* Mobile */
   @media (max-width: 600px) {
-    .dock.pos-bottom { bottom: 8px; padding: 5px 8px; }
-    .dock-tooltip { display: none; }
+    .dock.pos-bottom { bottom: 8px; padding: 4px 6px; }
+    .dock-pill-tip { display: none; }
     .dock-more-panel { width: 95vw; }
     .dock-more-grid { grid-template-columns: repeat(3, 1fr); }
+    .dock-item { min-width: 36px; padding: 3px 6px 2px; }
+    .dock-item-label { font-size: 9px; }
   }
 </style>
