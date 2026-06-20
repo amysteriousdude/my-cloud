@@ -23,7 +23,8 @@
     { code: 'ru', label: 'Russian' },
     { code: 'ja', label: 'Japanese' },
     { code: 'ko', label: 'Korean' },
-    { code: 'zh', label: 'Chinese' },
+    { code: 'zh-CN', label: 'Chinese (Simplified)' },
+    { code: 'zh-TW', label: 'Chinese (Traditional)' },
     { code: 'ar', label: 'Arabic' },
     { code: 'hi', label: 'Hindi' },
     { code: 'tr', label: 'Turkish' },
@@ -34,6 +35,24 @@
     { code: 'vi', label: 'Vietnamese' },
     { code: 'th', label: 'Thai' },
     { code: 'id', label: 'Indonesian' },
+    { code: 'fa', label: 'Persian' },
+    { code: 'he', label: 'Hebrew' },
+    { code: 'cs', label: 'Czech' },
+    { code: 'da', label: 'Danish' },
+    { code: 'fi', label: 'Finnish' },
+    { code: 'el', label: 'Greek' },
+    { code: 'hu', label: 'Hungarian' },
+    { code: 'no', label: 'Norwegian' },
+    { code: 'ro', label: 'Romanian' },
+    { code: 'bg', label: 'Bulgarian' },
+    { code: 'sk', label: 'Slovak' },
+    { code: 'sl', label: 'Slovenian' },
+    { code: 'ms', label: 'Malay' },
+    { code: 'sw', label: 'Swahili' },
+    { code: 'tl', label: 'Filipino' },
+    { code: 'bn', label: 'Bengali' },
+    { code: 'ta', label: 'Tamil' },
+    { code: 'ur', label: 'Urdu' },
   ];
 
   function fetchTimeout(url: string, opts?: RequestInit, ms = 8000) {
@@ -49,14 +68,18 @@
 
     try {
       const res = await fetchTimeout(
-        `https://api.mymemory.translated.net/get?q=${encodeURIComponent(sourceText.trim())}&langpair=${sourceLang}|${targetLang}`
+        `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sourceLang}&tl=${targetLang}&dt=t&q=${encodeURIComponent(sourceText.trim())}`
       );
       if (!res.ok) throw new Error('Translation failed');
       const data = await res.json();
-      translatedText = data.responseData?.translatedText || '';
 
-      if (sourceLang === 'auto' && data.responseData?.detectedLanguage) {
-        sourceLang = data.responseData.detectedLanguage;
+      // Response is [[["translated","original",...], ...], ...]
+      const sentences = data[0];
+      translatedText = sentences.map((s: any[]) => s[0]).join('');
+
+      // Auto-detect language
+      if (sourceLang === 'auto' && data[2]) {
+        sourceLang = data[2];
       }
 
       history = [{
@@ -103,7 +126,7 @@
 <div class="tr-root">
   <div class="tr-header">
     <div class="tr-title"><IconLanguage size={20} stroke={1.8}/><span>Translator</span></div>
-    <p class="tr-sub">21 languages via MyMemory API</p>
+    <p class="tr-sub">40 languages via Google Translate</p>
   </div>
 
   <div class="tr-lang-bar">
