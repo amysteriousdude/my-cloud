@@ -165,42 +165,55 @@
     if (translatedText) navigator.clipboard.writeText(translatedText);
   }
 
+  let voicesLoaded = $state(false);
+
   async function speak(text: string, lang: string) {
     if (!text) return;
-    // Stop any ongoing speech
     window.speechSynthesis?.cancel();
 
-    // Try Google Translate TTS first (more reliable, more languages)
     const tl = lang === 'auto' ? 'en' : lang;
-    try {
-      // Split into chunks of ~200 chars (TTS has a limit)
-      const chunks = text.match(/.{1,200}(?:\s|$)/g) || [text];
-      for (const chunk of chunks) {
-        const res = await fetchTimeout(
-          `https://translate.google.com/translate_tts?ie=UTF-8&tl=${tl}&client=tw-ob&q=${encodeURIComponent(chunk.trim())}`,
-          undefined, 10000
-        );
-        if (res.ok) {
-          const blob = await res.blob();
-          const url = URL.createObjectURL(blob);
-          const audio = new Audio(url);
-          await new Promise<void>((resolve) => {
-            audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
-            audio.onerror = () => { URL.revokeObjectURL(url); resolve(); };
-            audio.play().catch(() => resolve());
-          });
-        }
-      }
-    } catch {
-      // Fallback to browser TTS
-      if (window.speechSynthesis) {
-        const u = new SpeechSynthesisUtterance(text);
-        u.lang = tl;
+
+    // Ensure voices are loaded
+    if (!voicesLoaded && window.speechSynthesis) {
+      await new Promise<void>(resolve => {
         const voices = window.speechSynthesis.getVoices();
-        const match = voices.find(v => v.lang.startsWith(tl));
-        if (match) u.voice = match;
-        window.speechSynthesis.speak(u);
+        if (voices.length > 0) { voicesLoaded = true; resolve(); return; }
+        window.speechSynthesis.onvoiceschanged = () => { voicesLoaded = true; resolve(); };
+        setTimeout(resolve, 500);
+      });
+    }
+
+    // Split into ~200 char chunks on sentence boundaries
+    const chunks = text.match(/[^.!?]+[.!?]+[\s]*|[^.!?]+$/g) || [text];
+
+    for (const chunk of chunks) {
+      const trimmed = chunk.trim();
+      if (!trimmed) continue;
+
+      const u = new SpeechSynthesisUtterance(trimmed);
+      u.lang = tl;
+      u.rate = 1;
+      u.pitch = 1;
+
+      // Find best matching voice
+      if (window.speechSynthesis) {
+        const voices = window.speechSynthesis.getVoices();
+        // Exact match first
+        let voice = voices.find(v => v.lang === tl);
+        // Then prefix match (e.g. 'es' matches 'es-ES')
+        if (!voice) voice = voices.find(v => v.lang.startsWith(tl.split('-')[0]));
+        // Then partial match
+        if (!voice) voice = voices.find(v => v.lang.includes(tl.split('-')[0]));
+        if (voice) u.voice = voice;
       }
+
+      await new Promise<void>(resolve => {
+        u.onend = () => resolve();
+        u.onerror = () => resolve();
+        window.speechSynthesis?.speak(u);
+        // Safety timeout
+        setTimeout(resolve, 15000);
+      });
     }
   }
 
