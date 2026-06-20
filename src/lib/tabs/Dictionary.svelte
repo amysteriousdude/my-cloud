@@ -1,481 +1,383 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import {
-    IconSearch, IconBook, IconLanguage, IconLetterA,
-    IconRefresh, IconExternalLink, IconLoader2,
-    IconLetterCaseLower, IconAlphabetGreek, IconAbacus,
-    IconBook2, IconHash, IconStar,
+    IconSearch, IconBook, IconLanguage,
+    IconLoader2, IconLetterCaseLower, IconAlphabetGreek,
+    IconHash, IconWorld, IconX, IconMoodHappy, IconClock,
   } from '@tabler/icons-svelte';
 
   let query = $state('');
   let loading = $state(false);
   let activeSource = $state('all');
   let results: Record<string, any> = $state({});
-  let error = $state('');
+  let suggestions: string[] = $state([]);
+  let showSuggestions = $state(false);
+  let suggestionIdx = $state(-1);
+  let suggestDebounce: ReturnType<typeof setTimeout>;
 
   const SOURCES = [
-    { id: 'all',        label: 'All Sources',         icon: IconSearch },
-    { id: 'freedic',    label: 'Free Dictionary',     icon: IconBook },
-    { id: 'wiktionary', label: 'Wiktionary',           icon: IconLanguage },
-    { id: 'merriam',    label: 'Merriam-Webster',      icon: IconBook2 },
-    { id: 'wordsapi',   label: 'WordsAPI',             icon: IconLetterA },
-    { id: 'datamuse',   label: 'Datamuse',             icon: IconHash },
-    { id: 'lastletter', label: 'Last Letter Library',  icon: IconLetterCaseLower },
-    { id: 'oxford',     label: 'Oxford Learner',       icon: IconAlphabetGreek },
+    { id: 'all',        label: 'All',          icon: IconSearch },
+    { id: 'freedic',    label: 'Free Dict',    icon: IconBook },
+    { id: 'wiktionary', label: 'Wiktionary',   icon: IconLanguage },
+    { id: 'datamuse',   label: 'Datamuse',     icon: IconHash },
+    { id: 'lastletter', label: 'Last Letter',  icon: IconLetterCaseLower },
+    { id: 'oxford',     label: 'Oxford',       icon: IconAlphabetGreek },
+    { id: 'wordnet',    label: 'WordNet',      icon: IconWorld },
+    { id: 'urban',      label: 'Urban Dict',   icon: IconMoodHappy },
+    { id: 'etymology',  label: 'Etymology',    icon: IconClock },
   ];
 
-  const SOURCE_COLORS: Record<string, string> = {
-    freedic: '#4ade80',
-    wiktionary: '#60a5fa',
-    merriam: '#f472b6',
-    wordsapi: '#facc15',
-    datamuse: '#c084fc',
-    lastletter: '#fb923c',
-    oxford: '#34d399',
+  const COLORS: Record<string, string> = {
+    freedic: '#4ade80', wiktionary: '#60a5fa', datamuse: '#c084fc',
+    lastletter: '#fb923c', oxford: '#34d399', wordnet: '#facc15',
+    urban: '#ef4444', etymology: '#a78bfa',
   };
 
+  function fetchTimeout(url: string, opts?: RequestInit, ms = 5000) {
+    const c = new AbortController();
+    const t = setTimeout(() => c.abort(), ms);
+    return fetch(url, { ...opts, signal: c.signal }).finally(() => clearTimeout(t));
+  }
+
+  function onInput() {
+    clearTimeout(suggestDebounce);
+    suggestionIdx = -1;
+    if (query.trim().length < 2) { suggestions = []; showSuggestions = false; return; }
+    suggestDebounce = setTimeout(fetchSuggestions, 180);
+  }
+
+  async function fetchSuggestions() {
+    const q = query.trim();
+    if (q.length < 2) return;
+    try {
+      const r = await fetchTimeout(`https://api.datamuse.com/sug?s=${encodeURIComponent(q)}&max=8`, undefined, 2500);
+      if (!r.ok) return;
+      const d = await r.json();
+      suggestions = d.map((s: any) => s.word);
+      showSuggestions = suggestions.length > 0;
+    } catch {}
+  }
+
+  function pickSuggestion(w: string) {
+    query = w; showSuggestions = false; suggestions = []; search();
+  }
+
+  function onKeydown(e: KeyboardEvent) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); suggestionIdx = Math.min(suggestionIdx + 1, suggestions.length - 1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); suggestionIdx = Math.max(suggestionIdx - 1, -1); }
+    else if (e.key === 'Enter') {
+      if (suggestionIdx >= 0 && suggestions[suggestionIdx]) pickSuggestion(suggestions[suggestionIdx]);
+      else search();
+    } else if (e.key === 'Escape') { showSuggestions = false; }
+  }
+
   async function search() {
-    if (!query.trim()) return;
-    loading = true;
-    error = '';
-    results = {};
-
-    const sources = activeSource === 'all'
-      ? SOURCES.filter(s => s.id !== 'all')
-      : SOURCES.filter(s => s.id === activeSource);
-
-    const promises = sources.map(s => fetchSource(s.id, query.trim()));
-    await Promise.allSettled(promises);
+    const q = query.trim();
+    if (!q) return;
+    loading = true; results = {}; showSuggestions = false;
+    const srcs = activeSource === 'all' ? SOURCES.filter(s => s.id !== 'all') : SOURCES.filter(s => s.id === activeSource);
+    await Promise.allSettled(srcs.map(s => fetchSource(s.id, q)));
     loading = false;
   }
 
-  async function fetchSource(sourceId: string, word: string) {
+  async function fetchSource(id: string, word: string) {
     try {
-      switch (sourceId) {
-        case 'freedic':
-          await fetchFreeDict(word);
-          break;
-        case 'wiktionary':
-          await fetchWiktionary(word);
-          break;
-        case 'merriam':
-          await fetchMerriam(word);
-          break;
-        case 'wordsapi':
-          await fetchWordsAPI(word);
-          break;
-        case 'datamuse':
-          await fetchDatamuse(word);
-          break;
-        case 'lastletter':
-          await fetchLastLetter(word);
-          break;
-        case 'oxford':
-          await fetchOxford(word);
-          break;
-      }
+      if (id === 'freedic') return await fetchFreeDict(word);
+      if (id === 'wiktionary') return await fetchWiktionary(word);
+      if (id === 'datamuse') return await fetchDatamuse(word);
+      if (id === 'lastletter') return await fetchLastLetter(word);
+      if (id === 'oxford') return await fetchOxford(word);
+      if (id === 'wordnet') return await fetchWordNet(word);
+      if (id === 'urban') return await fetchUrban(word);
+      if (id === 'etymology') return await fetchEtymology(word);
     } catch (e: any) {
-      results[sourceId] = { error: e.message || 'Failed to fetch' };
+      if (e.name !== 'AbortError') results[id] = { error: e.message || 'Failed' };
     }
   }
 
   async function fetchFreeDict(word: string) {
-    const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
-    if (!res.ok) throw new Error('No results found');
-    const data = await res.json();
-    results['freedic'] = data.map((entry: any) => ({
-      word: entry.word,
-      phonetic: entry.phonetic || entry.phonetics?.[0]?.text || '',
-      audio: entry.phonetics?.find((p: any) => p.audio)?.audio,
-      meanings: entry.meanings?.map((m: any) => ({
-        partOfSpeech: m.partOfSpeech,
-        definitions: m.definitions?.slice(0, 3).map((d: any) => ({
-          definition: d.definition,
-          example: d.example,
-          synonyms: d.synonyms?.slice(0, 3),
-        })),
+    const r = await fetchTimeout(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
+    if (!r.ok) throw new Error('No results');
+    const d = await r.json();
+    results['freedic'] = (Array.isArray(d) ? d : [d]).slice(0, 2).map((e: any) => ({
+      word: e.word,
+      phonetic: e.phonetic || e.phonetics?.find((p: any) => p.text)?.text || '',
+      meanings: e.meanings?.map((m: any) => ({
+        pos: m.partOfSpeech,
+        defs: m.definitions?.slice(0, 3).map((df: any) => ({ def: df.definition, ex: df.example, syns: df.synonyms?.slice(0, 3) })),
       })),
     }));
   }
 
   async function fetchWiktionary(word: string) {
-    const res = await fetch(
-      `https://en.wiktionary.org/api/rest_v1/page/definition/${encodeURIComponent(word)}`
-    );
-    if (!res.ok) throw new Error('No results found');
-    const data = await res.json();
-    const languages = ['en'];
-    const filtered = languages
-      .map(lang => data[lang])
-      .filter(Boolean)
-      .flat();
-    results['wiktionary'] = filtered.map((entry: any) => ({
-      partOfSpeech: entry.partOfSpeech,
-      definitions: entry.definitions?.slice(0, 3).map((d: any) => ({
-        definition: d.definition?.replace(/<[^>]*>/g, ''),
-        example: d.examples?.[0]?.replace(/<[^>]*>/g, ''),
+    const r = await fetchTimeout(`https://en.wiktionary.org/api/rest_v1/page/definition/${encodeURIComponent(word)}`);
+    if (!r.ok) throw new Error('No results');
+    const d = await r.json();
+    results['wiktionary'] = (d['en'] || []).map((e: any) => ({
+      pos: e.partOfSpeech,
+      defs: e.definitions?.slice(0, 3).map((df: any) => ({
+        def: (df.definition || '').replace(/<[^>]*>/g, ''),
+        ex: df.examples?.[0]?.replace(/<[^>]*>/g, ''),
       })),
     }));
-  }
-
-  async function fetchMerriam(word: string) {
-    const res = await fetch(
-      `https://www.dictionaryapi.com/api/v3/references/collegiate/json/${encodeURIComponent(word)}?key=`
-    );
-    if (!res.ok) throw new Error('No results found');
-    const data = await res.json();
-    if (!data || !data.length || typeof data[0] === 'string') {
-      throw new Error('No results found');
-    }
-    results['merriam'] = data.slice(0, 3).map((entry: any) => ({
-      word: entry.hwi?.hw || word,
-      functionalLabel: entry.fl,
-      shortdef: entry.shortdef?.slice(0, 3),
-      audio: entry.hwi?.prs?.[0]?.sound?.audio,
-      definitions: entry.shortdef?.slice(0, 3).map((d: string) => ({
-        definition: d,
-      })),
-    }));
-  }
-
-  async function fetchWordsAPI(word: string) {
-    const res = await fetch(`https://wordsapiv1.p.rapidapi.com/words/${encodeURIComponent(word)}`, {
-      headers: {
-        'X-RapidAPI-Key': 'public-demo',
-        'X-RapidAPI-Host': 'wordsapiv1.p.rapidapi.com',
-      },
-    });
-    if (!res.ok) throw new Error('No results found');
-    const data = await res.json();
-    results['wordsapi'] = {
-      word: data.word,
-      syllables: data.syllables?.count,
-      pronunciations: data.pronunciations?.all,
-      definitions: data.results?.slice(0, 5).map((r: any) => ({
-        definition: r.definition,
-        partOfSpeech: r.partOfSpeech,
-        examples: r.examples?.slice(0, 1),
-        synonyms: r.synonyms?.slice(0, 3),
-        typeOf: r.typeOf?.slice(0, 2),
-        hasTypes: r.hasTypes?.slice(0, 2),
-        inCategory: r.inCategory?.slice(0, 2),
-      })),
-    };
   }
 
   async function fetchDatamuse(word: string) {
-    const [defRes, rhymeRes, synRes] = await Promise.allSettled([
-      fetch(`https://api.datamuse.com/words?sp=${encodeURIComponent(word)}&md=d&max=1`),
-      fetch(`https://api.datamuse.com/words?rel_rhy=${encodeURIComponent(word)}&max=8`),
-      fetch(`https://api.datamuse.com/words?ml=${encodeURIComponent(word)}&max=8`),
+    const [defR, rhymeR, synR, slR] = await Promise.allSettled([
+      fetchTimeout(`https://api.datamuse.com/words?sp=${encodeURIComponent(word)}&md=d&max=1`, undefined, 3000),
+      fetchTimeout(`https://api.datamuse.com/words?rel_rhy=${encodeURIComponent(word)}&max=8`, undefined, 3000),
+      fetchTimeout(`https://api.datamuse.com/words?ml=${encodeURIComponent(word)}&max=8`, undefined, 3000),
+      fetchTimeout(`https://api.datamuse.com/words?sl=${encodeURIComponent(word)}&max=5`, undefined, 3000),
     ]);
-
-    const definition = defRes.status === 'fulfilled' && defRes.value.ok ? await defRes.value.json() : [];
-    const rhymes = rhymeRes.status === 'fulfilled' && rhymeRes.value.ok ? await rhymeRes.value.json() : [];
-    const synonyms = synRes.status === 'fulfilled' && synRes.value.ok ? await synRes.value.json() : [];
-
+    const get = async (r: PromiseSettledResult<Response>) => r.status === 'fulfilled' && r.value.ok ? await r.value.json() : [];
+    const defs = await get(defR), rhymes = await get(rhymeR), syns = await get(synR), sl = await get(slR);
     results['datamuse'] = {
-      definition: definition[0]?.defs?.map((d: string) => {
-        const [pos, def] = d.split('\t');
-        return { partOfSpeech: pos, definition: def };
-      }),
-      rhymes: rhymes.filter((r: any) => r.word !== word).slice(0, 8),
-      synonyms: synonyms.filter((s: any) => s.word !== word).slice(0, 8),
+      definitions: defs[0]?.defs?.map((d: string) => { const [p, def] = d.split('\t'); return { pos: p, def }; }),
+      rhymes: rhymes.filter((r: any) => r.word !== word),
+      synonyms: syns.filter((s: any) => s.word !== word),
+      soundsLike: sl.filter((s: any) => s.word !== word),
     };
   }
 
   async function fetchLastLetter(word: string) {
-    const lastChar = word.slice(-1).toLowerCase();
-    const res = await fetch(`https://api.datamuse.com/words?sp=*${lastChar}&md=d&max=12`);
-    if (!res.ok) throw new Error('No results found');
-    const data = await res.json();
-    const filtered = data.filter((w: any) => w.word.endsWith(lastChar) && w.word !== word);
+    const last = word.slice(-1).toLowerCase();
+    const r = await fetchTimeout(`https://api.datamuse.com/words?sp=*${last}&md=d&max=20`, undefined, 4000);
+    if (!r.ok) throw new Error('No results');
+    const d = await r.json();
     results['lastletter'] = {
-      lastLetter: lastChar,
-      words: filtered.map((w: any) => ({
+      lastLetter: last,
+      words: d.filter((w: any) => w.word.endsWith(last) && w.word.length >= 3).map((w: any) => ({
         word: w.word,
-        definitions: w.defs?.map((d: string) => {
-          const [pos, def] = d.split('\t');
-          return { partOfSpeech: pos, definition: def };
-        })?.slice(0, 1),
+        defs: w.defs?.map((df: string) => { const [p, def] = df.split('\t'); return { pos: p, def }; })?.slice(0, 1),
       })),
     };
   }
 
   async function fetchOxford(word: string) {
-    const res = await fetch(`https://od-api.oxforddictionaries.com/api/v2/entries/en-us/${encodeURIComponent(word.toLowerCase())}`, {
-      headers: { 'app_id': 'public', 'app_key': 'public' },
-    });
-    if (!res.ok) throw new Error('No results found');
-    const data = await res.json();
-    const lexicalEntries = data.results?.[0]?.lexicalEntries || [];
-    results['oxford'] = lexicalEntries.slice(0, 3).map((le: any) => ({
-      partOfSpeech: le.lexicalCategory?.id,
-      entries: le.entries?.slice(0, 1).map((e: any) => ({
-        pronunciation: e.pronunciations?.[0]?.phoneticSpelling,
-        definitions: e.senses?.slice(0, 3).map((s: any) => ({
-          definition: s.definitions?.[0],
-          example: s.examples?.[0]?.text,
-          synonyms: s.synonyms?.slice(0, 2).map((syn: any) => syn.text),
+    try {
+      const r = await fetchTimeout(
+        `https://od-api.oxforddictionaries.com/api/v2/entries/en-us/${encodeURIComponent(word.toLowerCase())}`,
+        { headers: { app_id: 'public', app_key: 'public' } }, 4000
+      );
+      if (!r.ok) throw new Error('No results');
+      const d = await r.json();
+      const entries = d.results?.[0]?.lexicalEntries || [];
+      results['oxford'] = entries.slice(0, 3).map((le: any) => ({
+        pos: le.lexicalCategory?.id,
+        defs: le.entries?.[0]?.senses?.slice(0, 3).map((s: any) => ({
+          def: s.definitions?.[0], ex: s.examples?.[0]?.text,
+          syns: s.synonyms?.slice(0, 2).map((sy: any) => sy.text),
         })),
-      })),
+        pronunciation: le.entries?.[0]?.pronunciations?.[0]?.phoneticSpelling,
+      }));
+    } catch { results['oxford'] = { error: 'No results' }; }
+  }
+
+  async function fetchUrban(word: string) {
+    const r = await fetchTimeout(`https://api.urbandictionary.com/v0/define?term=${encodeURIComponent(word)}`, undefined, 4000);
+    if (!r.ok) throw new Error('No results');
+    const d = await r.json();
+    if (!d.list?.length) throw new Error('No results');
+    results['urban'] = d.list.slice(0, 4).map((e: any) => ({
+      word: e.word,
+      definition: e.definition?.replace(/\[/g, '').replace(/\]/g, ''),
+      example: e.example?.replace(/\[/g, '').replace(/\]/g, ''),
+      author: e.author,
+      thumbsUp: e.thumbs_up,
+      thumbsDown: e.thumbs_down,
+      date: e.written_on?.slice(0, 10),
     }));
   }
 
-  function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Enter') search();
+  async function fetchEtymology(word: string) {
+    const r = await fetchTimeout(`https://en.wiktionary.org/api/rest_v1/page/etymology/${encodeURIComponent(word)}`, undefined, 4000);
+    if (!r.ok) throw new Error('No results');
+    const d = await r.json();
+    const etymologies = d.etymologies || [];
+    if (!etymologies.length) throw new Error('No results');
+    results['etymology'] = etymologies.slice(0, 3).map((e: any) => ({
+      language: e.language,
+      content: (e.content || []).map((c: any) => c.text || '').filter(Boolean).join(' '),
+    }));
   }
 
-  onMount(() => {
-    const saved = localStorage.getItem('dict-query');
-    if (saved) query = saved;
-  });
-
-  $effect(() => {
-    if (query) localStorage.setItem('dict-query', query);
-  });
+  async function fetchWordNet(word: string) {
+    const r = await fetchTimeout(`https://api.datamuse.com/words?sp=${encodeURIComponent(word)}&md=r&max=1`, undefined, 3000);
+    if (!r.ok) throw new Error('No results');
+    const d = await r.json();
+    if (d.length) {
+      results['wordnet'] = {
+        word: d[0].word, score: d[0].score,
+        defs: d[0].defs?.map((df: string) => { const [p, def] = df.split('\t'); return { pos: p, def }; }),
+      };
+    } else results['wordnet'] = { error: 'No results' };
+  }
 </script>
 
 <div class="dict-root">
   <div class="dict-header">
-    <div class="dict-title">
-      <IconBook size={20} stroke={1.8} />
-      <span>Dictionary</span>
-    </div>
-    <p class="dict-subtitle">Search across 7+ dictionary sources</p>
+    <div class="dict-title"><IconBook size={20} stroke={1.8}/><span>Dictionary</span></div>
+    <p class="dict-sub">Definitions, synonyms, rhymes & word games</p>
   </div>
 
   <div class="dict-search-row">
     <div class="dict-input-wrap">
-      <IconSearch size={16} stroke={1.8} />
-      <input
-        type="text"
-        class="dict-input"
-        placeholder="Type a word..."
-        bind:value={query}
-        onkeydown={handleKeydown}
-        autofocus
-      />
+      <IconSearch size={16} stroke={1.8}/>
+      <input type="text" class="dict-input"
+        placeholder="Type a word... (try sphenopalatineganglioneuralgia)"
+        bind:value={query} oninput={onInput} onkeydown={onKeydown}
+        onblur={() => setTimeout(() => showSuggestions = false, 150)}
+        onfocus={() => { if (suggestions.length) showSuggestions = true; }}
+        autocomplete="off" spellcheck="false"/>
       {#if query}
-        <button class="dict-clear" onclick={() => { query = ''; results = {}; error = ''; }}>
-          ✕
+        <button class="dict-clear" onclick={() => { query = ''; results = {}; suggestions = []; }}>
+          <IconX size={14} stroke={2}/>
         </button>
       {/if}
-    </div>
-    <button class="dict-search-btn" onclick={search} disabled={loading || !query.trim()}>
-      {#if loading}
-        <IconLoader2 size={16} stroke={2} class="spin" />
-      {:else}
-        <IconSearch size={16} stroke={2} />
+      {#if showSuggestions && suggestions.length}
+        <div class="dict-suggest">
+          {#each suggestions as s, i}
+            <button class="dict-sug-item" class:active={i === suggestionIdx}
+              onmousedown={() => pickSuggestion(s)}>
+              <IconSearch size={12} stroke={2}/><span>{s}</span>
+            </button>
+          {/each}
+        </div>
       {/if}
-      Search
+    </div>
+    <button class="dict-go" onclick={search} disabled={loading || !query.trim()}>
+      {#if loading}<IconLoader2 size={16} stroke={2} class="spin"/>{:else}Search{/if}
     </button>
   </div>
 
-  <div class="dict-sources">
-    {#each SOURCES as source}
-      {@const isActive = activeSource === source.id}
-      {@const hasResult = results[source.id] !== undefined}
-      <button
-        class="dict-source-chip"
-        class:active={isActive}
-        class:has-result={hasResult && !isActive}
-        style={isActive ? `--chip-color: ${SOURCE_COLORS[source.id] || 'var(--accent)'}` : ''}
-        onclick={() => activeSource = source.id}
-      >
-        <source.icon size={13} stroke={1.8} />
-        <span>{source.label}</span>
-        {#if hasResult && !isActive}
-          <span class="dict-chip-dot" style="background: {SOURCE_COLORS[source.id]}"></span>
-        {/if}
+  <div class="dict-chips">
+    {#each SOURCES as src}
+      <button class="dict-chip" class:active={activeSource === src.id}
+        style={activeSource === src.id ? `--c:${COLORS[src.id]||'var(--accent)'}` : ''}
+        onclick={() => activeSource = src.id}>
+        <src.icon size={12} stroke={1.8}/>{src.label}
       </button>
     {/each}
   </div>
 
-  {#if error}
-    <div class="dict-error">{error}</div>
-  {/if}
-
   <div class="dict-results">
     {#if loading}
-      <div class="dict-loading">
-        <IconLoader2 size={32} stroke={1.5} class="spin" />
-        <span>Searching dictionaries...</span>
-      </div>
+      <div class="dict-loading"><IconLoader2 size={28} stroke={1.5} class="spin"/><span>Searching...</span></div>
     {:else if Object.keys(results).length === 0}
-      <div class="dict-empty">
-        <IconBook size={48} stroke={1} />
-        <span>Search for a word to get definitions, synonyms, rhymes, and more</span>
-      </div>
+      <div class="dict-empty"><IconBook size={44} stroke={1}/><span>Search a word to see definitions, synonyms, rhymes & more</span></div>
     {:else}
-      {#each Object.entries(results) as [sourceId, data]}
+      {#each Object.entries(results) as [sid, data]}
         {#if data && !data.error}
-          <div class="dict-card" style="border-left-color: {SOURCE_COLORS[sourceId] || 'var(--border)'}">
-            <div class="dict-card-header">
-              <span class="dict-card-source" style="color: {SOURCE_COLORS[sourceId]}">
-                {SOURCES.find(s => s.id === sourceId)?.label || sourceId}
-              </span>
+          <div class="dict-card" style="border-left-color:{COLORS[sid]||'var(--border)'}">
+            <div class="dict-card-hdr">
+              <span class="dict-card-src" style="color:{COLORS[sid]}">{SOURCES.find(s=>s.id===sid)?.label}</span>
             </div>
 
-            {#if sourceId === 'freedic' && Array.isArray(data)}
+            {#if sid === 'freedic' && Array.isArray(data)}
               {#each data as entry}
-                <div class="dict-card-word">{entry.word}</div>
-                {#if entry.phonetic}
-                  <div class="dict-card-phonetic">{entry.phonetic}</div>
-                {/if}
+                <div class="dict-word">{entry.word}</div>
+                {#if entry.phonetic}<div class="dict-phon">{entry.phonetic}</div>{/if}
                 {#if entry.meanings}
-                  {#each entry.meanings as meaning}
-                    <div class="dict-pos">{meaning.partOfSpeech}</div>
-                    {#if meaning.definitions}
-                      {#each meaning.definitions as def, i}
-                        <div class="dict-def">
-                          <span class="dict-def-num">{i + 1}.</span>
-                          {def.definition}
-                        </div>
-                        {#if def.example}
-                          <div class="dict-example">"{def.example}"</div>
-                        {/if}
-                        {#if def.synonyms?.length}
-                          <div class="dict-synonyms">
-                            Synonyms: {def.synonyms.join(', ')}
-                          </div>
-                        {/if}
-                      {/each}
-                    {/if}
+                  {#each entry.meanings as m}
+                    <div class="dict-pos">{m.pos}</div>
+                    {#each m.defs as d, i}
+                      <div class="dict-def"><b>{i+1}.</b> {d.def}</div>
+                      {#if d.ex}<div class="dict-ex">"{d.ex}"</div>{/if}
+                      {#if d.syns?.length}<div class="dict-syns">Syn: {d.syns.join(', ')}</div>{/if}
+                    {/each}
                   {/each}
                 {/if}
               {/each}
 
-            {:else if sourceId === 'wiktionary' && Array.isArray(data)}
+            {:else if sid === 'wiktionary' && Array.isArray(data)}
               {#each data as entry}
-                <div class="dict-pos">{entry.partOfSpeech}</div>
-                {#if entry.definitions}
-                  {#each entry.definitions as def, i}
-                    <div class="dict-def">
-                      <span class="dict-def-num">{i + 1}.</span>
-                      {@html def.definition}
-                    </div>
-                    {#if def.example}
-                      <div class="dict-example">"{def.example}"</div>
-                    {/if}
-                  {/each}
-                {/if}
-              {/each}
-
-            {:else if sourceId === 'merriam' && Array.isArray(data)}
-              {#each data as entry}
-                <div class="dict-card-word">{entry.word}</div>
-                {#if entry.functionalLabel}
-                  <div class="dict-pos">{entry.functionalLabel}</div>
-                {/if}
-                {#if entry.definitions}
-                  {#each entry.definitions as def, i}
-                    <div class="dict-def">
-                      <span class="dict-def-num">{i + 1}.</span>
-                      {def.definition}
-                    </div>
-                  {/each}
-                {/if}
-              {/each}
-
-            {:else if sourceId === 'wordsapi'}
-              <div class="dict-card-word">{data.word}</div>
-              {#if data.syllables}
-                <div class="dict-card-meta">Syllables: {data.syllables}</div>
-              {/if}
-              {#if data.definitions}
-                {#each data.definitions as def, i}
-                  {#if def.partOfSpeech}
-                    <div class="dict-pos">{def.partOfSpeech}</div>
-                  {/if}
-                  <div class="dict-def">
-                    <span class="dict-def-num">{i + 1}.</span>
-                    {def.definition}
-                  </div>
-                  {#if def.examples?.length}
-                    <div class="dict-example">"{def.examples[0]}"</div>
-                  {/if}
-                  {#if def.synonyms?.length}
-                    <div class="dict-synonyms">Synonyms: {def.synonyms.join(', ')}</div>
-                  {/if}
+                <div class="dict-pos">{entry.pos}</div>
+                {#each entry.defs as d, i}
+                  <div class="dict-def"><b>{i+1}.</b> {@html d.def}</div>
+                  {#if d.ex}<div class="dict-ex">"{d.ex}"</div>{/if}
                 {/each}
-              {/if}
+              {/each}
 
-            {:else if sourceId === 'datamuse'}
-              {#if data.definition?.length}
-                <div class="dict-section-label">Definitions</div>
-                {#each data.definition as def, i}
-                  <div class="dict-def">
-                    <span class="dict-def-num">{i + 1}.</span>
-                    <span class="dict-pos">{def.partOfSpeech}</span> {def.definition}
-                  </div>
+            {:else if sid === 'datamuse'}
+              {#if data.definitions?.length}
+                <div class="dict-sub">Definitions</div>
+                {#each data.definitions as d, i}
+                  <div class="dict-def"><b>{i+1}.</b> <span class="dict-pos">{d.pos}</span> {d.def}</div>
                 {/each}
               {/if}
               {#if data.rhymes?.length}
-                <div class="dict-section-label">Rhymes</div>
-                <div class="dict-tag-list">
-                  {#each data.rhymes as rhyme}
-                    <span class="dict-tag">{rhyme.word}{rhyme.numSyllables ? ` (${rhyme.numSyllables})` : ''}</span>
-                  {/each}
-                </div>
+                <div class="dict-sub">Rhymes</div>
+                <div class="dict-tags">{#each data.rhymes as r}<span class="dict-tag">{r.word}</span>{/each}</div>
               {/if}
               {#if data.synonyms?.length}
-                <div class="dict-section-label">Related Words</div>
-                <div class="dict-tag-list">
-                  {#each data.synonyms as syn}
-                    <span class="dict-tag">{syn.word}</span>
-                  {/each}
-                </div>
+                <div class="dict-sub">Related Words</div>
+                <div class="dict-tags">{#each data.synonyms as s}<span class="dict-tag">{s.word}</span>{/each}</div>
+              {/if}
+              {#if data.soundsLike?.length}
+                <div class="dict-sub">Sounds Like</div>
+                <div class="dict-tags">{#each data.soundsLike as s}<span class="dict-tag">{s.word}</span>{/each}</div>
               {/if}
 
-            {:else if sourceId === 'lastletter'}
-              <div class="dict-section-label">Words ending in "{data.lastLetter}"</div>
+            {:else if sid === 'lastletter'}
+              <div class="dict-word">Words ending in "{data.lastLetter}"</div>
               <div class="dict-grid">
                 {#each data.words as w}
                   <div class="dict-grid-item">
                     <span class="dict-grid-word">{w.word}</span>
-                    {#if w.definitions?.length}
-                      <span class="dict-grid-def">{w.definitions[0].definition}</span>
-                    {/if}
+                    {#if w.defs?.length}<span class="dict-grid-def">{w.defs[0].def}</span>{/if}
                   </div>
                 {/each}
               </div>
+              <div class="dict-lastletter-link">
+                <a href="https://lastletterlibrary.com" target="_blank" rel="noopener">
+                  Open Last Letter Library <IconWorld size={12} stroke={2}/>
+                </a>
+              </div>
 
-            {:else if sourceId === 'oxford' && Array.isArray(data)}
+            {:else if sid === 'oxford' && Array.isArray(data)}
               {#each data as entry}
-                <div class="dict-pos">{entry.partOfSpeech}</div>
-                {#if entry.entries}
-                  {#each entry.entries as e}
-                    {#if e.pronunciation}
-                      <div class="dict-card-phonetic">/{e.pronunciation}/</div>
-                    {/if}
-                    {#if e.definitions}
-                      {#each e.definitions as def, i}
-                        <div class="dict-def">
-                          <span class="dict-def-num">{i + 1}.</span>
-                          {def.definition}
-                        </div>
-                        {#if def.example}
-                          <div class="dict-example">"{def.example}"</div>
-                        {/if}
-                        {#if def.synonyms?.length}
-                          <div class="dict-synonyms">Synonyms: {def.synonyms.join(', ')}</div>
-                        {/if}
-                      {/each}
-                    {/if}
-                  {/each}
-                {/if}
+                <div class="dict-pos">{entry.pos}</div>
+                {#if entry.pronunciation}<div class="dict-phon">/{entry.pronunciation}/</div>{/if}
+                {#each entry.defs as d, i}
+                  <div class="dict-def"><b>{i+1}.</b> {d.def}</div>
+                  {#if d.ex}<div class="dict-ex">"{d.ex}"</div>{/if}
+                  {#if d.syns?.length}<div class="dict-syns">Syn: {d.syns.join(', ')}</div>{/if}
+                {/each}
               {/each}
+
+            {:else if sid === 'urban'}
+              {#each data as entry}
+                <div class="dict-word">{entry.word}</div>
+                <div class="dict-def">{entry.definition}</div>
+                {#if entry.example}<div class="dict-ex">"{entry.example}"</div>{/if}
+                <div class="dict-urban-meta">
+                  <span>👍 {entry.thumbsUp}</span>
+                  <span>👎 {entry.thumbsDown}</span>
+                  <span>by {entry.author}</span>
+                  <span>{entry.date}</span>
+                </div>
+              {/each}
+
+            {:else if sid === 'etymology'}
+              {#each data as entry}
+                <div class="dict-pos">{entry.language}</div>
+                <div class="dict-def">{@html entry.content}</div>
+              {/each}
+
+            {:else if sid === 'wordnet'}
+              <div class="dict-word">{data.word}</div>
+              {#if data.defs?.length}
+                {#each data.defs as d, i}
+                  <div class="dict-def"><b>{i+1}.</b> <span class="dict-pos">{d.pos}</span> {d.def}</div>
+                {/each}
+              {/if}
             {/if}
           </div>
         {:else if data?.error}
-          <div class="dict-card dict-card-error" style="border-left-color: var(--red)">
-            <div class="dict-card-header">
-              <span class="dict-card-source" style="color: {SOURCE_COLORS[sourceId]}">
-                {SOURCES.find(s => s.id === sourceId)?.label || sourceId}
-              </span>
+          <div class="dict-card dict-card-err" style="border-left-color:var(--red)">
+            <div class="dict-card-hdr">
+              <span class="dict-card-src" style="color:{COLORS[sid]}">{SOURCES.find(s=>s.id===sid)?.label}</span>
             </div>
-            <div class="dict-no-result">No results found</div>
+            <div class="dict-no">No results</div>
           </div>
         {/if}
       {/each}
@@ -484,201 +386,69 @@
 </div>
 
 <style>
-  .dict-root {
-    padding: 24px 32px;
-    max-width: 960px;
-    margin: 0 auto;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-  }
+  .dict-root{padding:24px 32px;max-width:960px;margin:0 auto;height:100%;display:flex;flex-direction:column}
+  .dict-header{margin-bottom:16px}
+  .dict-title{display:flex;align-items:center;gap:10px;font-size:22px;font-weight:700;color:var(--text-1)}
+  .dict-sub{color:var(--text-3);font-size:13px;margin-top:4px}
 
-  .dict-header { margin-bottom: 20px; }
-  .dict-title {
-    display: flex; align-items: center; gap: 10px;
-    font-size: 22px; font-weight: 700; color: var(--text-1);
-  }
-  .dict-subtitle { color: var(--text-3); font-size: 13px; margin-top: 4px; }
+  .dict-search-row{display:flex;gap:10px;margin-bottom:14px}
+  .dict-input-wrap{flex:1;display:flex;align-items:center;gap:8px;background:var(--bg-3);border:1px solid var(--border);border-radius:10px;padding:0 12px;position:relative;transition:border-color .15s}
+  .dict-input-wrap:focus-within{border-color:var(--accent)}
+  .dict-input-wrap :global(svg){color:var(--text-3);flex-shrink:0}
+  .dict-input{flex:1;background:none;border:none;outline:none;color:var(--text-1);font-size:14px;font-family:'Geist',sans-serif;padding:10px 0}
+  .dict-input::placeholder{color:var(--text-3)}
+  .dict-clear{background:none;border:none;color:var(--text-3);cursor:pointer;padding:4px;border-radius:4px;transition:.13s;display:flex}
+  .dict-clear:hover{color:var(--text-1);background:var(--hover)}
 
-  .dict-search-row {
-    display: flex; gap: 10px; margin-bottom: 16px;
-  }
-  .dict-input-wrap {
-    flex: 1; display: flex; align-items: center; gap: 8px;
-    background: var(--bg-3); border: 1px solid var(--border);
-    border-radius: 10px; padding: 0 12px;
-    transition: border-color .15s;
-  }
-  .dict-input-wrap:focus-within { border-color: var(--accent); }
-  .dict-input-wrap :global(svg) { color: var(--text-3); flex-shrink: 0; }
-  .dict-input {
-    flex: 1; background: none; border: none; outline: none;
-    color: var(--text-1); font-size: 14px; font-family: 'Geist', sans-serif;
-    padding: 10px 0;
-  }
-  .dict-input::placeholder { color: var(--text-3); }
-  .dict-clear {
-    background: none; border: none; color: var(--text-3);
-    cursor: pointer; font-size: 12px; padding: 4px;
-    border-radius: 4px; transition: .13s;
-  }
-  .dict-clear:hover { color: var(--text-1); background: var(--hover); }
+  .dict-suggest{position:absolute;top:100%;left:0;right:0;z-index:50;background:var(--bg-2);border:1px solid var(--border);border-radius:10px;margin-top:4px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,.2)}
+  .dict-sug-item{display:flex;align-items:center;gap:8px;padding:8px 12px;background:none;border:none;width:100%;text-align:left;color:var(--text-2);font-size:13px;font-family:'Geist',sans-serif;cursor:pointer;transition:.1s}
+  .dict-sug-item:hover,.dict-sug-item.active{background:var(--hover);color:var(--text-1)}
 
-  .dict-search-btn {
-    display: flex; align-items: center; gap: 6px;
-    padding: 0 18px; border-radius: 10px; border: none;
-    background: var(--accent); color: #fff;
-    font-size: 13px; font-weight: 600; font-family: 'Geist', sans-serif;
-    cursor: pointer; transition: .15s; white-space: nowrap;
-  }
-  .dict-search-btn:hover { opacity: .9; }
-  .dict-search-btn:disabled { opacity: .5; cursor: not-allowed; }
+  .dict-go{display:flex;align-items:center;gap:6px;padding:0 18px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:600;font-family:'Geist',sans-serif;cursor:pointer;transition:.15s;white-space:nowrap}
+  .dict-go:hover{opacity:.9}
+  .dict-go:disabled{opacity:.5;cursor:not-allowed}
 
-  .dict-sources {
-    display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 20px;
-  }
-  .dict-source-chip {
-    display: flex; align-items: center; gap: 5px;
-    padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border);
-    background: var(--bg-3); color: var(--text-2);
-    font-size: 11.5px; font-weight: 500; font-family: 'Geist', sans-serif;
-    cursor: pointer; transition: .13s; white-space: nowrap;
-  }
-  .dict-source-chip:hover { border-color: var(--border-hover); color: var(--text-1); }
-  .dict-source-chip.active {
-    border-color: var(--chip-color, var(--accent));
-    color: var(--chip-color, var(--accent));
-    background: color-mix(in srgb, var(--chip-color, var(--accent)) 8%, transparent);
-  }
-  .dict-source-chip.has-result { opacity: .6; }
-  .dict-chip-dot {
-    width: 5px; height: 5px; border-radius: 50%;
-  }
+  .dict-chips{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:16px}
+  .dict-chip{display:flex;align-items:center;gap:5px;padding:5px 9px;border-radius:7px;border:1px solid var(--border);background:var(--bg-3);color:var(--text-2);font-size:11px;font-weight:500;font-family:'Geist',sans-serif;cursor:pointer;transition:.13s;white-space:nowrap}
+  .dict-chip:hover{border-color:var(--border-hover);color:var(--text-1)}
+  .dict-chip.active{border-color:var(--c,var(--accent));color:var(--c,var(--accent));background:color-mix(in srgb,var(--c,var(--accent)) 8%,transparent)}
 
-  .dict-results {
-    flex: 1; overflow-y: auto;
-    display: flex; flex-direction: column; gap: 14px;
-    padding-bottom: 32px;
-  }
+  .dict-results{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:12px;padding-bottom:32px}
+  .dict-loading,.dict-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:60px 0;color:var(--text-3);font-size:14px}
 
-  .dict-loading, .dict-empty {
-    display: flex; flex-direction: column; align-items: center;
-    justify-content: center; gap: 12px;
-    padding: 60px 0; color: var(--text-3); font-size: 14px;
-  }
-  .dict-loading :global(svg), .dict-empty :global(svg) {
-    color: var(--text-3);
-  }
+  .dict-card{background:var(--bg-3);border:1px solid var(--border);border-radius:12px;border-left:3px solid var(--border);padding:14px 16px}
+  .dict-card-err{opacity:.7}
+  .dict-card-hdr{margin-bottom:8px}
+  .dict-card-src{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
 
-  .dict-card {
-    background: var(--bg-3); border: 1px solid var(--border);
-    border-radius: 12px; border-left: 3px solid var(--border);
-    padding: 16px 18px;
-  }
-  .dict-card-error { opacity: .7; }
+  .dict-word{font-size:17px;font-weight:700;color:var(--text-1);margin-bottom:2px}
+  .dict-phon{font-size:13px;color:var(--text-2);font-family:'Geist Mono',monospace;margin-bottom:6px}
+  .dict-pos{display:inline-block;font-size:10.5px;font-weight:600;color:var(--accent);font-style:italic;margin:6px 0 3px;padding:2px 6px;background:rgba(99,102,241,.08);border-radius:4px}
+  .dict-sub{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-3);margin:8px 0 4px}
+  .dict-def{font-size:13px;color:var(--text-1);line-height:1.5;margin:2px 0;padding-left:2px}
+  .dict-ex{font-size:12px;color:var(--text-2);font-style:italic;margin:2px 0 3px 16px;padding-left:8px;border-left:2px solid var(--border)}
+  .dict-syns{font-size:11.5px;color:var(--text-3);margin:2px 0 3px 16px}
+  .dict-tags{display:flex;gap:5px;flex-wrap:wrap}
+  .dict-tag{display:inline-block;padding:3px 7px;border-radius:5px;background:var(--bg-2);border:1px solid var(--border);font-size:11.5px;color:var(--text-2);font-family:'Geist Mono',monospace}
+  .dict-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:7px;margin-top:6px}
+  .dict-grid-item{display:flex;flex-direction:column;gap:2px;padding:7px 9px;border-radius:7px;background:var(--bg-2);border:1px solid var(--border)}
+  .dict-grid-word{font-size:12.5px;font-weight:600;color:var(--text-1)}
+  .dict-grid-def{font-size:11px;color:var(--text-3);line-height:1.4}
+  .dict-lastletter-link{margin-top:10px}
+  .dict-lastletter-link a{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--accent);text-decoration:none;font-weight:500}
+  .dict-lastletter-link a:hover{text-decoration:underline}
+  .dict-urban-meta{display:flex;gap:12px;font-size:11px;color:var(--text-3);margin-top:6px;flex-wrap:wrap}
+  .dict-no{font-size:13px;color:var(--text-3);font-style:italic}
 
-  .dict-card-header {
-    display: flex; align-items: center; justify-content: space-between;
-    margin-bottom: 10px;
-  }
-  .dict-card-source {
-    font-size: 11px; font-weight: 700; text-transform: uppercase;
-    letter-spacing: .5px;
-  }
+  :global(.spin){animation:spin 1s linear infinite}
+  @keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
 
-  .dict-card-word {
-    font-size: 18px; font-weight: 700; color: var(--text-1);
-    margin-bottom: 2px;
-  }
-  .dict-card-phonetic {
-    font-size: 13px; color: var(--text-2);
-    font-family: 'Geist Mono', monospace; margin-bottom: 8px;
-  }
-  .dict-card-meta {
-    font-size: 12px; color: var(--text-3); margin-bottom: 6px;
-  }
-
-  .dict-pos {
-    display: inline-block; font-size: 11px; font-weight: 600;
-    color: var(--accent); font-style: italic;
-    margin: 8px 0 4px; padding: 2px 7px;
-    background: rgba(99,102,241,.08); border-radius: 5px;
-  }
-
-  .dict-def {
-    font-size: 13.5px; color: var(--text-1); line-height: 1.55;
-    margin: 3px 0; padding-left: 2px;
-  }
-  .dict-def-num {
-    color: var(--text-3); font-size: 12px; margin-right: 4px;
-  }
-
-  .dict-example {
-    font-size: 12.5px; color: var(--text-2); font-style: italic;
-    margin: 2px 0 4px 18px; padding-left: 8px;
-    border-left: 2px solid var(--border);
-  }
-
-  .dict-synonyms {
-    font-size: 12px; color: var(--text-3); margin: 2px 0 4px 18px;
-  }
-
-  .dict-section-label {
-    font-size: 11px; font-weight: 700; text-transform: uppercase;
-    letter-spacing: .5px; color: var(--text-3);
-    margin: 10px 0 6px;
-  }
-
-  .dict-tag-list {
-    display: flex; gap: 6px; flex-wrap: wrap;
-  }
-  .dict-tag {
-    display: inline-block; padding: 3px 8px; border-radius: 6px;
-    background: var(--bg-2); border: 1px solid var(--border);
-    font-size: 12px; color: var(--text-2);
-    font-family: 'Geist Mono', monospace;
-  }
-
-  .dict-grid {
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 8px;
-  }
-  .dict-grid-item {
-    display: flex; flex-direction: column; gap: 2px;
-    padding: 8px 10px; border-radius: 8px;
-    background: var(--bg-2); border: 1px solid var(--border);
-  }
-  .dict-grid-word {
-    font-size: 13px; font-weight: 600; color: var(--text-1);
-  }
-  .dict-grid-def {
-    font-size: 11.5px; color: var(--text-3); line-height: 1.4;
-  }
-
-  .dict-no-result {
-    font-size: 13px; color: var(--text-3); font-style: italic;
-  }
-
-  .dict-error {
-    padding: 10px 14px; border-radius: 8px;
-    background: var(--red-bg); border: 1px solid var(--red-border);
-    color: var(--red); font-size: 13px; margin-bottom: 16px;
-  }
-
-  :global(.spin) {
-    animation: spin 1s linear infinite;
-  }
-  @keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-  }
-
-  @media (max-width: 600px) {
-    .dict-root { padding: 16px; }
-    .dict-search-row { flex-direction: column; }
-    .dict-search-btn { justify-content: center; padding: 10px; }
-    .dict-sources { gap: 4px; }
-    .dict-source-chip { padding: 5px 8px; font-size: 10.5px; }
-    .dict-grid { grid-template-columns: 1fr 1fr; }
+  @media(max-width:600px){
+    .dict-root{padding:16px}
+    .dict-search-row{flex-direction:column}
+    .dict-go{justify-content:center;padding:10px}
+    .dict-chips{gap:4px}
+    .dict-chip{padding:4px 7px;font-size:10px}
+    .dict-grid{grid-template-columns:1fr 1fr}
   }
 </style>
