@@ -508,7 +508,7 @@
               {#if note.tags.length > 0}
                 <span class="n-note-item-tags">{note.tags.length} tag{note.tags.length !== 1 ? "s" : ""}</span>
               {/if}
-              <button class="n-note-item-copy" onclick|stopPropagation={() => copyNoteId(note.id)}
+              <button class="n-note-item-copy" onclick={(e) => { e.stopPropagation(); copyNoteId(note.id); }}
                 title="Copy wiki link">
                 {#if copiedId === note.id}<IconCheck size={9}/>{:else}<IconCopy size={9}/>{/if}
               </button>
