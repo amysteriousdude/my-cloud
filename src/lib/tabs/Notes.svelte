@@ -48,7 +48,7 @@
   let slashMenuPos = $state({ x: 0, y: 0 });
   let slashQuery = $state("");
   let copiedId = $state<string | null>(null);
-  let editorEl: HTMLTextAreaElement;
+  let editorEl = $state<HTMLTextAreaElement | null>(null);
 
   let selectedNote = $derived(notes.find(n => n.id === selectedNoteId) ?? null);
 

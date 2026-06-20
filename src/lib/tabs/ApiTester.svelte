@@ -79,6 +79,10 @@
     try { body = JSON.stringify(JSON.parse(body), null, 2); } catch {}
   }
 
+  function formatJson(str: string) {
+    try { return JSON.stringify(JSON.parse(str), null, 2); } catch { return str; }
+  }
+
   function statusColor(s?: number) {
     if (!s) return 'var(--text-3)';
     if (s < 300) return 'var(--green)';
@@ -180,8 +184,8 @@
               <div class="api-resp-hdr"><span class="api-resp-hdr-k">{k}:</span> <span>{v}</span></div>
             {/each}
           </div>
-        {:else}
-          <pre class="api-resp-body"><code>{try { JSON.stringify(JSON.parse(response.body), null, 2) } catch { response.body }}</code></pre>
+          {:else}
+            <pre class="api-resp-body"><code>{formatJson(response.body)}</code></pre>
         {/if}
       {/if}
     </div>
