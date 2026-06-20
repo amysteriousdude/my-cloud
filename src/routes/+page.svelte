@@ -3,6 +3,7 @@
   import { onMount } from 'svelte';
   import Login from '$lib/components/Login.svelte';
   import Sidebar from '$lib/components/Sidebar.svelte';
+  import Dock from '$lib/components/Dock.svelte';
   import Files from '$lib/tabs/Files.svelte';
   import Generators from '$lib/tabs/Generators.svelte';
   import Downloader from '$lib/tabs/Downloader.svelte';
@@ -110,6 +111,21 @@
   function onLoginSuccess() {
     window.location.reload();
   }
+
+  // Dock vs Sidebar mode
+  let dockMode = $state<'dock' | 'sidebar'>('dock');
+  let dockPosition = $state('bottom');
+
+  function loadDockMode() {
+    try {
+      const mode = localStorage.getItem('dock-mode');
+      if (mode === 'sidebar' || mode === 'dock') dockMode = mode;
+      const pos = localStorage.getItem('dock-position');
+      if (pos) dockPosition = pos;
+    } catch {}
+  }
+
+  $effect(() => { loadDockMode(); });
 </script>
 
 <svelte:head>
@@ -122,18 +138,32 @@
   <Login onsuccess={onLoginSuccess} />
 
 {:else}
-  <div class="app">
-    <Sidebar
-      {user}
-      {theme}
-      {fileCount}
-      {folderCount}
-      {storageBytes}
-      {activeTab}
-      oncycleTheme={cycleTheme}
-      onlogout={logout}
-      ontabchange={(t) => activeTab = t}
-    />
+  <div class="app" class:dock-mode={dockMode === 'dock'} class:dock-left={dockMode === 'dock' && dockPosition === 'left'} class:dock-right={dockMode === 'dock' && dockPosition === 'right'}>
+    {#if dockMode === 'sidebar'}
+      <Sidebar
+        {user}
+        {theme}
+        {fileCount}
+        {folderCount}
+        {storageBytes}
+        {activeTab}
+        oncycleTheme={cycleTheme}
+        onlogout={logout}
+        ontabchange={(t) => activeTab = t}
+      />
+    {:else}
+      <Dock
+        {user}
+        {theme}
+        {fileCount}
+        {folderCount}
+        {storageBytes}
+        {activeTab}
+        oncycleTheme={cycleTheme}
+        onlogout={logout}
+        ontabchange={(t) => activeTab = t}
+      />
+    {/if}
 
     <main class="main">
       {#if activeTab === 'files'}
@@ -181,12 +211,23 @@
   .app { display: flex; flex-direction: row; min-height: 100vh; }
   .main {
     flex: 1;
-    margin-left: var(--sb-width, 52px);
     min-width: 0;
-    transition: margin-left 0.22s cubic-bezier(.16,1,.3,1);
+    transition: margin 0.22s cubic-bezier(.16,1,.3,1);
   }
 
+  /* Sidebar mode: classic left margin */
+  .app:not(.dock-mode) .main {
+    margin-left: var(--sb-width, 52px);
+  }
+
+  /* Dock left/right: side margin */
+  .app.dock-left .main { margin-left: 72px; margin-right: 0; }
+  .app.dock-right .main { margin-left: 0; margin-right: 72px; }
+
+  /* Dock bottom/top: no side margin */
+  .app.dock-mode:not(.dock-left):not(.dock-right) .main { margin-left: 0; margin-right: 0; }
+
   @media (max-width: 600px) {
-    .main { margin-left: 0 !important; padding-bottom: 64px; }
+    .main { margin-left: 0 !important; margin-right: 0 !important; padding-bottom: 80px; }
   }
 </style>

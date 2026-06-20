@@ -1,6 +1,6 @@
 <!-- src/lib/components/Sidebar.svelte -->
 <script lang="ts">
-  import {
+    import {
     IconFiles, IconSparkles, IconDownload, IconPhoto,
     IconSun, IconMoon, IconDeviceDesktop,
     IconLogout, IconLock, IconLockOpen,
@@ -12,6 +12,7 @@
     IconBook,
     IconLanguage,
     IconApi,
+    IconApps,
   } from '@tabler/icons-svelte';
   import { env } from '$env/dynamic/public';
   const NAME = env.PUBLIC_NAME ?? "Omar";
@@ -84,6 +85,11 @@
   const secondaryIds: Tab[] = ['generators', 'downloader', 'console', 'dictionary', 'translator', 'apitester'];
   const secondaryTabs = TABS.filter(t => secondaryIds.includes(t.id));
   const primaryTabs = TABS.filter(t => PRIMARY_TABS.includes(t.id));
+
+  function switchToDock() {
+    localStorage.setItem('dock-mode', 'dock');
+    window.location.reload();
+  }
 
   function fmtBytes(b: number) {
     if (b < 1024) return `${b} B`;
@@ -159,6 +165,10 @@
       <button class="sb-action sb-action-danger" onclick={onlogout} title="Sign out">
         <IconLogout size={15}/>
         {#if isExpanded}<span>Sign out</span>{/if}
+      </button>
+      <button class="sb-action" onclick={switchToDock} title="Switch to floating dock">
+        <IconApps size={15}/>
+        {#if isExpanded}<span>Floating Dock</span>{/if}
       </button>
     </div>
   {/if}
