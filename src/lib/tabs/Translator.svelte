@@ -14,45 +14,107 @@
 
   const LANGUAGES = [
     { code: 'auto', label: 'Auto Detect' },
-    { code: 'en', label: 'English' },
-    { code: 'es', label: 'Spanish' },
-    { code: 'fr', label: 'French' },
-    { code: 'de', label: 'German' },
-    { code: 'it', label: 'Italian' },
-    { code: 'pt', label: 'Portuguese' },
-    { code: 'ru', label: 'Russian' },
-    { code: 'ja', label: 'Japanese' },
-    { code: 'ko', label: 'Korean' },
+    { code: 'af', label: 'Afrikaans' },
+    { code: 'sq', label: 'Albanian' },
+    { code: 'am', label: 'Amharic' },
+    { code: 'ar', label: 'Arabic' },
+    { code: 'hy', label: 'Armenian' },
+    { code: 'az', label: 'Azerbaijani' },
+    { code: 'eu', label: 'Basque' },
+    { code: 'be', label: 'Belarusian' },
+    { code: 'bn', label: 'Bengali' },
+    { code: 'bs', label: 'Bosnian' },
+    { code: 'bg', label: 'Bulgarian' },
+    { code: 'my', label: 'Burmese' },
+    { code: 'ca', label: 'Catalan' },
+    { code: 'ceb', label: 'Cebuano' },
     { code: 'zh-CN', label: 'Chinese (Simplified)' },
     { code: 'zh-TW', label: 'Chinese (Traditional)' },
-    { code: 'ar', label: 'Arabic' },
-    { code: 'hi', label: 'Hindi' },
-    { code: 'tr', label: 'Turkish' },
-    { code: 'nl', label: 'Dutch' },
-    { code: 'sv', label: 'Swedish' },
-    { code: 'pl', label: 'Polish' },
-    { code: 'uk', label: 'Ukrainian' },
-    { code: 'vi', label: 'Vietnamese' },
-    { code: 'th', label: 'Thai' },
-    { code: 'id', label: 'Indonesian' },
-    { code: 'fa', label: 'Persian' },
-    { code: 'he', label: 'Hebrew' },
+    { code: 'hr', label: 'Croatian' },
     { code: 'cs', label: 'Czech' },
     { code: 'da', label: 'Danish' },
+    { code: 'nl', label: 'Dutch' },
+    { code: 'en', label: 'English' },
+    { code: 'eo', label: 'Esperanto' },
+    { code: 'et', label: 'Estonian' },
     { code: 'fi', label: 'Finnish' },
+    { code: 'fr', label: 'French' },
+    { code: 'gl', label: 'Galician' },
+    { code: 'ka', label: 'Georgian' },
+    { code: 'de', label: 'German' },
     { code: 'el', label: 'Greek' },
+    { code: 'gu', label: 'Gujarati' },
+    { code: 'ht', label: 'Haitian Creole' },
+    { code: 'ha', label: 'Hausa' },
+    { code: 'haw', label: 'Hawaiian' },
+    { code: 'he', label: 'Hebrew' },
+    { code: 'hi', label: 'Hindi' },
     { code: 'hu', label: 'Hungarian' },
+    { code: 'is', label: 'Icelandic' },
+    { code: 'ig', label: 'Igbo' },
+    { code: 'id', label: 'Indonesian' },
+    { code: 'ga', label: 'Irish' },
+    { code: 'it', label: 'Italian' },
+    { code: 'ja', label: 'Japanese' },
+    { code: 'jv', label: 'Javanese' },
+    { code: 'kn', label: 'Kannada' },
+    { code: 'kk', label: 'Kazakh' },
+    { code: 'km', label: 'Khmer' },
+    { code: 'ko', label: 'Korean' },
+    { code: 'ku', label: 'Kurdish' },
+    { code: 'ky', label: 'Kyrgyz' },
+    { code: 'lo', label: 'Lao' },
+    { code: 'la', label: 'Latin' },
+    { code: 'lv', label: 'Latvian' },
+    { code: 'lt', label: 'Lithuanian' },
+    { code: 'mk', label: 'Macedonian' },
+    { code: 'ms', label: 'Malay' },
+    { code: 'ml', label: 'Malayalam' },
+    { code: 'mt', label: 'Maltese' },
+    { code: 'mi', label: 'Maori' },
+    { code: 'mr', label: 'Marathi' },
+    { code: 'mn', label: 'Mongolian' },
+    { code: 'ne', label: 'Nepali' },
     { code: 'no', label: 'Norwegian' },
+    { code: 'ny', label: 'Chichewa' },
+    { code: 'or', label: 'Odia' },
+    { code: 'ps', label: 'Pashto' },
+    { code: 'fa', label: 'Persian' },
+    { code: 'pl', label: 'Polish' },
+    { code: 'pt', label: 'Portuguese' },
+    { code: 'pa', label: 'Punjabi' },
     { code: 'ro', label: 'Romanian' },
-    { code: 'bg', label: 'Bulgarian' },
+    { code: 'ru', label: 'Russian' },
+    { code: 'sm', label: 'Samoan' },
+    { code: 'gd', label: 'Scots Gaelic' },
+    { code: 'sr', label: 'Serbian' },
+    { code: 'sn', label: 'Shona' },
+    { code: 'sd', label: 'Sindhi' },
+    { code: 'si', label: 'Sinhala' },
     { code: 'sk', label: 'Slovak' },
     { code: 'sl', label: 'Slovenian' },
-    { code: 'ms', label: 'Malay' },
+    { code: 'so', label: 'Somali' },
+    { code: 'es', label: 'Spanish' },
+    { code: 'su', label: 'Sundanese' },
     { code: 'sw', label: 'Swahili' },
-    { code: 'tl', label: 'Filipino' },
-    { code: 'bn', label: 'Bengali' },
+    { code: 'sv', label: 'Swedish' },
+    { code: 'tg', label: 'Tajik' },
     { code: 'ta', label: 'Tamil' },
+    { code: 'tt', label: 'Tatar' },
+    { code: 'te', label: 'Telugu' },
+    { code: 'th', label: 'Thai' },
+    { code: 'tr', label: 'Turkish' },
+    { code: 'tk', label: 'Turkmen' },
+    { code: 'uk', label: 'Ukrainian' },
     { code: 'ur', label: 'Urdu' },
+    { code: 'ug', label: 'Uyghur' },
+    { code: 'uz', label: 'Uzbek' },
+    { code: 'vi', label: 'Vietnamese' },
+    { code: 'cy', label: 'Welsh' },
+    { code: 'xh', label: 'Xhosa' },
+    { code: 'yi', label: 'Yiddish' },
+    { code: 'yo', label: 'Yoruba' },
+    { code: 'zu', label: 'Zulu' },
   ];
 
   function fetchTimeout(url: string, opts?: RequestInit, ms = 8000) {
@@ -104,10 +166,42 @@
   }
 
   async function speak(text: string, lang: string) {
-    if (!text || !window.speechSynthesis) return;
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = lang === 'auto' ? 'en' : lang;
-    speechSynthesis.speak(u);
+    if (!text) return;
+    // Stop any ongoing speech
+    window.speechSynthesis?.cancel();
+
+    // Try Google Translate TTS first (more reliable, more languages)
+    const tl = lang === 'auto' ? 'en' : lang;
+    try {
+      // Split into chunks of ~200 chars (TTS has a limit)
+      const chunks = text.match(/.{1,200}(?:\s|$)/g) || [text];
+      for (const chunk of chunks) {
+        const res = await fetchTimeout(
+          `https://translate.google.com/translate_tts?ie=UTF-8&tl=${tl}&client=tw-ob&q=${encodeURIComponent(chunk.trim())}`,
+          undefined, 10000
+        );
+        if (res.ok) {
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          const audio = new Audio(url);
+          await new Promise<void>((resolve) => {
+            audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
+            audio.onerror = () => { URL.revokeObjectURL(url); resolve(); };
+            audio.play().catch(() => resolve());
+          });
+        }
+      }
+    } catch {
+      // Fallback to browser TTS
+      if (window.speechSynthesis) {
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = tl;
+        const voices = window.speechSynthesis.getVoices();
+        const match = voices.find(v => v.lang.startsWith(tl));
+        if (match) u.voice = match;
+        window.speechSynthesis.speak(u);
+      }
+    }
   }
 
   function toggleFav(key: string) {
@@ -126,7 +220,7 @@
 <div class="tr-root">
   <div class="tr-header">
     <div class="tr-title"><IconLanguage size={20} stroke={1.8}/><span>Translator</span></div>
-    <p class="tr-sub">40 languages via Google Translate</p>
+    <p class="tr-sub">100+ languages via Google Translate</p>
   </div>
 
   <div class="tr-lang-bar">
