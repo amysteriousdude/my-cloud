@@ -51,8 +51,8 @@
     },
     {
       id: 'ascii-art',
-      title: 'ASCII Art',
-      desc: 'Convert text or images to ASCII art with color and custom character sets.',
+      title: 'ASCII Art & Image-to-ASCII',
+      desc: 'Convert text to ASCII art or transform images into ASCII with color and custom character sets.',
       icon: '🔤',
       banner: 'ascii',
       href: '/generators/ascii-art',
@@ -96,6 +96,14 @@
       icon: '🖼️',
       banner: 'dither',
       href: '/generators/dither',
+    },
+    {
+      id: 'palette',
+      title: 'Color Palette',
+      desc: 'Generate harmonious color palettes from a base color with complementary, triadic, and analogous schemes.',
+      icon: '🎨',
+      banner: 'palette',
+      href: '/generators/palette',
     },
   ];
 </script>
@@ -217,6 +225,12 @@
       repeating-conic-gradient(rgba(248,113,113,.08) 0% 25%, transparent 0% 50%) 0 0 / 8px 8px,
       radial-gradient(circle at 50% 50%, rgba(248,113,113,.15) 0%, transparent 55%),
       linear-gradient(135deg, #1a0d0d 0%, #111 100%);
+  }
+  .banner-palette {
+    background:
+      conic-gradient(from 45deg, rgba(99,102,241,.3), rgba(236,72,153,.3), rgba(245,158,11,.3), rgba(34,197,94,.3), rgba(99,102,241,.3)),
+      radial-gradient(circle at 50% 50%, rgba(99,102,241,.1) 0%, transparent 60%),
+      linear-gradient(135deg, #0d0d1a 0%, #111 100%);
   }
 
   .card-body { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 6px; }

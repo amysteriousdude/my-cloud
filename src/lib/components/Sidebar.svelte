@@ -7,16 +7,16 @@
     IconFolder, IconFile, IconCloud, IconChevronUp, IconChevronDown,
     IconPencil,
     IconChartBar,
-    IconVideo,
-    IconMusic,
     IconNote,
     IconTerminal,
     IconBook,
+    IconLanguage,
+    IconApi,
   } from '@tabler/icons-svelte';
   import { env } from '$env/dynamic/public';
   const NAME = env.PUBLIC_NAME ?? "Omar";
 
-  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'stats' | 'editor' | 'vault' | 'video' | 'music' | 'notes' | 'console' | 'dictionary';
+  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester';
 
   let {
     user,
@@ -71,17 +71,17 @@
     { id: 'files',      icon: IconFiles,          label: 'Files'      },
     { id: 'generators', icon: IconSparkles,        label: 'Generators' },
     { id: 'draw',       icon: IconPencil,           label: 'Draw'       },
-    { id: 'video',      icon: IconVideo,            label: 'Video'      },
-    { id: 'music',      icon: IconMusic,            label: 'Music'      },
     { id: 'stats',      icon: IconChartBar,          label: 'Stats'      },
     { id: 'notes',      icon: IconNote,               label: 'Notes'      },
     { id: 'vault',      icon: IconLock,                label: 'Vault' },
     { id: 'console',   icon: IconTerminal,            label: 'Console' },
-    { id: 'dictionary', icon: IconBook,              label: 'Dictionary' }
+    { id: 'dictionary', icon: IconBook,              label: 'Dictionary' },
+    { id: 'translator', icon: IconLanguage,           label: 'Translator' },
+    { id: 'apitester', icon: IconApi,                 label: 'API Tester' }
   ];
   // Mobile: primary tabs shown in bottom bar, secondary in sheet
-  const PRIMARY_TABS: Tab[] = ['files', 'draw', 'video', 'music', 'stats', 'notes', 'vault'];
-  const secondaryIds: Tab[] = ['generators', 'downloader', 'console', 'dictionary'];
+  const PRIMARY_TABS: Tab[] = ['files', 'draw', 'stats', 'notes', 'vault'];
+  const secondaryIds: Tab[] = ['generators', 'downloader', 'console', 'dictionary', 'translator', 'apitester'];
   const secondaryTabs = TABS.filter(t => secondaryIds.includes(t.id));
   const primaryTabs = TABS.filter(t => PRIMARY_TABS.includes(t.id));
 

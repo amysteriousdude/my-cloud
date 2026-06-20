@@ -8,13 +8,13 @@
   import Downloader from '$lib/tabs/Downloader.svelte';
   import Draw       from '$lib/draw/Draw.svelte';
   import Editor     from '$lib/tabs/Editor.svelte';
-  import VideoEditor from '$lib/tabs/VideoEditor.svelte';
-  import MusicEditor from '$lib/tabs/MusicEditor.svelte';
   import Stats      from '$lib/tabs/Stats.svelte';
   import Vault	    from '$lib/tabs/Vault.svelte';
   import Notes      from '$lib/tabs/Notes.svelte';
   import Console    from '$lib/tabs/Console.svelte';
   import Dictionary from '$lib/tabs/Dictionary.svelte';
+  import Translator from '$lib/tabs/Translator.svelte';
+  import ApiTester  from '$lib/tabs/ApiTester.svelte';
   import Toast      from '$lib/components/Toast.svelte';
   import { env } from '$env/dynamic/public';
   const NAME = env.PUBLIC_NAME ?? "Omar";
@@ -25,7 +25,7 @@
   let encryptedApiKey = $derived(data.encryptedApiKey);
 
   // Tab state
-  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'stats' | 'editor' | 'vault' | 'video' | 'music' | 'notes' | 'console' | 'dictionary';
+  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester';
   let activeTab = $state<Tab>('files');
   let editorFile = $state<{ metaFileId: string; fileName: string } | null>(null);
   let filesRefreshNonce = $state(0);
@@ -154,10 +154,6 @@
         <Downloader />
       {:else if activeTab === 'draw'}
         <Draw {apiKey} />
-      {:else if activeTab === 'video'}
-        <VideoEditor {apiKey} />
-      {:else if activeTab === 'music'}
-        <MusicEditor {apiKey} />
       {:else if activeTab === 'stats'}
         <Stats {apiKey} />
       {:else if activeTab === 'editor'}
@@ -170,6 +166,10 @@
         <Console {apiKey} />
       {:else if activeTab === 'dictionary'}
         <Dictionary />
+      {:else if activeTab === 'translator'}
+        <Translator />
+      {:else if activeTab === 'apitester'}
+        <ApiTester />
       {/if}
     </main>
   </div>
