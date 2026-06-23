@@ -1583,68 +1583,142 @@
 
     <!-- ═══ RIGHT PANEL ═══ -->
     <div class="right-panel">
-      <div class="rp-tabs">
-        {#if hasSelection}
-          <button class="rp-tab" class:active={rightPanel === "selection"} onclick={() => rightPanel = "selection"}>Select</button>
+      <!-- ── Color section (top) ── -->
+      <div class="rp-section rp-color-section">
+        <div class="rp-section-header" onclick={() => rightPanel = rightPanel === "color" ? "brush" : "color"}>
+          <span class="rp-section-title">Color</span>
+          <span class="rp-section-chevron" class:open={rightPanel === "color"}>▾</span>
+        </div>
+        {#if rightPanel === "color" || rightPanel === "brush"}
+          <div class="rp-section-body">
+            <ColorPicker bind:value={fgColor}/>
+          </div>
         {/if}
-        <button class="rp-tab" class:active={rightPanel === "brush"} onclick={() => rightPanel = "brush"}>Brush</button>
-        <button class="rp-tab" class:active={rightPanel === "color"} onclick={() => rightPanel = "color"}>Color</button>
-        <button class="rp-tab" class:active={rightPanel === "layers"} onclick={() => rightPanel = "layers"}>Layers</button>
       </div>
 
-      <div class="rp-content">
-        {#if rightPanel === "brush"}
-          <div class="rp-cats">
-            {#each ["all","basic","paint","ink","sketch","special"] as cat}
-              <button class="rp-cat" class:active={brushCategory === cat} onclick={() => brushCategory = cat as any}>{cat}</button>
-            {/each}
+      <div class="rp-divider"></div>
+
+      <!-- ── Brush / Selection section (middle) ── -->
+      {#if hasSelection}
+        <div class="rp-section rp-brush-section">
+          <div class="rp-section-header" onclick={() => rightPanel = rightPanel === "selection" ? "brush" : "selection"}>
+            <span class="rp-section-title">Selection</span>
+            <span class="rp-section-chevron" class:open={rightPanel === "selection"}>▾</span>
           </div>
-          <div class="rp-presets">
-            {#each filteredPresets as p}
-              {@const idx = BRUSH_PRESETS.indexOf(p)}
-              <button class="rp-preset" class:active={activePresetIdx === idx} onclick={() => applyPreset(p)}>
-                <span class="rp-pi">{p.icon}</span>
-                <div class="rp-pinfo">
-                  <span class="rp-pn">{p.name}</span>
-                  <span class="rp-ps">{p.size}px · {p.hardness}%</span>
+          {#if rightPanel === "selection"}
+            <div class="rp-section-body">
+              {@const selStrokes = getSelectedStrokes()}
+              {@const bbox = getSelectionBBox()}
+              {#if selStrokes.length > 0 && bbox}
+                <div class="rp-heading">Position</div>
+                <div class="sel-row">
+                  <label class="sel-field">X
+                    <input type="number" value={Math.round(bbox.x)} onchange={(e) => {
+                      const val = parseFloat((e.target as HTMLInputElement).value);
+                      if (!isNaN(val)) moveStrokes(val - bbox.x, 0);
+                    }}/>
+                  </label>
+                  <label class="sel-field">Y
+                    <input type="number" value={Math.round(bbox.y)} onchange={(e) => {
+                      const val = parseFloat((e.target as HTMLInputElement).value);
+                      if (!isNaN(val)) moveStrokes(0, val - bbox.y);
+                    }}/>
+                  </label>
                 </div>
-              </button>
-            {/each}
+                <div class="rp-heading">Size</div>
+                <div class="sel-row">
+                  <label class="sel-field">W
+                    <input type="number" min="1" value={Math.round(bbox.w)} onchange={(e) => {
+                      const val = parseFloat((e.target as HTMLInputElement).value);
+                      if (!isNaN(val) && val > 0) {
+                        if (lockAspect && bbox.h > 0) { resizeSelected(val, val * (bbox.h / bbox.w)); }
+                        else { resizeSelected(val, bbox.h); }
+                      }
+                    }}/>
+                  </label>
+                  <label class="sel-field">H
+                    <input type="number" min="1" value={Math.round(bbox.h)} onchange={(e) => {
+                      const val = parseFloat((e.target as HTMLInputElement).value);
+                      if (!isNaN(val) && val > 0) {
+                        if (lockAspect && bbox.w > 0) { resizeSelected(bbox.w * (val / bbox.h), val); }
+                        else { resizeSelected(bbox.w, val); }
+                      }
+                    }}/>
+                  </label>
+                  <!-- svelte-ignore a11y_consider_explicit_label -->
+                  <button class="sel-lock" class:active={lockAspect} onclick={() => lockAspect = !lockAspect} title="Lock aspect ratio">
+                    {#if lockAspect}<IconLock size={14}/>{:else}<IconLockOpen size={14}/>{/if}
+                  </button>
+                </div>
+                <div class="rp-heading">Appearance</div>
+                <label class="sel-field sel-full">Opacity
+                  <input type="range" min="1" max="100" value={Math.round((selStrokes[0]?.opacity ?? 1) * 100)} oninput={(e) => setSelectionOpacity(parseInt((e.target as HTMLInputElement).value))}/>
+                  <span>{Math.round((selStrokes[0]?.opacity ?? 1) * 100)}%</span>
+                </label>
+                {#if selStrokes.every(s => s.tool !== "eraser" && !s.imageData)}
+                  <label class="sel-field sel-full">Color
+                    <input type="color" value={selStrokes[0]?.color ?? "#000000"} oninput={(e) => setSelectionColor((e.target as HTMLInputElement).value)}/>
+                  </label>
+                {/if}
+                <div class="sel-actions">
+                  <button class="sel-btn" onclick={duplicateSelected}>Duplicate</button>
+                  <button class="sel-btn danger" onclick={deleteSelected}>Delete</button>
+                </div>
+              {:else}
+                <p class="sel-empty">Select an object to edit</p>
+              {/if}
+            </div>
+          {/if}
+        </div>
+        <div class="rp-divider"></div>
+      {/if}
+
+      <div class="rp-section rp-brush-section">
+        <div class="rp-section-header" onclick={() => rightPanel = rightPanel === "brush" ? "layers" : "brush"}>
+          <span class="rp-section-title">Brush</span>
+          <span class="rp-section-chevron" class:open={rightPanel === "brush"}>▾</span>
+        </div>
+        {#if rightPanel === "brush"}
+          <div class="rp-section-body">
+            <div class="rp-cats">
+              {#each ["all","basic","paint","ink","sketch","special"] as cat}
+                <button class="rp-cat" class:active={brushCategory === cat} onclick={() => brushCategory = cat as any}>{cat}</button>
+              {/each}
+            </div>
+            <div class="rp-presets">
+              {#each filteredPresets as p}
+                {@const idx = BRUSH_PRESETS.indexOf(p)}
+                <button class="rp-preset" class:active={activePresetIdx === idx} onclick={() => applyPreset(p)}>
+                  <span class="rp-pi">{p.icon}</span>
+                  <div class="rp-pinfo">
+                    <span class="rp-pn">{p.name}</span>
+                    <span class="rp-ps">{p.size}px · {p.hardness}%</span>
+                  </div>
+                </button>
+              {/each}
+            </div>
+            <p class="rp-heading">Advanced</p>
+            <label class="rp-slider">Taper<input type="range" min="0" max="1" step="0.05" bind:value={taper}/><span>{Math.round(taper*100)}%</span></label>
+            <label class="rp-slider">Angle<input type="range" min="-90" max="90" bind:value={brushAngle}/><span>{brushAngle}°</span></label>
+            <label class="rp-slider">Scatter<input type="range" min="0" max="3" step="0.1" bind:value={scatter}/><span>{scatter.toFixed(1)}</span></label>
           </div>
-          <p class="rp-heading">Advanced</p>
-          <label class="rp-slider">Taper<input type="range" min="0" max="1" step="0.05" bind:value={taper}/><span>{Math.round(taper*100)}%</span></label>
-          <label class="rp-slider">Angle<input type="range" min="-90" max="90" bind:value={brushAngle}/><span>{brushAngle}°</span></label>
-          <label class="rp-slider">Scatter<input type="range" min="0" max="3" step="0.1" bind:value={scatter}/><span>{scatter.toFixed(1)}</span></label>
+        {/if}
+      </div>
 
-          <p class="rp-heading">Quick Colors</p>
-          <div class="rp-quick-colors">
-            {#each ["#000000","#ffffff","#ff0000","#ff8800","#ffff00","#00ff00","#00ccff","#0066ff","#9933ff","#ff00ff","#888888","#444444"] as c}
-              <!-- svelte-ignore a11y_consider_explicit_label -->
-              <button class="rp-qc" style="background:{c}" class:active={fgColor === c} onclick={() => { fgColor = c; }}></button>
-            {/each}
-          </div>
+      <div class="rp-divider"></div>
 
-          <p class="rp-heading">Brush Info</p>
-          <div class="rp-info-grid">
-            <span class="rp-info-label">Size</span><span class="rp-info-val">{lineWidth.toFixed(1)}px</span>
-            <span class="rp-info-label">Opacity</span><span class="rp-info-val">{opacity}%</span>
-            <span class="rp-info-label">Hardness</span><span class="rp-info-val">{hardness}%</span>
-            <span class="rp-info-label">Smoothing</span><span class="rp-info-val">{Math.round(smoothing*100)}%</span>
-            <span class="rp-info-label">Taper</span><span class="rp-info-val">{Math.round(taper*100)}%</span>
-            <span class="rp-info-label">P→Size</span><span class="rp-info-val">{pressureSize ? 'On' : 'Off'}</span>
-            <span class="rp-info-label">P→Opacity</span><span class="rp-info-val">{pressureOpacity ? 'On' : 'Off'}</span>
-          </div>
-
-        {:else if rightPanel === "color"}
-          <ColorPicker bind:value={fgColor}/>
-
-        {:else if rightPanel === "layers"}
+      <!-- ── Layers section (bottom, always visible) ── -->
+      <div class="rp-section rp-layers-section">
+        <div class="rp-section-header">
+          <span class="rp-section-title">Layers</span>
           <div class="rp-layer-actions">
-            <button class="rp-layer-btn" onclick={addLayer}>+ New</button>
-            <button class="rp-layer-btn" onclick={removeLayer} disabled={layers.length <= 1}>Delete</button>
-            <button class="rp-layer-btn" onclick={moveLayerUp} disabled={activeLayerIdx >= layers.length - 1}>↑</button>
-            <button class="rp-layer-btn" onclick={moveLayerDown} disabled={activeLayerIdx <= 0}>↓</button>
+            <button class="rp-layer-btn" onclick={addLayer} title="Add layer">+</button>
+            <button class="rp-layer-btn" onclick={removeLayer} disabled={layers.length <= 1} title="Delete layer">🗑</button>
+            <button class="rp-layer-btn" onclick={moveLayerUp} disabled={activeLayerIdx >= layers.length - 1} title="Move up">↑</button>
+            <button class="rp-layer-btn" onclick={moveLayerDown} disabled={activeLayerIdx <= 0} title="Move down">↓</button>
           </div>
+        </div>
+        <div class="rp-section-body rp-layers-body">
           {#each [...layers].reverse() as layer, ri (layer.id)}
             {@const idx = layers.length - 1 - ri}
             <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -1663,280 +1737,199 @@
               </label>
             {/if}
           {/each}
-        {:else if rightPanel === "selection"}
-          {@const selStrokes = getSelectedStrokes()}
-          {@const bbox = getSelectionBBox()}
-          {#if selStrokes.length > 0 && bbox}
-            <div class="rp-heading">Position</div>
-            <div class="sel-row">
-              <label class="sel-field">X
-                <input type="number" value={Math.round(bbox.x)} onchange={(e) => {
-                  const val = parseFloat((e.target as HTMLInputElement).value);
-                  if (!isNaN(val)) moveStrokes(val - bbox.x, 0);
-                }}/>
-              </label>
-              <label class="sel-field">Y
-                <input type="number" value={Math.round(bbox.y)} onchange={(e) => {
-                  const val = parseFloat((e.target as HTMLInputElement).value);
-                  if (!isNaN(val)) moveStrokes(0, val - bbox.y);
-                }}/>
-              </label>
-            </div>
-
-            <div class="rp-heading">Size</div>
-            <div class="sel-row">
-              <label class="sel-field">W
-                <input type="number" min="1" value={Math.round(bbox.w)} onchange={(e) => {
-                  const val = parseFloat((e.target as HTMLInputElement).value);
-                  if (!isNaN(val) && val > 0) {
-                    if (lockAspect && bbox.h > 0) { resizeSelected(val, val * (bbox.h / bbox.w)); }
-                    else { resizeSelected(val, bbox.h); }
-                  }
-                }}/>
-              </label>
-              <label class="sel-field">H
-                <input type="number" min="1" value={Math.round(bbox.h)} onchange={(e) => {
-                  const val = parseFloat((e.target as HTMLInputElement).value);
-                  if (!isNaN(val) && val > 0) {
-                    if (lockAspect && bbox.w > 0) { resizeSelected(bbox.w * (val / bbox.h), val); }
-                    else { resizeSelected(bbox.w, val); }
-                  }
-                }}/>
-              </label>
-              <!-- svelte-ignore a11y_consider_explicit_label -->
-              <button class="sel-lock" class:active={lockAspect} onclick={() => lockAspect = !lockAspect} title="Lock aspect ratio">
-                {#if lockAspect}<IconLock size={14}/>{:else}<IconLockOpen size={14}/>{/if}
-              </button>
-            </div>
-
-            <div class="rp-heading">Appearance</div>
-            <label class="sel-field sel-full">Opacity
-              <input type="range" min="1" max="100" value={Math.round((selStrokes[0]?.opacity ?? 1) * 100)} oninput={(e) => setSelectionOpacity(parseInt((e.target as HTMLInputElement).value))}/>
-              <span>{Math.round((selStrokes[0]?.opacity ?? 1) * 100)}%</span>
-            </label>
-            {#if selStrokes.every(s => s.tool !== "eraser" && !s.imageData)}
-              <label class="sel-field sel-full">Color
-                <input type="color" value={selStrokes[0]?.color ?? "#000000"} oninput={(e) => setSelectionColor((e.target as HTMLInputElement).value)}/>
-              </label>
-            {/if}
-
-            {#if selStrokes.some(s => s.text !== undefined)}
-              <div class="rp-heading">Text</div>
-              <label class="sel-field sel-full">Font Size
-                <input type="range" min="8" max="200" value={selStrokes.find(s => s.text !== undefined)?.fontSize ?? 32} oninput={(e) => setSelectionFontSize(parseInt((e.target as HTMLInputElement).value))}/>
-                <span>{selStrokes.find(s => s.text !== undefined)?.fontSize ?? 32}px</span>
-              </label>
-            {/if}
-
-            {#if selStrokes.some(s => s.imageData)}
-              <div class="rp-heading">Image</div>
-              <div class="sel-info">
-                <span>{Math.round(selStrokes.find(s => s.imageData)?.imageW ?? 0)} × {Math.round(selStrokes.find(s => s.imageData)?.imageH ?? 0)}px</span>
-              </div>
-            {/if}
-
-            <div class="rp-heading">Info</div>
-            <div class="sel-info">
-              <span>{selStrokes.length} object{selStrokes.length > 1 ? 's' : ''}</span>
-              <span>{selStrokes[0]?.tool}{selStrokes[0]?.shapeType ? ` (${selStrokes[0].shapeType})` : ''}</span>
-            </div>
-
-            <div class="sel-actions">
-              <button class="sel-btn" onclick={duplicateSelected}>Duplicate</button>
-              <button class="sel-btn danger" onclick={deleteSelected}>Delete</button>
-            </div>
-          {:else}
-            <p class="sel-empty">Select an object to edit its properties</p>
-          {/if}
-        {/if}
+        </div>
       </div>
     </div>
   </div>
 </div>
 
 <style>
-  .draw-root { display: flex; flex-direction: column; height: 100%; width: 100%; overflow: hidden; background: #1a1a1e; user-select: none; }
+  .draw-root { display: flex; flex-direction: column; height: 100%; width: 100%; overflow: hidden; background: #1a1a2e; user-select: none; }
 
-  .menu-bar { display: flex; align-items: center; background: #1e1e22; border-bottom: 1px solid #333; height: 26px; flex-shrink: 0; padding: 0 4px; }
-  .mb-item { position: relative; padding: 3px 8px; font-size: 11px; color: #aaa; cursor: pointer; border-radius: 3px; transition: .1s; }
-  .mb-item:hover { background: #333; color: #fff; }
+  .menu-bar { display: flex; align-items: center; background: #16161e; border-bottom: 1px solid #2a2a35; height: 24px; flex-shrink: 0; padding: 0 4px; }
+  .mb-item { position: relative; padding: 2px 7px; font-size: 11px; color: #8888a0; cursor: pointer; border-radius: 3px; transition: .1s; }
+  .mb-item:hover { background: #2a2a3a; color: #e0e0f0; }
   .mb-dropdown {
     position: absolute; top: 100%; left: 0; z-index: 100;
-    background: #2a2a2e; border: 1px solid #444; border-radius: 6px;
+    background: #1e1e2a; border: 1px solid #3a3a4a; border-radius: 6px;
     padding: 4px 0; min-width: 200px;
-    box-shadow: 0 4px 16px rgba(0,0,0,.5);
+    box-shadow: 0 8px 32px rgba(0,0,0,.6);
   }
   .mb-option {
     display: flex; align-items: center; justify-content: space-between;
     width: 100%; padding: 5px 12px; border: none; background: none;
-    color: #ccc; font-size: 11px; cursor: pointer; text-align: left;
+    color: #b0b0c0; font-size: 11px; cursor: pointer; text-align: left;
     font-family: 'Geist', sans-serif;
   }
-  .mb-option:hover { background: #6366f1; color: #fff; }
-  .mb-key { font-size: 10px; color: #666; font-family: 'Geist Mono', monospace; }
+  .mb-option:hover { background: #5050c0; color: #fff; }
+  .mb-key { font-size: 10px; color: #555; font-family: 'Geist Mono', monospace; }
   .mb-option:hover .mb-key { color: rgba(255,255,255,.6); }
-  .mb-sep { height: 1px; background: #444; margin: 3px 8px; }
+  .mb-sep { height: 1px; background: #3a3a4a; margin: 3px 8px; }
   .mb-spacer { flex: 1; }
   .mb-title { font-size: 10px; color: #555; font-family: 'Geist Mono', monospace; }
-  .mb-sep-inline { width: 1px; height: 12px; background: #444; margin: 0 6px; }
+  .mb-sep-inline { width: 1px; height: 12px; background: #3a3a4a; margin: 0 6px; }
 
   .main-row { display: flex; flex: 1; overflow: hidden; min-height: 0; }
 
-  .tool-sidebar { display: flex; flex-direction: column; align-items: center; width: 40px; background: #222226; border-right: 1px solid #333; padding: 4px 0; gap: 1px; flex-shrink: 0; }
-  .ts-sep { width: 22px; height: 1px; background: #444; margin: 3px 0; }
-  .ts-btn { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 5px; background: none; border: none; color: #777; cursor: pointer; transition: .1s; }
-  .ts-btn:hover { background: #333; color: #ccc; }
-  .ts-btn.active { background: #6366f1; color: #fff; }
-  .ts-btn:disabled { opacity: .2; cursor: default; }
+  .tool-sidebar { display: flex; flex-direction: column; align-items: center; width: 36px; background: #16161e; border-right: 1px solid #2a2a35; padding: 4px 0; gap: 1px; flex-shrink: 0; }
+  .ts-sep { width: 20px; height: 1px; background: #2a2a35; margin: 3px 0; }
+  .ts-btn { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 4px; background: none; border: none; color: #666680; cursor: pointer; transition: .1s; }
+  .ts-btn:hover { background: #2a2a3a; color: #b0b0d0; }
+  .ts-btn.active { background: #5050c0; color: #fff; }
+  .ts-btn:disabled { opacity: .15; cursor: default; }
   .ts-spacer { flex: 1; }
-  .ts-swatch { width: 22px; height: 22px; border-radius: 3px; border: 2px solid #555; cursor: pointer; position: relative; overflow: hidden; }
+  .ts-swatch { width: 20px; height: 20px; border-radius: 3px; border: 2px solid #444460; cursor: pointer; position: relative; overflow: hidden; }
   .ts-fg { margin-top: 4px; z-index: 2; }
-  .ts-bg { width: 16px; height: 16px; margin-top: -6px; margin-left: 10px; z-index: 1; }
-  .ts-swap { background: none; border: none; color: #555; cursor: pointer; padding: 2px; margin-top: 2px; }
-  .ts-swap:hover { color: #aaa; }
+  .ts-bg { width: 14px; height: 14px; margin-top: -5px; margin-left: 9px; z-index: 1; }
+  .ts-swap { background: none; border: none; color: #444460; cursor: pointer; padding: 2px; margin-top: 2px; }
+  .ts-swap:hover { color: #8888a0; }
 
   .center-area { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
 
-  .options-bar { display: flex; align-items: center; gap: 8px; padding: 3px 10px; background: #26262a; border-bottom: 1px solid #333; min-height: 30px; flex-shrink: 0; overflow-x: auto; }
-  .ob-tool { font-size: 10px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: .06em; min-width: 50px; }
-  .ob-sep { width: 1px; height: 14px; background: #444; flex-shrink: 0; }
-  .ob-label { display: flex; align-items: center; gap: 3px; font-size: 10px; color: #666; white-space: nowrap; }
-  .ob-slider { width: 52px; height: 3px; accent-color: #6366f1; }
-  .ob-val { font-family: 'Geist Mono', monospace; font-size: 9px; color: #555; min-width: 24px; }
-  .ob-check { display: flex; align-items: center; gap: 3px; font-size: 10px; color: #666; cursor: pointer; white-space: nowrap; }
-  .ob-check input { accent-color: #6366f1; width: 12px; height: 12px; }
+  .options-bar { display: flex; align-items: center; gap: 8px; padding: 2px 10px; background: #1c1c28; border-bottom: 1px solid #2a2a35; min-height: 28px; flex-shrink: 0; overflow-x: auto; }
+  .ob-tool { font-size: 10px; font-weight: 700; color: #666680; text-transform: uppercase; letter-spacing: .06em; min-width: 50px; }
+  .ob-sep { width: 1px; height: 14px; background: #2a2a35; flex-shrink: 0; }
+  .ob-label { display: flex; align-items: center; gap: 3px; font-size: 10px; color: #555570; white-space: nowrap; }
+  .ob-slider { width: 52px; height: 3px; accent-color: #5050c0; }
+  .ob-val { font-family: 'Geist Mono', monospace; font-size: 9px; color: #444460; min-width: 24px; }
+  .ob-check { display: flex; align-items: center; gap: 3px; font-size: 10px; color: #555570; cursor: pointer; white-space: nowrap; }
+  .ob-check input { accent-color: #5050c0; width: 12px; height: 12px; }
   .ob-spacer { flex: 1; }
   .ob-presets { display: flex; gap: 2px; }
-  .ob-preset { width: 22px; height: 22px; border-radius: 3px; border: 1px solid #444; background: #2a2a2e; color: #999; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: .1s; }
-  .ob-preset:hover { border-color: #6366f1; color: #fff; }
-  .ob-preset.active { border-color: #6366f1; background: #2a2a3e; color: #fff; }
+  .ob-preset { width: 22px; height: 22px; border-radius: 3px; border: 1px solid #3a3a4a; background: #1e1e2a; color: #8888a0; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: .1s; }
+  .ob-preset:hover { border-color: #5050c0; color: #e0e0f0; }
+  .ob-preset.active { border-color: #5050c0; background: #2a2a3e; color: #e0e0f0; }
 
   .canvas-container { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 0; position: relative; }
-  .ruler { background: #26262a; overflow: hidden; flex-shrink: 0; }
+  .ruler { background: #1c1c28; overflow: hidden; flex-shrink: 0; }
   .ruler-h { height: 20px; width: 100%; }
   .ruler-v { position: absolute; left: 0; top: 20px; bottom: 0; width: 20px; z-index: 2; }
-  .ruler-corner { position: absolute; left: 0; top: 0; width: 20px; height: 20px; background: #26262a; border-right: 1px solid #333; border-bottom: 1px solid #333; z-index: 3; }
+  .ruler-corner { position: absolute; left: 0; top: 0; width: 20px; height: 20px; background: #1c1c28; border-right: 1px solid #2a2a35; border-bottom: 1px solid #2a2a35; z-index: 3; }
   .ruler-canvas { width: 100%; height: 100%; display: block; }
 
-  .canvas-wrap { flex: 1; overflow: hidden; position: relative; background: #1a1a1e; min-height: 0; display: flex; align-items: center; justify-content: center; isolation: isolate; }
+  .canvas-wrap { flex: 1; overflow: hidden; position: relative; background: #12121a; min-height: 0; display: flex; align-items: center; justify-content: center; isolation: isolate; }
   .canvas-wrap.panning { cursor: grab !important; }
-  .draw-svg { display: block; box-shadow: 0 0 0 1px rgba(255,255,255,.04), 0 2px 16px rgba(0,0,0,.5); cursor: crosshair; flex-shrink: 0; position: relative; z-index: 2; }
+  .draw-svg { display: block; box-shadow: 0 0 0 1px rgba(255,255,255,.03), 0 4px 24px rgba(0,0,0,.6); cursor: crosshair; flex-shrink: 0; position: relative; z-index: 2; }
   .grid-overlay { position: absolute; pointer-events: none; z-index: 1; }
 
   .brush-cursor { position: absolute; pointer-events: none; border: 1.5px solid; border-radius: 50%; transform: translate(-50%, -50%); z-index: 9999; mix-blend-mode: normal; isolation: isolate; will-change: transform; transition: width .05s, height .05s, opacity .15s; }
 
   .text-editor-overlay { position: absolute; z-index: 20; pointer-events: auto; transform: translate(0, 0); }
   .text-editor-input {
-    min-width: 180px;
-    min-height: 36px;
-    padding: 6px 8px;
-    background: transparent;
-    border: 1px dashed rgba(99, 102, 241, 0.5);
-    border-radius: 4px;
-    outline: none;
-    resize: both;
-    color: inherit;
-    line-height: 1.2;
-    box-shadow: none;
+    min-width: 180px; min-height: 36px; padding: 6px 8px;
+    background: transparent; border: 1px dashed rgba(80, 80, 192, 0.5);
+    border-radius: 4px; outline: none; resize: both; color: inherit;
+    line-height: 1.2; box-shadow: none;
   }
 
-  .status-bar { display: flex; align-items: center; gap: 5px; padding: 2px 10px; background: #26262a; border-top: 1px solid #333; font-size: 10px; color: #555; font-family: 'Geist Mono', monospace; min-height: 24px; flex-shrink: 0; }
-  .sb-sep { width: 1px; height: 10px; background: #3a3a3a; }
+  .status-bar { display: flex; align-items: center; gap: 5px; padding: 2px 10px; background: #16161e; border-top: 1px solid #2a2a35; font-size: 10px; color: #444460; font-family: 'Geist Mono', monospace; min-height: 22px; flex-shrink: 0; }
+  .sb-sep { width: 1px; height: 10px; background: #2a2a35; }
   .sb-spacer { flex: 1; }
-  .sb-btn { display: flex; align-items: center; gap: 2px; padding: 2px 5px; border-radius: 3px; background: #2a2a2e; border: 1px solid #3a3a3a; color: #666; font-size: 9px; cursor: pointer; font-family: 'Geist Mono', monospace; transition: .1s; }
-  .sb-btn:hover { border-color: #6366f1; color: #bbb; }
-  .sb-btn.active { border-color: #6366f1; color: #6366f1; background: #2a2a3e; }
-  .sb-btn.primary { background: #6366f1; border-color: #6366f1; color: #fff; font-weight: 600; }
+  .sb-btn { display: flex; align-items: center; gap: 2px; padding: 2px 5px; border-radius: 3px; background: #1e1e2a; border: 1px solid #2a2a35; color: #555570; font-size: 9px; cursor: pointer; font-family: 'Geist Mono', monospace; transition: .1s; }
+  .sb-btn:hover { border-color: #5050c0; color: #b0b0d0; }
+  .sb-btn.active { border-color: #5050c0; color: #5050c0; background: #1e1e30; }
+  .sb-btn.primary { background: #5050c0; border-color: #5050c0; color: #fff; font-weight: 600; }
   .sb-btn.primary:hover { opacity: .85; }
   .sb-btn.primary:disabled { opacity: .4; cursor: not-allowed; }
-  .sb-fname { background: #1a1a1e; border: 1px solid #3a3a3a; border-radius: 3px; padding: 1px 5px; color: #888; font-size: 9px; font-family: 'Geist Mono', monospace; width: 90px; outline: none; }
-  .sb-fname:focus { border-color: #6366f1; }
-  .sb-dim { color: #444; }
+  .sb-fname { background: #12121a; border: 1px solid #2a2a35; border-radius: 3px; padding: 1px 5px; color: #666680; font-size: 9px; font-family: 'Geist Mono', monospace; width: 90px; outline: none; }
+  .sb-fname:focus { border-color: #5050c0; }
+  .sb-dim { color: #333350; }
   .sb-ok { color: #4ade80; }
   .sb-err { color: #f87171; }
 
-  .right-panel { width: 210px; flex-shrink: 0; background: #222226; border-left: 1px solid #333; display: flex; flex-direction: column; overflow: hidden; }
-  .rp-tabs { display: flex; border-bottom: 1px solid #333; }
-  .rp-tab { flex: 1; padding: 5px 0; background: none; border: none; color: #555; font-size: 10px; font-weight: 700; cursor: pointer; border-bottom: 2px solid transparent; transition: .1s; text-transform: uppercase; letter-spacing: .04em; }
-  .rp-tab:hover { color: #999; }
-  .rp-tab.active { color: #fff; border-bottom-color: #6366f1; }
-  .rp-content { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 4px; }
-  .rp-heading { font-size: 9px; font-weight: 700; color: #444; text-transform: uppercase; letter-spacing: .08em; margin: 6px 0 3px; }
+  /* ── Right panel (Photoshop-style stacked sections) ── */
+  .right-panel { width: 220px; flex-shrink: 0; background: #16161e; border-left: 1px solid #2a2a35; display: flex; flex-direction: column; overflow: hidden; }
+  .rp-divider { height: 1px; background: #2a2a35; flex-shrink: 0; }
+  .rp-section { display: flex; flex-direction: column; flex-shrink: 0; }
+  .rp-layers-section { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+  .rp-section-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 5px 8px; background: #1a1a26; cursor: pointer;
+    border-bottom: 1px solid #2a2a35; user-select: none;
+  }
+  .rp-section-header:hover { background: #1e1e2c; }
+  .rp-section-title { font-size: 10px; font-weight: 700; color: #8888a0; text-transform: uppercase; letter-spacing: .06em; }
+  .rp-section-chevron { font-size: 9px; color: #444460; transition: transform .15s; }
+  .rp-section-chevron.open { transform: rotate(0deg); }
+  .rp-section-body { flex: 1; overflow-y: auto; padding: 6px; display: flex; flex-direction: column; gap: 3px; min-height: 0; }
+  .rp-layers-body { flex: 1; overflow-y: auto; }
+
+  .rp-heading { font-size: 9px; font-weight: 700; color: #3a3a50; text-transform: uppercase; letter-spacing: .08em; margin: 4px 0 2px; }
   .rp-heading:first-child { margin-top: 0; }
 
-  .rp-cats { display: flex; flex-wrap: wrap; gap: 2px; margin-bottom: 4px; }
-  .rp-cat { padding: 2px 6px; border-radius: 3px; background: #2a2a2e; border: 1px solid #333; color: #666; font-size: 9px; cursor: pointer; text-transform: capitalize; transition: .1s; }
-  .rp-cat:hover { border-color: #555; color: #aaa; }
-  .rp-cat.active { border-color: #6366f1; color: #fff; background: #2a2a3e; }
+  .rp-cats { display: flex; flex-wrap: wrap; gap: 2px; margin-bottom: 3px; }
+  .rp-cat { padding: 2px 5px; border-radius: 3px; background: #1e1e2a; border: 1px solid #2a2a35; color: #555570; font-size: 9px; cursor: pointer; text-transform: capitalize; transition: .1s; }
+  .rp-cat:hover { border-color: #444460; color: #8888a0; }
+  .rp-cat.active { border-color: #5050c0; color: #e0e0f0; background: #2a2a3e; }
 
-  .rp-presets { display: flex; flex-direction: column; gap: 2px; max-height: 300px; overflow-y: auto; }
-  .rp-preset { display: flex; align-items: center; gap: 6px; padding: 5px 6px; border-radius: 5px; background: #2a2a2e; border: 1px solid #333; color: #999; cursor: pointer; font-size: 10px; transition: .1s; text-align: left; }
-  .rp-preset:hover { border-color: #555; background: #303034; }
-  .rp-preset.active { border-color: #6366f1; background: #2a2a3e; color: #fff; }
-  .rp-pi { font-size: 14px; width: 18px; text-align: center; flex-shrink: 0; }
+  .rp-presets { display: flex; flex-direction: column; gap: 2px; max-height: 200px; overflow-y: auto; }
+  .rp-preset { display: flex; align-items: center; gap: 5px; padding: 4px 5px; border-radius: 4px; background: #1e1e2a; border: 1px solid #2a2a35; color: #8888a0; cursor: pointer; font-size: 10px; transition: .1s; text-align: left; }
+  .rp-preset:hover { border-color: #444460; background: #22222e; }
+  .rp-preset.active { border-color: #5050c0; background: #2a2a3e; color: #e0e0f0; }
+  .rp-pi { font-size: 13px; width: 16px; text-align: center; flex-shrink: 0; }
   .rp-pinfo { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
   .rp-pn { font-weight: 600; font-size: 10px; }
-  .rp-ps { font-size: 9px; color: #555; font-family: 'Geist Mono', monospace; }
+  .rp-ps { font-size: 9px; color: #444460; font-family: 'Geist Mono', monospace; }
 
-  .rp-slider { display: flex; align-items: center; gap: 4px; font-size: 10px; color: #666; }
-  .rp-slider input[type="range"] { flex: 1; accent-color: #6366f1; height: 3px; }
-  .rp-slider span { font-size: 9px; color: #555; font-family: 'Geist Mono', monospace; min-width: 28px; text-align: right; }
+  .rp-slider { display: flex; align-items: center; gap: 4px; font-size: 10px; color: #555570; }
+  .rp-slider input[type="range"] { flex: 1; accent-color: #5050c0; height: 3px; }
+  .rp-slider span { font-size: 9px; color: #444460; font-family: 'Geist Mono', monospace; min-width: 28px; text-align: right; }
 
-  .rp-layer-actions { display: flex; gap: 3px; margin-bottom: 4px; }
-  .rp-layer-btn { flex: 1; padding: 3px; border-radius: 3px; background: #2a2a2e; border: 1px solid #444; color: #777; font-size: 9px; cursor: pointer; transition: .1s; }
-  .rp-layer-btn:hover { border-color: #6366f1; color: #ccc; }
-  .rp-layer-btn:disabled { opacity: .25; cursor: default; }
-  .rp-layer { display: flex; align-items: center; gap: 5px; padding: 5px 6px; border-radius: 5px; background: #2a2a2e; border: 1px solid #333; color: #999; cursor: pointer; font-size: 10px; transition: .1s; }
-  .rp-layer:hover { border-color: #555; }
-  .rp-layer.active { border-color: #6366f1; background: #2a2a3e; color: #fff; }
+  .rp-layer-actions { display: flex; gap: 2px; }
+  .rp-layer-btn { width: 20px; height: 20px; border-radius: 3px; background: #1e1e2a; border: 1px solid #2a2a35; color: #666680; font-size: 10px; cursor: pointer; transition: .1s; display: flex; align-items: center; justify-content: center; }
+  .rp-layer-btn:hover { border-color: #5050c0; color: #b0b0d0; }
+  .rp-layer-btn:disabled { opacity: .2; cursor: default; }
+  .rp-layer { display: flex; align-items: center; gap: 5px; padding: 4px 5px; border-radius: 4px; background: #1e1e2a; border: 1px solid #2a2a35; color: #8888a0; cursor: pointer; font-size: 10px; transition: .1s; }
+  .rp-layer:hover { border-color: #444460; }
+  .rp-layer.active { border-color: #5050c0; background: #2a2a3e; color: #e0e0f0; }
   .rp-lvis { background: none; border: none; font-size: 11px; cursor: pointer; padding: 0; color: inherit; width: 18px; text-align: center; }
   .rp-lname { flex: 1; }
-  .rp-lcount { font-size: 9px; color: #444; }
+  .rp-lcount { font-size: 9px; color: #333350; }
   .rp-lay-opacity { padding: 2px 0; }
 
   .rp-quick-colors { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; }
-  .rp-qc { width: 100%; aspect-ratio: 1; border-radius: 3px; border: 1px solid #444; cursor: pointer; transition: .1s; }
-  .rp-qc:hover { border-color: #888; transform: scale(1.1); }
-  .rp-qc.active { border-color: #fff; box-shadow: 0 0 0 1px #6366f1; }
+  .rp-qc { width: 100%; aspect-ratio: 1; border-radius: 3px; border: 1px solid #3a3a4a; cursor: pointer; transition: .1s; }
+  .rp-qc:hover { border-color: #666680; transform: scale(1.1); }
+  .rp-qc.active { border-color: #e0e0f0; box-shadow: 0 0 0 1px #5050c0; }
 
   .rp-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; font-size: 10px; }
-  .rp-info-label { color: #555; }
-  .rp-info-val { color: #999; text-align: right; font-family: 'Geist Mono', monospace; font-size: 9px; }
+  .rp-info-label { color: #444460; }
+  .rp-info-val { color: #8888a0; text-align: right; font-family: 'Geist Mono', monospace; font-size: 9px; }
 
-  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; z-index: 9999; }
-  .modal-box { background: #2a2a2e; border: 1px solid #444; border-radius: 8px; padding: 16px; min-width: 300px; max-width: 400px; box-shadow: 0 8px 32px rgba(0,0,0,.5); }
-  .modal-title { font-size: 13px; font-weight: 600; color: #eee; margin-bottom: 12px; }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.7); display: flex; align-items: center; justify-content: center; z-index: 9999; }
+  .modal-box { background: #1e1e2a; border: 1px solid #3a3a4a; border-radius: 8px; padding: 16px; min-width: 300px; max-width: 400px; box-shadow: 0 12px 48px rgba(0,0,0,.6); }
+  .modal-title { font-size: 13px; font-weight: 600; color: #e0e0f0; margin-bottom: 12px; }
   .modal-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-  .modal-row label { font-size: 11px; color: #888; min-width: 60px; }
+  .modal-row label { font-size: 11px; color: #8888a0; min-width: 60px; }
   .modal-row input[type="text"],
-  .modal-row input[type="number"] { flex: 1; background: #1a1a1e; border: 1px solid #444; border-radius: 4px; padding: 4px 8px; color: #ccc; font-size: 12px; font-family: 'Geist Mono', monospace; outline: none; }
-  .modal-row input:focus { border-color: #6366f1; }
-  .modal-check { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #888; margin-bottom: 8px; }
-  .modal-check input { accent-color: #6366f1; }
+  .modal-row input[type="number"] { flex: 1; background: #12121a; border: 1px solid #3a3a4a; border-radius: 4px; padding: 4px 8px; color: #b0b0c0; font-size: 12px; font-family: 'Geist Mono', monospace; outline: none; }
+  .modal-row input:focus { border-color: #5050c0; }
+  .modal-check { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #8888a0; margin-bottom: 8px; }
+  .modal-check input { accent-color: #5050c0; }
   .modal-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 14px; }
-  .modal-btn { padding: 5px 14px; border-radius: 4px; border: 1px solid #444; background: #222226; color: #aaa; font-size: 11px; cursor: pointer; transition: .1s; }
-  .modal-btn:hover { border-color: #6366f1; color: #fff; }
-  .modal-btn.primary { background: #6366f1; border-color: #6366f1; color: #fff; font-weight: 600; }
+  .modal-btn { padding: 5px 14px; border-radius: 4px; border: 1px solid #3a3a4a; background: #16161e; color: #8888a0; font-size: 11px; cursor: pointer; transition: .1s; }
+  .modal-btn:hover { border-color: #5050c0; color: #e0e0f0; }
+  .modal-btn.primary { background: #5050c0; border-color: #5050c0; color: #fff; font-weight: 600; }
   .modal-btn.primary:hover { opacity: .85; }
 
-  .sel-row { display: flex; align-items: center; gap: 6px; padding: 0 8px; margin-bottom: 6px; }
-  .sel-field { display: flex; flex-direction: column; gap: 2px; font-size: 10px; color: #666; flex: 1; }
-  .sel-field input[type="number"] { width: 100%; background: #1a1a1e; border: 1px solid #444; border-radius: 3px; padding: 3px 5px; color: #ccc; font-size: 11px; font-family: 'Geist Mono', monospace; outline: none; }
-  .sel-field input[type="number"]:focus { border-color: #6366f1; }
-  .sel-field input[type="range"] { width: 100%; accent-color: #6366f1; }
-  .sel-field input[type="color"] { width: 100%; height: 24px; border: 1px solid #444; border-radius: 3px; background: #1a1a1e; cursor: pointer; padding: 1px; }
-  .sel-field span { font-size: 10px; color: #555; font-family: 'Geist Mono', monospace; }
-  .sel-full { padding: 0 8px; margin-bottom: 6px; }
-  .sel-lock { width: 26px; height: 26px; border-radius: 4px; border: 1px solid #444; background: #222226; color: #aaa; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: .1s; }
-  .sel-lock:hover { border-color: #6366f1; color: #fff; }
-  .sel-lock.active { border-color: #6366f1; color: #6366f1; background: rgba(99,102,241,.15); }
-  .sel-info { padding: 4px 8px; font-size: 11px; color: #666; display: flex; flex-direction: column; gap: 2px; }
-  .sel-actions { display: flex; gap: 6px; padding: 8px; }
-  .sel-btn { flex: 1; padding: 5px 0; border-radius: 4px; border: 1px solid #444; background: #222226; color: #aaa; font-size: 11px; cursor: pointer; transition: .1s; }
-  .sel-btn:hover { border-color: #6366f1; color: #fff; }
-  .sel-btn.danger { border-color: #664; }
+  .sel-row { display: flex; align-items: center; gap: 6px; padding: 0 4px; margin-bottom: 4px; }
+  .sel-field { display: flex; flex-direction: column; gap: 2px; font-size: 10px; color: #555570; flex: 1; }
+  .sel-field input[type="number"] { width: 100%; background: #12121a; border: 1px solid #3a3a4a; border-radius: 3px; padding: 3px 5px; color: #b0b0c0; font-size: 11px; font-family: 'Geist Mono', monospace; outline: none; }
+  .sel-field input[type="number"]:focus { border-color: #5050c0; }
+  .sel-field input[type="range"] { width: 100%; accent-color: #5050c0; }
+  .sel-field input[type="color"] { width: 100%; height: 22px; border: 1px solid #3a3a4a; border-radius: 3px; background: #12121a; cursor: pointer; padding: 1px; }
+  .sel-field span { font-size: 10px; color: #444460; font-family: 'Geist Mono', monospace; }
+  .sel-full { padding: 0 4px; margin-bottom: 4px; }
+  .sel-lock { width: 24px; height: 24px; border-radius: 4px; border: 1px solid #3a3a4a; background: #16161e; color: #8888a0; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: .1s; }
+  .sel-lock:hover { border-color: #5050c0; color: #e0e0f0; }
+  .sel-lock.active { border-color: #5050c0; color: #5050c0; background: rgba(80,80,192,.15); }
+  .sel-info { padding: 3px 4px; font-size: 11px; color: #555570; display: flex; flex-direction: column; gap: 2px; }
+  .sel-actions { display: flex; gap: 4px; padding: 4px; }
+  .sel-btn { flex: 1; padding: 4px 0; border-radius: 4px; border: 1px solid #3a3a4a; background: #16161e; color: #8888a0; font-size: 11px; cursor: pointer; transition: .1s; }
+  .sel-btn:hover { border-color: #5050c0; color: #e0e0f0; }
+  .sel-btn.danger { border-color: #443; }
   .sel-btn.danger:hover { border-color: #f44; color: #f44; background: rgba(255,68,68,.1); }
-  .sel-empty { padding: 16px 8px; font-size: 11px; color: #555; text-align: center; }
+  .sel-empty { padding: 12px 4px; font-size: 11px; color: #444460; text-align: center; }
 </style>
 
 <input bind:this={fileInputEl} type="file" accept="image/*" style="display:none" onchange={handleImageFile}/>

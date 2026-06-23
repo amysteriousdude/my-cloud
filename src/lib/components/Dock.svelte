@@ -17,6 +17,8 @@
     folderCount = 0,
     storageBytes = 0,
     activeTab = 'files',
+    autoHide = false,
+    dockHovered = $bindable(false),
     oncycleTheme,
     onlogout,
     ontabchange,
@@ -27,6 +29,8 @@
     folderCount?: number;
     storageBytes?: number;
     activeTab?: Tab;
+    autoHide?: boolean;
+    dockHovered?: boolean;
     oncycleTheme: () => void;
     onlogout: () => void;
     ontabchange: (t: Tab) => void;
@@ -73,6 +77,36 @@
   }
 
   function onItemLeave() { hoverTabId = null; }
+
+  // ── Long-press tooltip (mobile) ──────────────────────────────
+  let longPressTooltipTab = $state<string | null>(null);
+  let tooltipLongPressTimer: ReturnType<typeof setTimeout> | null = null;
+  let longPressTouching = $state(false);
+
+  function onItemTouchStart(tabId: string, e: TouchEvent) {
+    const touch = e.touches[0];
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    longPressTouching = true;
+    tooltipLongPressTimer = setTimeout(() => {
+      longPressTooltipTab = tabId;
+      hoverX = rect.left + rect.width / 2;
+      if (position === 'bottom') { hoverY = rect.top - 10; hoverSide = 'top'; }
+      else if (position === 'top') { hoverY = rect.bottom + 10; hoverSide = 'bottom'; }
+      else if (position === 'left') { hoverX = rect.right + 10; hoverY = rect.top + rect.height / 2; hoverSide = 'right'; }
+      else { hoverX = rect.left - 10; hoverY = rect.top + rect.height / 2; hoverSide = 'left'; }
+    }, 450);
+  }
+
+  function onItemTouchEnd() {
+    longPressTouching = false;
+    if (tooltipLongPressTimer) { clearTimeout(tooltipLongPressTimer); tooltipLongPressTimer = null; }
+    longPressTooltipTab = null;
+  }
+
+  function onItemTouchMove() {
+    longPressTouching = false;
+    if (tooltipLongPressTimer) { clearTimeout(tooltipLongPressTimer); tooltipLongPressTimer = null; }
+  }
 
   // ── Load / Save ────────────────────────────────────────────────
   function loadState() {
@@ -198,10 +232,18 @@
     if (!target.closest('.dock-more-overlay') && !target.closest('.dock-more-btn')) showMore = false;
     if (!target.closest('.dock-user-panel') && !target.closest('.dock-avatar')) showUser = false;
   }
+
+  function handleOutsideTouch(e: TouchEvent) {
+    const target = e.target as HTMLElement;
+    if (!target.closest('.dock-item') && !target.closest('.dock-avatar')) {
+      longPressTooltipTab = null;
+    }
+  }
 </script>
 
 <svelte:window
   onclick={handleOutsideClick}
+  ontouchstart={handleOutsideTouch}
   onmousemove={onDockDragMove}
   onmouseup={onDockDragEnd}
   ontouchmove={onDockDragMove}
@@ -220,7 +262,8 @@
 {/if}
 
 <!-- ── Floating pill tooltip above hovered item ────────────────── -->
-{#if hoverTabId}
+{#if hoverTabId || longPressTooltipTab}
+  {@const tipId = longPressTooltipTab ?? hoverTabId}
   {@const side = hoverSide}
   <div
     class="dock-pill-tip"
@@ -228,9 +271,10 @@
     class:tip-bottom={side === 'bottom'}
     class:tip-left={side === 'left'}
     class:tip-right={side === 'right'}
+    class:touch-visible={longPressTooltipTab !== null}
     style="left:{hoverX}px; top:{hoverY}px;"
   >
-    {getTabLabel(hoverTabId)}
+    {getTabLabel(tipId!)}
   </div>
 {/if}
 
@@ -291,16 +335,30 @@
   </div>
 {/if}
 
+<!-- ── Auto-hide hover zone (bottom edge) ────────────────────── -->
+{#if autoHide}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="dock-hover-zone"
+    onmouseenter={() => { dockHovered = true; }}
+    onmouseleave={() => { dockHovered = false; }}
+  ></div>
+{/if}
+
 <!-- ── Main dock bar ───────────────────────────────────────────── -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class="dock pos-{position}"
   class:repositioning
+  class:auto-hide={autoHide}
+  class:hide-dock={autoHide && !dockHovered}
   onmousedown={startDockDrag}
   ontouchstart={startDockDrag}
   onmouseup={cancelDockDrag}
   ontouchend={cancelDockDrag}
   onmousemove={cancelDockDrag}
+  onmouseenter={() => { if (autoHide) dockHovered = true; }}
+  onmouseleave={() => { if (autoHide) dockHovered = false; }}
 >
   <!-- Brand -->
   <div class="dock-brand">
@@ -325,6 +383,10 @@
         onclick={() => ontabchange(tab.id)}
         onmouseenter={(e) => onItemHover(tab.id, e)}
         onmouseleave={onItemLeave}
+        ontouchstart={(e) => onItemTouchStart(tab.id, e)}
+        ontouchend={onItemTouchEnd}
+        ontouchmove={onItemTouchMove}
+        ontouchcancel={onItemTouchEnd}
         role="button"
         tabindex="-1"
       >
@@ -344,6 +406,10 @@
     onclick={() => { showMore = !showMore; showUser = false; }}
     onmouseenter={(e) => onItemHover('more', e)}
     onmouseleave={onItemLeave}
+    ontouchstart={(e) => onItemTouchStart('more', e)}
+    ontouchend={onItemTouchEnd}
+    ontouchmove={onItemTouchMove}
+    ontouchcancel={onItemTouchEnd}
   >
     <div class="dock-item-icon">
       <IconDots size={20} stroke={1.5}/>
@@ -361,6 +427,10 @@
       onclick={(e) => { e.stopPropagation(); showUser = !showUser; showMore = false; }}
       onmouseenter={(e) => onItemHover('user', e)}
       onmouseleave={onItemLeave}
+      ontouchstart={(e) => onItemTouchStart('user', e)}
+      ontouchend={onItemTouchEnd}
+      ontouchmove={onItemTouchMove}
+      ontouchcancel={onItemTouchEnd}
       role="button"
       tabindex="-1"
     >
@@ -635,13 +705,47 @@
   }
   .dock-avatar:hover { transform: scale(1.1); box-shadow: 0 2px 12px rgba(99,102,241,.4); }
 
+  /* ── Auto-hide hover zone ────────────────────────────────────── */
+  .dock-hover-zone {
+    position: fixed;
+    bottom: 0; left: 50%;
+    transform: translateX(-50%);
+    width: 300px; height: 24px;
+    z-index: 250;
+  }
+
+  /* ── Auto-hide dock ──────────────────────────────────────────── */
+  .dock.auto-hide {
+    transition: transform 0.35s cubic-bezier(.16,1,.3,1), opacity 0.3s ease;
+  }
+  .dock.auto-hide.hide-dock {
+    pointer-events: none;
+  }
+  .dock.auto-hide.hide-dock.pos-bottom {
+    transform: translateX(-50%) translateY(calc(100% + 24px));
+    opacity: 0;
+  }
+  .dock.auto-hide.hide-dock.pos-top {
+    transform: translateX(-50%) translateY(calc(-100% - 24px));
+    opacity: 0;
+  }
+  .dock.auto-hide.hide-dock.pos-left {
+    transform: translateY(-50%) translateX(calc(-100% - 24px));
+    opacity: 0;
+  }
+  .dock.auto-hide.hide-dock.pos-right {
+    transform: translateY(-50%) translateX(calc(100% + 24px));
+    opacity: 0;
+  }
+
   /* Mobile */
   @media (max-width: 600px) {
     .dock.pos-bottom { bottom: 8px; padding: 4px 6px; }
-    .dock-pill-tip { display: none; }
     .dock-more-panel { width: 95vw; }
     .dock-more-grid { grid-template-columns: repeat(3, 1fr); }
     .dock-item { min-width: 36px; padding: 3px 6px 2px; }
     .dock-item-label { font-size: 9px; }
+    .dock-pill-tip { opacity: 0; pointer-events: none; transition: opacity .15s; }
+    .dock-pill-tip.touch-visible { opacity: 1; }
   }
 </style>

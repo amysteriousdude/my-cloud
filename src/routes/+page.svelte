@@ -116,6 +116,21 @@
   let dockMode = $state<'dock' | 'sidebar'>('dock');
   let dockPosition = $state('bottom');
 
+  // Dock auto-hide (for Draw tab fullscreen)
+  let dockHovered = $state(false);
+  let dockHoverTimeout: ReturnType<typeof setTimeout> | null = null;
+  let isDrawTab = $derived(activeTab === 'draw');
+  let dockAutoHide = $derived(isDrawTab && dockMode === 'dock');
+
+  function onDockHoverZoneEnter() {
+    if (dockHoverTimeout) { clearTimeout(dockHoverTimeout); dockHoverTimeout = null; }
+    dockHovered = true;
+  }
+
+  function onDockHoverZoneLeave() {
+    dockHoverTimeout = setTimeout(() => { dockHovered = false; }, 300);
+  }
+
   function loadDockMode() {
     try {
       const mode = localStorage.getItem('dock-mode');
@@ -159,13 +174,15 @@
         {folderCount}
         {storageBytes}
         {activeTab}
+        autoHide={dockAutoHide}
+        bind:dockHovered
         oncycleTheme={cycleTheme}
         onlogout={logout}
         ontabchange={(t) => activeTab = t}
       />
     {/if}
 
-    <main class="main">
+    <main class="main" class:draw-fullscreen={dockAutoHide && !dockHovered}>
       {#if activeTab === 'files'}
         <Files
           {user}
@@ -207,6 +224,15 @@
 
 <Toast />
 
+{#if dockAutoHide}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="dock-hover-zone"
+    onmouseenter={onDockHoverZoneEnter}
+    onmouseleave={onDockHoverZoneLeave}
+  ></div>
+{/if}
+
 <style>
   .app { display: flex; flex-direction: row; min-height: 100vh; }
   .main {
@@ -226,6 +252,10 @@
 
   /* Dock bottom/top: no side margin, bottom padding for the dock bar */
   .app.dock-mode:not(.dock-left):not(.dock-right) .main { margin-left: 0; margin-right: 0; padding-bottom: 90px; }
+
+  .main.draw-fullscreen {
+    padding-bottom: 0 !important;
+  }
 
   @media (max-width: 600px) {
     .main { margin-left: 0 !important; margin-right: 0 !important; padding-bottom: 90px; }
