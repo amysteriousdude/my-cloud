@@ -200,7 +200,7 @@
       {:else if activeTab === 'downloader'}
         <Downloader />
       {:else if activeTab === 'draw'}
-        <Draw {apiKey} />
+        <Draw {apiKey} fullscreen={dockAutoHide && !dockHovered} />
       {:else if activeTab === 'stats'}
         <Stats {apiKey} />
       {:else if activeTab === 'editor'}

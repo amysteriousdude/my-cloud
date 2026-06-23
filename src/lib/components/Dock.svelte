@@ -650,12 +650,12 @@
 
   /* Individual item: icon + label stacked */
   .dock-item {
-    display: flex; flex-direction: column; align-items: center; gap: 2px;
-    padding: 4px 10px 3px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    padding: 6px 10px; border-radius: 12px;
     color: var(--text-2); cursor: pointer;
     transition: all .15s cubic-bezier(.16,1,.3,1);
     position: relative;
-    min-width: 44px;
+    min-width: 40px;
   }
 
   .dock-item:hover {
@@ -680,12 +680,7 @@
   }
 
   .dock-item-label {
-    font-size: 10px;
-    font-weight: 500;
-    font-family: 'Geist', sans-serif;
-    white-space: nowrap;
-    line-height: 1;
-    letter-spacing: .01em;
+    display: none;
   }
 
   .dock-more-btn {

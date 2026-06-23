@@ -13,7 +13,7 @@
   import { Stabilizer, smoothPath, variableWidthPath, generatePencilPaths, shapeAttrs, escapeXml, minDistFilter } from "./engine";
   import ColorPicker from "./ColorPicker.svelte";
 
-  let { apiKey }: { apiKey: string } = $props();
+  let { apiKey, fullscreen = false }: { apiKey: string; fullscreen?: boolean } = $props();
 
   // ── Canvas ──────────────────────────────────────────────────────────
   let svgEl: SVGSVGElement = $state() as SVGSVGElement;
@@ -1547,6 +1547,7 @@
         </div>
       </div>
 
+      {#if !fullscreen}
       <div class="status-bar">
         <span>{w}×{h}</span>
         <span class="sb-sep"></span>
@@ -1579,6 +1580,7 @@
         {#if saveOk}<span class="sb-ok">✓</span>{/if}
         {#if saveError}<span class="sb-err">{saveError}</span>{/if}
       </div>
+      {/if}
     </div>
 
     <!-- ═══ RIGHT PANEL ═══ -->
@@ -1799,6 +1801,12 @@
   .ob-preset { width: 22px; height: 22px; border-radius: 3px; border: 1px solid #3a3a4a; background: #1e1e2a; color: #8888a0; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: .1s; }
   .ob-preset:hover { border-color: #5050c0; color: #e0e0f0; }
   .ob-preset.active { border-color: #5050c0; background: #2a2a3e; color: #e0e0f0; }
+  .ob-btn { display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 3px; border: 1px solid #3a3a4a; background: #1e1e2a; color: #8888a0; font-size: 11px; font-weight: 600; cursor: pointer; transition: .1s; flex-shrink: 0; }
+  .ob-btn:hover { border-color: #5050c0; color: #e0e0f0; }
+  .ob-btn.active { border-color: #5050c0; background: #5050c0; color: #fff; }
+  .ob-italic { font-style: italic; }
+  .ob-select { background: #12121a; border: 1px solid #3a3a4a; border-radius: 3px; padding: 2px 4px; color: #b0b0c0; font-size: 10px; font-family: 'Geist', sans-serif; outline: none; max-width: 120px; }
+  .ob-select:focus { border-color: #5050c0; }
 
   .canvas-container { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 0; position: relative; }
   .ruler { background: #1c1c28; overflow: hidden; flex-shrink: 0; }
@@ -1841,6 +1849,7 @@
   .right-panel { width: 220px; flex-shrink: 0; background: #16161e; border-left: 1px solid #2a2a35; display: flex; flex-direction: column; overflow: hidden; }
   .rp-divider { height: 1px; background: #2a2a35; flex-shrink: 0; }
   .rp-section { display: flex; flex-direction: column; flex-shrink: 0; }
+  .rp-color-section .rp-section-body { max-height: 200px; overflow-y: auto; }
   .rp-layers-section { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
   .rp-section-header {
     display: flex; align-items: center; justify-content: space-between;
