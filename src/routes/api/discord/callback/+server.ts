@@ -6,12 +6,14 @@ import { env } from '$env/dynamic/private';
 export const GET: RequestHandler = async ({ url, fetch }) => {
   try {
     const OWNER_ID = env.OWNER_ID;
-    const BASE_URL = env.PUBLIC_BASE_URL ?? 'http://localhost:5173';
+    const BASE_URL = (env.PUBLIC_BASE_URL ?? 'http://localhost:5173').replace(/\/+$/, '');
     const CLIENT_ID = env.DISCORD_CLIENT_ID;
     const CLIENT_SECRET = env.DISCORD_CLIENT_SECRET;
 
     if (!OWNER_ID || !CLIENT_ID || !CLIENT_SECRET) {
-      return json({ error: 'Missing env vars' }, 500);
+      return json({ error: 'Missing env vars', missing: {
+        OWNER_ID: !!OWNER_ID, CLIENT_ID: !!CLIENT_ID, CLIENT_SECRET: !!CLIENT_SECRET
+      }}, 500);
     }
 
     const code = url.searchParams.get('code');
@@ -19,28 +21,29 @@ export const GET: RequestHandler = async ({ url, fetch }) => {
 
     const redirectUri = `${BASE_URL}/api/discord/callback`;
 
-    // 🔑 token exchange (FIXED: no .toString(), no axios)
+    const body = new URLSearchParams({
+      client_id: CLIENT_ID,
+      client_secret: CLIENT_SECRET,
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: redirectUri
+    }).toString();
+
     const tokenRes = await fetch('https://discord.com/api/v10/oauth2/token', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded'
       },
-      body: new URLSearchParams({
-        client_id: CLIENT_ID,
-        client_secret: CLIENT_SECRET,
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: redirectUri
-      })
+      body
     });
 
     if (!tokenRes.ok) {
-      return json({ error: 'Discord OAuth failed at token exchange' }, 500);
+      const errBody = await tokenRes.text().catch(() => '');
+      return json({ error: 'Discord OAuth failed at token exchange', status: tokenRes.status, details: errBody }, 500);
     }
 
     const token = await tokenRes.json();
 
-    // 👤 fetch user
     const userRes = await fetch('https://discord.com/api/v10/users/@me', {
       headers: {
         Authorization: `${token.token_type ?? 'Bearer'} ${token.access_token}`
@@ -48,12 +51,12 @@ export const GET: RequestHandler = async ({ url, fetch }) => {
     });
 
     if (!userRes.ok) {
-      return json({ error: 'Failed to fetch user' }, 500);
+      const errBody = await userRes.text().catch(() => '');
+      return json({ error: 'Failed to fetch user', status: userRes.status, details: errBody }, 500);
     }
 
     const user = await userRes.json();
 
-    // 🔐 owner gate
     if (user.id !== OWNER_ID) {
       return json({ error: 'Unauthorized' }, 403);
     }
@@ -61,8 +64,8 @@ export const GET: RequestHandler = async ({ url, fetch }) => {
     const rec = await generateApiKeyForDiscordId(user.id, user.username);
 
     return json({ user, apiKey: rec.apiKey }, 200);
-  } catch {
-    return json({ error: 'Discord OAuth failed' }, 500);
+  } catch (err) {
+    return json({ error: 'Discord OAuth failed', message: (err as Error).message }, 500);
   }
 };
 

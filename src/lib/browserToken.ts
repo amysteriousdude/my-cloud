@@ -1,7 +1,7 @@
 // src/lib/browserToken.ts
 import crypto from 'crypto';
 
-const SECRET = () => process.env.BROWSER_SESSION_SECRET!;
+const SECRET = () => (typeof process !== 'undefined' && process.env?.BROWSER_SESSION_SECRET) || '';
 
 const usedTokens = new Map<string, number>();
 

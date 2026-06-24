@@ -2,7 +2,7 @@
 import crypto from 'crypto';
 
 const ALGO = 'aes-256-gcm';
-const SECRET = process.env.SESSION_SECRET!;
+const SECRET = typeof process !== 'undefined' && process.env?.SESSION_SECRET || '';
 
 if (!SECRET || SECRET.length < 32) {
   console.warn('SESSION_SECRET must be at least 32 characters');

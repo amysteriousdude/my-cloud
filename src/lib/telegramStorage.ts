@@ -33,8 +33,8 @@ export type FileRecord = {
   parentId?: string;
 };
 
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const CHAT_ID = process.env.TELEGRAM_BACKUP_CHAT_ID;
+const BOT_TOKEN = (typeof process !== 'undefined' && process.env?.TELEGRAM_BOT_TOKEN) || '';
+const CHAT_ID = (typeof process !== 'undefined' && process.env?.TELEGRAM_BACKUP_CHAT_ID) || '';
 const TELE_API = BOT_TOKEN ? `https://api.telegram.org/bot${BOT_TOKEN}` : null;
 
 if (!BOT_TOKEN || !CHAT_ID) {
