@@ -251,13 +251,13 @@
   .app.dock-right .main { margin-left: 0; margin-right: 80px; }
 
   /* Dock bottom/top: no side margin, bottom padding for the dock bar */
-  .app.dock-mode:not(.dock-left):not(.dock-right) .main { margin-left: 0; margin-right: 0; padding-bottom: 90px; }
+  .app.dock-mode:not(.dock-left):not(.dock-right) .main { margin-left: 0; margin-right: 0; padding-bottom: 80px; }
 
   .main.draw-fullscreen {
     padding-bottom: 0 !important;
   }
 
   @media (max-width: 600px) {
-    .main { margin-left: 0 !important; margin-right: 0 !important; padding-bottom: 90px; }
+    .main { margin-left: 0 !important; margin-right: 0 !important; padding-bottom: 80px; }
   }
 </style>

@@ -230,12 +230,12 @@
   function handleOutsideClick(e: MouseEvent) {
     const target = e.target as HTMLElement;
     if (!target.closest('.dock-more-overlay') && !target.closest('.dock-more-btn')) showMore = false;
-    if (!target.closest('.dock-user-panel') && !target.closest('.dock-avatar')) showUser = false;
+    if (!target.closest('.dock-user-panel') && !target.closest('.dock-avatar-float')) showUser = false;
   }
 
   function handleOutsideTouch(e: TouchEvent) {
     const target = e.target as HTMLElement;
-    if (!target.closest('.dock-item') && !target.closest('.dock-avatar')) {
+    if (!target.closest('.dock-item') && !target.closest('.dock-avatar-float')) {
       longPressTooltipTab = null;
     }
   }
@@ -412,32 +412,25 @@
     ontouchcancel={onItemTouchEnd}
   >
     <div class="dock-item-icon">
-      <IconDots size={20} stroke={1.5}/>
+      <IconDots size={20} stroke={showMore ? 2.2 : 1.5}/>
     </div>
     <span class="dock-item-label">More</span>
   </button>
 
-  <div class="dock-sep"></div>
-
-  <!-- User avatar -->
-  {#if user}
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div
-      class="dock-avatar"
-      onclick={(e) => { e.stopPropagation(); showUser = !showUser; showMore = false; }}
-      onmouseenter={(e) => onItemHover('user', e)}
-      onmouseleave={onItemLeave}
-      ontouchstart={(e) => onItemTouchStart('user', e)}
-      ontouchend={onItemTouchEnd}
-      ontouchmove={onItemTouchMove}
-      ontouchcancel={onItemTouchEnd}
-      role="button"
-      tabindex="-1"
-    >
-      {user.username[0].toUpperCase()}
-    </div>
-  {/if}
 </div>
+
+<!-- ── User avatar — top-right corner ──────────────────────────── -->
+{#if user}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="dock-avatar-float"
+    onclick={(e) => { e.stopPropagation(); showUser = !showUser; showMore = false; }}
+    role="button"
+    tabindex="-1"
+  >
+    {user.username[0].toUpperCase()}
+  </div>
+{/if}
 
 <style>
   /* ── Floating pill tooltip ────────────────────────────────────── */
@@ -554,16 +547,16 @@
   /* ── User panel ────────────────────────────────────────────────── */
   .dock-user-panel {
     position: fixed; z-index: 600;
-    bottom: 100px; right: 16px;
+    top: 60px; right: 16px;
     background: var(--bg-2); border: 1px solid var(--border);
     border-radius: 14px; width: 240px;
     box-shadow: 0 12px 40px rgba(0,0,0,.35);
     padding: 12px;
     animation: panelIn .15s ease-out;
   }
-  .dock-user-panel.pos-top { bottom: auto; top: 100px; }
-  .dock-user-panel.pos-left { right: auto; left: 100px; bottom: 16px; }
-  .dock-user-panel.pos-right { right: 100px; bottom: 16px; }
+  .dock-user-panel.pos-top { top: 60px; }
+  .dock-user-panel.pos-left { right: auto; left: 16px; top: 60px; }
+  .dock-user-panel.pos-right { right: 16px; top: 60px; }
 
   @keyframes panelIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
@@ -591,12 +584,10 @@
   .dock {
     position: fixed; z-index: 200;
     display: flex; align-items: center; gap: 0;
-    background: color-mix(in srgb, var(--bg-2) 60%, transparent);
-    backdrop-filter: blur(24px) saturate(1.6);
-    -webkit-backdrop-filter: blur(24px) saturate(1.6);
-    border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+    background: var(--bg-2);
+    border: 1px solid var(--border);
     box-shadow:
-      0 8px 32px rgba(0,0,0,.2),
+      0 8px 32px rgba(0,0,0,.3),
       inset 0 1px 0 color-mix(in srgb, var(--bg-1) 30%, transparent);
     transition: all .3s cubic-bezier(.16,1,.3,1);
     user-select: none;
@@ -606,8 +597,8 @@
 
   /* Position variants */
   .dock.pos-bottom {
-    bottom: 16px; left: 50%; transform: translateX(-50%);
-    border-radius: 999px;
+    bottom: 0; left: 50%; transform: translateX(-50%);
+    border-radius: 16px 16px 0 0;
   }
   .dock.pos-top {
     top: 16px; left: 50%; transform: translateX(-50%);
@@ -684,21 +675,27 @@
   }
 
   .dock-more-btn {
-    color: var(--text-3);
+    color: var(--text-2);
   }
   .dock-more-btn:hover { color: var(--text-1); }
+  .dock-more-btn.active {
+    background: color-mix(in srgb, var(--text-1) 12%, transparent);
+    color: var(--text-1);
+  }
 
-  /* Avatar */
-  .dock-avatar {
-    width: 32px; height: 32px; border-radius: 50%;
+  /* Floating user avatar — top right */
+  .dock-avatar-float {
+    position: fixed;
+    top: 16px; right: 16px;
+    z-index: 300;
+    width: 36px; height: 36px; border-radius: 50%;
     background: var(--accent); color: #fff;
     display: flex; align-items: center; justify-content: center;
-    font-size: 13px; font-weight: 700; cursor: pointer;
+    font-size: 14px; font-weight: 700; cursor: pointer;
     transition: all .15s cubic-bezier(.16,1,.3,1);
-    flex-shrink: 0;
-    margin-left: 4px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.3);
   }
-  .dock-avatar:hover { transform: scale(1.1); box-shadow: 0 2px 12px rgba(99,102,241,.4); }
+  .dock-avatar-float:hover { transform: scale(1.1); box-shadow: 0 4px 16px rgba(99,102,241,.4); }
 
   /* ── Auto-hide hover zone ────────────────────────────────────── */
   .dock-hover-zone {
@@ -717,7 +714,7 @@
     pointer-events: none;
   }
   .dock.auto-hide.hide-dock.pos-bottom {
-    transform: translateX(-50%) translateY(calc(100% + 24px));
+    transform: translateX(-50%) translateY(100%);
     opacity: 0;
   }
   .dock.auto-hide.hide-dock.pos-top {
@@ -735,7 +732,7 @@
 
   /* Mobile */
   @media (max-width: 600px) {
-    .dock.pos-bottom { bottom: 8px; padding: 4px 6px; }
+    .dock.pos-bottom { bottom: 0; padding: 4px 6px; }
     .dock-more-panel { width: 95vw; }
     .dock-more-grid { grid-template-columns: repeat(3, 1fr); }
     .dock-item { min-width: 36px; padding: 3px 6px 2px; }
