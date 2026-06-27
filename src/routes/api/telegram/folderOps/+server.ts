@@ -119,22 +119,29 @@ export const POST: RequestHandler = async ({ request }) => {
     const f = registry[folderId];
     if (!f?._type) return Response.json({ error: 'Not found' }, { status: 404 });
 
-    const newParent = f.parentId ?? undefined;
+    const toDelete = new Set<string>();
 
-    for (const key of Object.keys(registry)) {
-      const item = registry[key];
-
-      if (item?._type === 'folder' && item.parentId === folderId) {
-        item.parentId = newParent;
-      }
-
-      if (!item?._type && item.folderId === folderId) {
-        if (newParent) item.folderId = newParent;
-        else delete item.folderId;
+    function collectChildren(parentId: string) {
+      for (const key of Object.keys(registry)) {
+        const item = registry[key];
+        if (!item) continue;
+        if (item._type === 'folder' && item.parentId === parentId) {
+          toDelete.add(key);
+          collectChildren(key);
+        }
+        if (!item._type && item.folderId === parentId) {
+          toDelete.add(key);
+        }
       }
     }
 
-    delete registry[folderId];
+    collectChildren(folderId);
+    toDelete.add(folderId);
+
+    for (const key of toDelete) {
+      delete registry[key];
+    }
+
     await writeRegistry(registry);
 
     return Response.json({ ok: true });

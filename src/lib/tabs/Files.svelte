@@ -480,8 +480,19 @@
     files = files.filter(f => f.metaFileId !== metaFileId);
   }
   function optimisticRemoveFolder(folderId: string) {
-    folders = folders.filter(f => f.folderId !== folderId);
-    files = files.map(f => f.folderId === folderId ? { ...f, folderId: undefined } : f);
+    const toRemove = new Set<string>();
+    function collectChildren(parentId: string) {
+      for (const f of folders) {
+        if (f.parentId === parentId) {
+          toRemove.add(f.folderId);
+          collectChildren(f.folderId);
+        }
+      }
+    }
+    collectChildren(folderId);
+    toRemove.add(folderId);
+    folders = folders.filter(f => !toRemove.has(f.folderId));
+    files = files.filter(f => !f.folderId || !toRemove.has(f.folderId));
   }
 
   // ── Folder operations ─────────────────────────────────────────────────────
@@ -639,14 +650,14 @@
       const chunks: any[] = new Array(totalChunks);
       let done = 0;
 
-      if (totalChunks <= 1) {
-        // Single chunk: original endpoint
-        const blob = file.slice(0, file.size);
+      async function uploadOneChunk(i: number) {
+        const start = i * CHUNK_SIZE;
+        const blob  = file.slice(start, Math.min(start + CHUNK_SIZE, file.size));
         const res = await fetch(`${BASE}/api/telegram/uploadChunk`, {
           method: "POST",
           headers: {
             "X-Api-Key": apiKey,
-            "X-Chunk-Index": "0",
+            "X-Chunk-Index": String(i),
             "X-File-Name": encodeURIComponent(file.name),
             "Content-Type": file.type || "application/octet-stream"
           },
@@ -658,49 +669,16 @@
         }
         const d = await res.json();
         if (d.error) throw new Error(d.error);
-        chunks[0] = d;
-        done = 1;
-      } else {
-        // One chunk at a time — slow but reliable under CF rate limits
-        for (let i = 0; i < totalChunks; i++) {
-          const start = i * CHUNK_SIZE;
-          const end = Math.min(start + CHUNK_SIZE, file.size);
-          const blob = file.slice(start, end);
-
-          let lastErr = '';
-          let ok = false;
-          for (let attempt = 1; attempt <= 5; attempt++) {
-            try {
-              const res = await fetch(`${BASE}/api/telegram/uploadChunk`, {
-                method: "POST",
-                headers: {
-                  "X-Api-Key": apiKey,
-                  "X-Chunk-Index": String(i),
-                  "X-File-Name": encodeURIComponent(file.name),
-                  "Content-Type": file.type || "application/octet-stream"
-                },
-                body: blob,
-              });
-              if (!res.ok) {
-                const txt = await res.text().catch(() => '');
-                throw new Error(`HTTP ${res.status}: ${txt.slice(0, 100)}`);
-              }
-              const d = await res.json();
-              if (d.error) throw new Error(d.error);
-              chunks[i] = d;
-              done++;
-              ok = true;
-              break;
-            } catch (e: any) {
-              lastErr = e.message;
-              if (attempt < 5) await new Promise(r => setTimeout(r, 5000 * attempt));
-            }
-          }
-          if (!ok) throw new Error(`Chunk ${i} failed after 5 attempts: ${lastErr}`);
-          patchJob({ progress: Math.round((done / totalChunks) * 90) });
-          if (i < totalChunks - 1) await new Promise(r => setTimeout(r, 3000));
-        }
+        chunks[i] = d;
+        done++;
+        patchJob({ progress: Math.round((done / totalChunks) * 90) });
       }
+
+      const CONCURRENCY = 3;
+      const queue = Array.from({ length: totalChunks }, (_, i) => i);
+      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, totalChunks) }, async () => {
+        while (queue.length) await uploadOneChunk(queue.shift()!);
+      }));
 
       patchJob({ progress: 95 });
       const finalRes = await fetch(`${BASE}/api/telegram/finalizeUpload`, {
