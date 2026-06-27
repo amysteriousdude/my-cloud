@@ -4,6 +4,47 @@ import { getPublicFileByPath, getPublicFolderByPath } from '$lib/telegramStorage
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
 const TELE_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 
+// ── CDN URL cache (avoids repeated Telegram API calls) ──────────────────────
+const CDN_URL_TTL = 50 * 60 * 1000;
+const cdnUrlCache = new Map<string, { url: string; exp: number }>();
+
+async function getTgUrl(fileId: string): Promise<string | null> {
+  const cached = cdnUrlCache.get(fileId);
+  if (cached && Date.now() < cached.exp) return cached.url;
+
+  try {
+    const r = await fetch(`${TELE_API}/getFile?file_id=${encodeURIComponent(fileId)}`);
+    const j = await r.json() as any;
+    if (!j?.ok) return null;
+    const url = `https://api.telegram.org/file/bot${BOT_TOKEN}/${j.result.file_path}`;
+    cdnUrlCache.set(fileId, { url, exp: Date.now() + CDN_URL_TTL });
+    return url;
+  } catch { return null; }
+}
+
+// ── Cache-first chunk fetch (same pattern as getRequestFile) ────────────────
+async function fetchChunkFromCacheOrOrigin(fileId: string): Promise<{ body: ReadableStream<Uint8Array>; fromCache: boolean }> {
+  try {
+    const cache = await caches.open('tg-chunks-v1');
+    const cacheReq = new Request(`https://tg-cache/${fileId}`);
+    const hit = await cache.match(cacheReq);
+    if (hit?.body) return { body: hit.body, fromCache: true };
+  } catch {}
+
+  const cdnUrl = await getTgUrl(fileId);
+  if (!cdnUrl) throw new Error('No CDN URL for chunk');
+  const upstream = await fetch(cdnUrl);
+  if (!upstream.ok) throw new Error(`Upstream failed: ${upstream.status}`);
+
+  try {
+    const cache = await caches.open('tg-chunks-v1');
+    const cacheReq = new Request(`https://tg-cache/${fileId}`);
+    await cache.put(cacheReq, upstream.clone());
+  } catch {}
+
+  return { body: upstream.body!, fromCache: false };
+}
+
 function mimeFromName(name: string): string {
   const ext = name.split('.').pop()?.toLowerCase();
   switch (ext) {
@@ -22,6 +63,7 @@ function mimeFromName(name: string): string {
     case 'js': return 'text/javascript; charset=utf-8';
     case 'ts': return 'text/plain; charset=utf-8';
     case 'xml': return 'application/xml; charset=utf-8';
+    case 'ipxe': return 'text/plain; charset=utf-8';
     default: return 'application/octet-stream';
   }
 }
@@ -40,17 +82,6 @@ function splitPublicPrefix(path: string): { raw: boolean; path: string } {
     return { raw: true, path: clean.slice(4) };
   }
   return { raw: false, path: clean };
-}
-
-async function getTgUrl(fileId: string): Promise<string | null> {
-  try {
-    const r = await fetch(`${TELE_API}/getFile?file_id=${encodeURIComponent(fileId)}`);
-    const j = await r.json();
-    if (!j?.ok) return null;
-    return `https://api.telegram.org/file/bot${BOT_TOKEN}/${j.result.file_path}`;
-  } catch {
-    return null;
-  }
 }
 
 function parseRange(range: string | null, size: number) {
@@ -154,25 +185,38 @@ export const GET: RequestHandler = async ({ params, url, request }) => {
             if (range && end < range.start) continue;
             if (range && start > range.end) break;
 
-            const chunkUrl = await getTgUrl(chunk.file_id);
-            if (!chunkUrl) throw new Error('Chunk url fail');
+            const { body } = await fetchChunkFromCacheOrOrigin(chunk.file_id);
 
-            const overlapStart = range ? Math.max(0, range.start - start) : 0;
-            const overlapEnd = range ? Math.min(chunkSize - 1, range.end - start) : chunkSize - 1;
-
-            const res = await fetch(chunkUrl, {
-              headers: range ? { Range: `bytes=${overlapStart}-${overlapEnd}` } : {}
-            });
-
-            if (!res.ok || !res.body) {
-              throw new Error(`Chunk fetch failed: ${res.status}`);
-            }
-
-            const reader = res.body.getReader();
-            while (true) {
-              const { value, done } = await reader.read();
-              if (done) break;
-              if (value) controller.enqueue(value);
+            if (range) {
+              const overlapStart = Math.max(0, range.start - start);
+              const overlapEnd = Math.min(chunkSize - 1, range.end - start);
+              const need = overlapEnd - overlapStart + 1;
+              const reader = body.getReader();
+              let skipped = 0;
+              let taken = 0;
+              while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                if (!value) continue;
+                if (skipped + value.length <= overlapStart) { skipped += value.length; continue; }
+                const startInChunk = Math.max(0, overlapStart - skipped);
+                const sliced = value.slice(startInChunk);
+                if (taken + sliced.length > need) {
+                  controller.enqueue(sliced.slice(0, need - taken));
+                  taken = need;
+                  break;
+                }
+                taken += sliced.length;
+                controller.enqueue(sliced);
+                skipped += value.length;
+              }
+            } else {
+              const reader = body.getReader();
+              while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                if (value) controller.enqueue(value);
+              }
             }
           }
 
