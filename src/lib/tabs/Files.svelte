@@ -662,7 +662,7 @@
         done = 1;
       } else {
         // Multi-chunk: batch 5 chunks per request (90MB max — under CF body limit)
-        const BATCH_SIZE = 5;
+        const BATCH_SIZE = 2;
         for (let batchStart = 0; batchStart < totalChunks; batchStart += BATCH_SIZE) {
           const batchEnd = Math.min(batchStart + BATCH_SIZE, totalChunks);
           const parts: ArrayBuffer[] = [];
@@ -714,6 +714,7 @@
             }
           }
           if (!ok) throw new Error(`Batch at chunk ${batchStart} failed: ${lastErr}`);
+          if (batchStart + BATCH_SIZE < totalChunks) await new Promise(r => setTimeout(r, 2000));
         }
       }
 
