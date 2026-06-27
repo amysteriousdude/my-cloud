@@ -669,10 +669,13 @@
         throw new Error(`Chunk ${i} failed after 3 attempts: ${lastErr}`);
       }
 
-      const CONCURRENCY = 3;
+      const CONCURRENCY = 1;
       const queue = Array.from({ length: totalChunks }, (_, i) => i);
-      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, totalChunks) }, async () => {
-        while (queue.length) await uploadOneChunk(queue.shift()!);
+      await Promise.all(Array.from({ length: CONCURRENCY }, async () => {
+        while (queue.length) {
+          await uploadOneChunk(queue.shift()!);
+          if (queue.length) await new Promise(r => setTimeout(r, 500));
+        }
       }));
 
       patchJob({ progress: 95 });
