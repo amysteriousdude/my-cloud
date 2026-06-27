@@ -661,6 +661,51 @@
         chunks[0] = d;
         done = 1;
       } else {
+        // One chunk at a time — slow but reliable under CF rate limits
+        for (let i = 0; i < totalChunks; i++) {
+          const start = i * CHUNK_SIZE;
+          const end = Math.min(start + CHUNK_SIZE, file.size);
+          const blob = file.slice(start, end);
+
+          let lastErr = '';
+          let ok = false;
+          for (let attempt = 1; attempt <= 5; attempt++) {
+            try {
+              const res = await fetch(`${BASE}/api/telegram/uploadChunk`, {
+                method: "POST",
+                headers: {
+                  "X-Api-Key": apiKey,
+                  "X-Chunk-Index": String(i),
+                  "X-File-Name": encodeURIComponent(file.name),
+                  "Content-Type": file.type || "application/octet-stream"
+                },
+                body: blob,
+              });
+              if (!res.ok) {
+                const txt = await res.text().catch(() => '');
+                throw new Error(`HTTP ${res.status}: ${txt.slice(0, 100)}`);
+              }
+              const d = await res.json();
+              if (d.error) throw new Error(d.error);
+              chunks[i] = d;
+              done++;
+              ok = true;
+              break;
+            } catch (e: any) {
+              lastErr = e.message;
+              if (attempt < 5) await new Promise(r => setTimeout(r, 5000 * attempt));
+            }
+          }
+          if (!ok) throw new Error(`Chunk ${i} failed after 5 attempts: ${lastErr}`);
+          patchJob({ progress: Math.round((done / totalChunks) * 90) });
+          if (i < totalChunks - 1) await new Promise(r => setTimeout(r, 3000));
+        }
+      }
+        const d = await res.json();
+        if (d.error) throw new Error(d.error);
+        chunks[0] = d;
+        done = 1;
+      } else {
         // Multi-chunk: batch 5 chunks per request (90MB max — under CF body limit)
         const BATCH_SIZE = 2;
         for (let batchStart = 0; batchStart < totalChunks; batchStart += BATCH_SIZE) {
