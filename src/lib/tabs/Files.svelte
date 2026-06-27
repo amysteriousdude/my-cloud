@@ -642,21 +642,31 @@
       async function uploadOneChunk(i: number) {
         const start = i * CHUNK_SIZE;
         const blob  = file.slice(start, Math.min(start + CHUNK_SIZE, file.size));
-        const res = await fetch(`${BASE}/api/telegram/uploadChunk`, {
-          method: "POST",
-          headers: {
-            "X-Api-Key": apiKey,
-            "X-Chunk-Index": String(i),
-            "X-File-Name": encodeURIComponent(file.name),
-            "Content-Type": file.type || "application/octet-stream"
-          },
-          body: blob,
-        });
-        const d = await res.json();
-        if (d.error) throw new Error(d.error);
-        chunks[i] = d;
-        done++;
-        patchJob({ progress: Math.round((done / totalChunks) * 90) });
+        let lastErr: string = '';
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          try {
+            const res = await fetch(`${BASE}/api/telegram/uploadChunk`, {
+              method: "POST",
+              headers: {
+                "X-Api-Key": apiKey,
+                "X-Chunk-Index": String(i),
+                "X-File-Name": encodeURIComponent(file.name),
+                "Content-Type": file.type || "application/octet-stream"
+              },
+              body: blob,
+            });
+            const d = await res.json();
+            if (d.error) throw new Error(d.error);
+            chunks[i] = d;
+            done++;
+            patchJob({ progress: Math.round((done / totalChunks) * 90) });
+            return;
+          } catch (e: any) {
+            lastErr = e.message;
+            if (attempt < 3) await new Promise(r => setTimeout(r, 1000 * attempt));
+          }
+        }
+        throw new Error(`Chunk ${i} failed after 3 attempts: ${lastErr}`);
       }
 
       const CONCURRENCY = 3;
