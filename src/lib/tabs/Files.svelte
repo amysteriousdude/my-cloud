@@ -663,7 +663,7 @@
             return;
           } catch (e: any) {
             lastErr = e.message;
-            if (attempt < 3) await new Promise(r => setTimeout(r, 1000 * attempt));
+            if (attempt < 3) await new Promise(r => setTimeout(r, 3000 * attempt));
           }
         }
         throw new Error(`Chunk ${i} failed after 3 attempts: ${lastErr}`);
@@ -674,7 +674,7 @@
       await Promise.all(Array.from({ length: CONCURRENCY }, async () => {
         while (queue.length) {
           await uploadOneChunk(queue.shift()!);
-          if (queue.length) await new Promise(r => setTimeout(r, 500));
+          if (queue.length) await new Promise(r => setTimeout(r, 2000));
         }
       }));
 
