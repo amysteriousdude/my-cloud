@@ -1,6 +1,6 @@
 // src/routes/api/telegram/folderOps/+server.ts
 import type { RequestHandler } from './$types';
-import { getRecordByApiKey, readRegistry, writeRegistry, acquireMutex, releaseMutex } from '$lib/telegramStorage';
+import { getRecordByApiKey, readRegistry, writeRegistry } from '$lib/telegramStorage';
 import crypto from 'crypto';
 
 export type FolderRecord = {
@@ -57,7 +57,6 @@ export const POST: RequestHandler = async ({ request }) => {
   const rec = await getRecordByApiKey(apiKey(request));
   if (!rec) return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 });
 
-  await acquireMutex();
   try {
     const body = await request.json();
     const registry = (await readRegistry()) as Record<string, any>;
@@ -218,7 +217,8 @@ export const POST: RequestHandler = async ({ request }) => {
   }
 
   return Response.json({ error: 'Unknown action' }, { status: 400 });
-  } finally {
-    releaseMutex();
+  } catch (err: any) {
+    console.error('folderOps error:', err?.message || err);
+    return Response.json({ error: err?.message || 'Internal error' }, { status: 500 });
   }
 };
