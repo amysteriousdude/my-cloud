@@ -20,6 +20,9 @@
         IconFileText,
         IconFolder,
     } from "@tabler/icons-svelte";
+    import { toasts } from "$lib/types/toast";
+    import { env } from "$env/dynamic/public";
+    const BASE = env.PUBLIC_BASE_PATH ?? '';
 
     type FileRecord = {
         fileName: string;
@@ -81,6 +84,23 @@
         if (b < 1024 ** 2) return `${(b / 1024).toFixed(1)} KB`;
         if (b < 1024 ** 3) return `${(b / 1024 ** 2).toFixed(1)} MB`;
         return `${(b / 1024 ** 3).toFixed(2)} GB`;
+    }
+
+    async function downloadFile(f: FileRecord) {
+        try {
+            const resp = await fetch(`${BASE}/api/telegram/getRequestFile?api_key=${apiKey}&meta_file_id=${f.metaFileId}&download=true`);
+            const cache = resp.headers.get('X-Cache');
+            if (cache === 'HIT') toasts.success('Served from cache');
+            else if (cache === 'PARTIAL') toasts.info('Partial cache hit');
+            const blob = await resp.blob();
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = f.fileName;
+            a.click();
+            URL.revokeObjectURL(a.href);
+        } catch {
+            toasts.error('Download failed');
+        }
     }
     function formatDate(iso: string) {
         return new Date(iso).toLocaleDateString("en-US", {
@@ -247,13 +267,12 @@
                 {item.public ? "Make Private" : "Make Public"}
             </button>
             {#if !isFolder && file}
-                <a
+                <button
                     class="sb-btn"
-                    href={`/api/telegram/getRequestFile?api_key=${apiKey}&meta_file_id=${file.metaFileId}&download=true`}
-                    download={file.fileName}
+                    onclick={() => downloadFile(file)}
                 >
                     <IconDownload size={15} /> Download
-                </a>
+                </button>
             {/if}
             {#if item.public}
                 <a

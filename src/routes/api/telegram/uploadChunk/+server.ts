@@ -65,6 +65,21 @@ export const POST: RequestHandler = async ({ request, url }) => {
     const chunkName = `${originalName}.chunk${chunkIndex}`;
     const { message_id, file_id } = await uploadBytesToTelegram(fileData!, chunkName);
 
+    // Pre-cache chunk in Cloudflare Cache (zero extra subrequests — data is already in memory)
+    try {
+      const cache = await caches.open('tg-chunks-v1');
+      const cacheReq = new Request(`https://tg-cache/${file_id}`);
+      const cacheResp = new Response(fileData, {
+        status: 200,
+        headers: {
+          'Content-Type': contentType || 'application/octet-stream',
+          'Content-Length': String(fileData.length),
+          'Cache-Control': 'public, max-age=2592000',
+        },
+      });
+      await cache.put(cacheReq, cacheResp);
+    } catch { /* caching is best-effort */ }
+
     return new Response(JSON.stringify({ message_id, file_id, index: parseInt(chunkIndex), size: fileData!.length }), {
       status: 200, headers: { 'Content-Type': 'application/json' }
     });

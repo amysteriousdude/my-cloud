@@ -888,6 +888,25 @@
     }
   }
 
+  async function downloadFile(file: FileRecord) {
+    try {
+      const resp = await fetch(
+        `${BASE}/api/telegram/getRequestFile?api_key=${apiKey}&meta_file_id=${file.metaFileId}&download=true`
+      );
+      const cache = resp.headers.get('X-Cache');
+      if (cache === 'HIT') toasts.success('Served from cache');
+      else if (cache === 'PARTIAL') toasts.info('Partial cache hit');
+      const blob = await resp.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = file.fileName;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch {
+      toasts.error('Download failed');
+    }
+  }
+
   // Folder Actions
   async function toggleFolderFavorite(folder: FolderRecord) {
     optimisticUpdateFolder(folder.folderId, { favorite: !folder.favorite });
@@ -1821,12 +1840,10 @@
                         size={14}
                       />{/if}
                   </button>
-                  <a
+                  <button
                     class="act-btn"
-                    href={`/api/telegram/getRequestFile?api_key=${apiKey}&meta_file_id=${file.metaFileId}&download=true`}
-                    download={file.fileName}
-                    onclick={(e) => e.stopPropagation()}
-                    title="Download"><IconDownload size={14} /></a
+                    onclick={(e) => { e.stopPropagation(); downloadFile(file); }}
+                    title="Download"><IconDownload size={14} /></button
                   >
                   {#if folders.length > 0}
                     <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -2012,12 +2029,10 @@
                      title="Rename"
                      ><IconEdit size={13} /></button
                    >
-                  <a
+                  <button
                     class="act-btn sm"
-                    href={`/api/telegram/getRequestFile?api_key=${apiKey}&meta_file_id=${file.metaFileId}&download=true`}
-                    download={file.fileName}
-                    onclick={(e) => e.stopPropagation()}
-                    ><IconDownload size={13} /></a
+                    onclick={(e) => { e.stopPropagation(); downloadFile(file); }}
+                    ><IconDownload size={13} /></button
                   >
                   <button
                     class="act-btn sm danger"

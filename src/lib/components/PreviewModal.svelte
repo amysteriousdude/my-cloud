@@ -9,6 +9,9 @@
   } from "@tabler/icons-svelte";
   import FileEditor from "./viewer/FileEditor.svelte";
   import { onDestroy } from "svelte";
+  import { toasts } from "$lib/types/toast";
+  import { env } from "$env/dynamic/public";
+  const BASE = env.PUBLIC_BASE_PATH ?? '';
 
   type FileRecord = {
     fileName: string; type: string; totalBytes: number; time: string;
@@ -38,6 +41,23 @@
   function isTextFile(f: FileRecord) {
     const ext = f.fileName.split(".").pop()?.toLowerCase() ?? "";
     return TEXT_EXTS.has(ext) || f.type.startsWith("text/") || f.type === "application/json";
+  }
+
+  async function downloadFile(f: FileRecord) {
+    try {
+      const resp = await fetch(`${BASE}/api/telegram/getRequestFile?api_key=${apiKey}&meta_file_id=${f.metaFileId}&download=true`);
+      const cache = resp.headers.get('X-Cache');
+      if (cache === 'HIT') toasts.success('Served from cache');
+      else if (cache === 'PARTIAL') toasts.info('Partial cache hit');
+      const blob = await resp.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = f.fileName;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch {
+      toasts.error('Download failed');
+    }
   }
 
   function previewKind(f: FileRecord): "image"|"pdf"|"video"|"audio"|"font"|"text"|null {
@@ -413,9 +433,9 @@
   <!-- BOTTOM BAR -->
   <div class="botbar" onclick={e => e.stopPropagation()}>
     <div class="bg">
-      <a class="bb" href={"/api/telegram/getRequestFile?api_key=" + apiKey + "&meta_file_id=" + preview.metaFileId + "&download=true"} download={preview.fileName}>
+      <button class="bb" onclick={() => downloadFile(preview)}>
         <IconDownload size={13}/><span class="bl">Download</span>
-      </a>
+      </button>
       <button class="bb" class:bb-active={preview.public}
         onclick={() => ontogglePublic(preview)} disabled={togglingPublic === preview.metaFileId}>
         {#if preview.public}<IconWorld size={13}/><span class="bl">Public</span>
