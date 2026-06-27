@@ -639,44 +639,83 @@
       const chunks: any[] = new Array(totalChunks);
       let done = 0;
 
-      async function uploadOneChunk(i: number) {
-        const start = i * CHUNK_SIZE;
-        const blob  = file.slice(start, Math.min(start + CHUNK_SIZE, file.size));
-        let lastErr: string = '';
-        for (let attempt = 1; attempt <= 3; attempt++) {
-          try {
-            const res = await fetch(`${BASE}/api/telegram/uploadChunk`, {
-              method: "POST",
-              headers: {
-                "X-Api-Key": apiKey,
-                "X-Chunk-Index": String(i),
-                "X-File-Name": encodeURIComponent(file.name),
-                "Content-Type": file.type || "application/octet-stream"
-              },
-              body: blob,
-            });
-            const d = await res.json();
-            if (d.error) throw new Error(d.error);
-            chunks[i] = d;
-            done++;
-            patchJob({ progress: Math.round((done / totalChunks) * 90) });
-            return;
-          } catch (e: any) {
-            lastErr = e.message;
-            if (attempt < 3) await new Promise(r => setTimeout(r, 3000 * attempt));
-          }
+      if (totalChunks <= 1) {
+        // Single chunk: original endpoint
+        const blob = file.slice(0, file.size);
+        const res = await fetch(`${BASE}/api/telegram/uploadChunk`, {
+          method: "POST",
+          headers: {
+            "X-Api-Key": apiKey,
+            "X-Chunk-Index": "0",
+            "X-File-Name": encodeURIComponent(file.name),
+            "Content-Type": file.type || "application/octet-stream"
+          },
+          body: blob,
+        });
+        if (!res.ok) {
+          const txt = await res.text().catch(() => '');
+          throw new Error(`HTTP ${res.status}: ${txt.slice(0, 100)}`);
         }
-        throw new Error(`Chunk ${i} failed after 3 attempts: ${lastErr}`);
-      }
+        const d = await res.json();
+        if (d.error) throw new Error(d.error);
+        chunks[0] = d;
+        done = 1;
+      } else {
+        // Multi-chunk: batch 5 chunks per request (90MB max — under CF body limit)
+        const BATCH_SIZE = 5;
+        for (let batchStart = 0; batchStart < totalChunks; batchStart += BATCH_SIZE) {
+          const batchEnd = Math.min(batchStart + BATCH_SIZE, totalChunks);
+          const parts: ArrayBuffer[] = [];
 
-      const CONCURRENCY = 1;
-      const queue = Array.from({ length: totalChunks }, (_, i) => i);
-      await Promise.all(Array.from({ length: CONCURRENCY }, async () => {
-        while (queue.length) {
-          await uploadOneChunk(queue.shift()!);
-          if (queue.length) await new Promise(r => setTimeout(r, 2000));
+          for (let i = batchStart; i < batchEnd; i++) {
+            const start = i * CHUNK_SIZE;
+            const end = Math.min(start + CHUNK_SIZE, file.size);
+            const ab = await file.slice(start, end).arrayBuffer();
+            const header = new ArrayBuffer(8);
+            const h = new DataView(header);
+            h.setUint32(0, i, true);
+            h.setUint32(4, ab.byteLength, true);
+            parts.push(header, ab);
+          }
+
+          const totalStreamSize = parts.reduce((s, p) => s + p.byteLength, 0);
+          const combined = new Uint8Array(totalStreamSize);
+          let off = 0;
+          for (const p of parts) { combined.set(new Uint8Array(p), off); off += p.byteLength; }
+
+          patchJob({ progress: Math.round(((batchStart + BATCH_SIZE) / totalChunks) * 85) });
+
+          let lastErr = '';
+          let ok = false;
+          for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+              const res = await fetch(`${BASE}/api/telegram/uploadChunkStream`, {
+                method: "POST",
+                headers: {
+                  "X-Api-Key": apiKey,
+                  "X-File-Name": encodeURIComponent(file.name),
+                  "X-Batch-Size": String(batchEnd - batchStart),
+                },
+                body: combined,
+              });
+              if (!res.ok) {
+                const txt = await res.text().catch(() => '');
+                throw new Error(`HTTP ${res.status}: ${txt.slice(0, 200)}`);
+              }
+              const d = await res.json();
+              if (d.error) throw new Error(d.error);
+              for (const r of d.results) chunks[r.index] = r;
+              done += batchEnd - batchStart;
+              ok = true;
+              break;
+            } catch (e: any) {
+              lastErr = e.message;
+              if (attempt < 3) await new Promise(r => setTimeout(r, 3000 * attempt));
+            }
+          }
+          if (!ok) throw new Error(`Batch at chunk ${batchStart} failed: ${lastErr}`);
         }
-      }));
+      }
 
       patchJob({ progress: 95 });
       const finalRes = await fetch(`${BASE}/api/telegram/finalizeUpload`, {
