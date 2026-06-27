@@ -1608,9 +1608,9 @@
             <span class="rp-section-chevron" class:open={rightPanel === "selection"}>▾</span>
           </div>
           {#if rightPanel === "selection"}
+            {@const selStrokes = getSelectedStrokes()}
+            {@const bbox = getSelectionBBox()}
             <div class="rp-section-body">
-              {@const selStrokes = getSelectedStrokes()}
-              {@const bbox = getSelectionBBox()}
               {#if selStrokes.length > 0 && bbox}
                 <div class="rp-heading">Position</div>
                 <div class="sel-row">
