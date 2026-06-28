@@ -3,8 +3,8 @@
   import {
     IconDatabase, IconPlus, IconUpload, IconDownload, IconTrash,
     IconRefresh, IconSearch, IconTable, IconStar, IconStarFilled,
-    IconChevronRight, IconPlay, IconX, IconCheck, IconEdit,
-    IconFolder, IconSql,
+    IconChevronRight, IconPlayerPlay, IconX, IconCheck, IconEdit,
+    IconFolder, IconCode,
   } from '@tabler/icons-svelte';
   import { openDatabase, getSchema, query as sqlQuery, type Database as SqlDb } from '$lib/sql';
 
@@ -329,7 +329,7 @@
             <IconTable size={14} /> Schema
           </button>
           <button class="panel-tab" class:active={activePanel === 'query'} onclick={() => activePanel = 'query'}>
-            <IconSql size={14} /> Query
+            <IconCode size={14} /> Query
           </button>
         </div>
 
@@ -372,7 +372,7 @@
               placeholder="SELECT * FROM ..."></textarea>
             <div class="query-actions">
               <button class="db-btn accent" onclick={runQuery} disabled={running || !sqlInput.trim()}>
-                <IconPlay size={14} /> {running ? 'Running...' : 'Run'}
+                <IconPlayerPlay size={14} /> {running ? 'Running...' : 'Run'}
               </button>
               <span class="query-hint">Ctrl+Enter</span>
             </div>
