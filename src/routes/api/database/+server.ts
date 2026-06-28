@@ -41,7 +41,9 @@ export const POST: RequestHandler = async ({ request, url, cookies }) => {
     const body = await request.json();
 
     if (body.action === 'create') {
-      const db = await createDatabase(body.name || 'Untitled DB', new Uint8Array(0), body.description, body.folderId);
+      const bytes = body.data ? Uint8Array.from(atob(body.data), c => c.charCodeAt(0)) : new Uint8Array(0);
+      if (bytes.length === 0) return Response.json({ error: 'Database file is empty' }, { status: 400 });
+      const db = await createDatabase(body.name || 'Untitled DB', bytes, body.description, body.folderId);
       return Response.json({ database: db });
     }
 

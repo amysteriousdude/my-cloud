@@ -84,7 +84,7 @@
     const res = await fetch('/api/database', {
       method: 'POST',
       headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'import', name, data: base64, folderId: databasesFolderId })
+      body: JSON.stringify({ action: 'create', name, data: base64, folderId: databasesFolderId })
     });
     const result = await res.json();
     if (result.database) databases = [result.database, ...databases];
