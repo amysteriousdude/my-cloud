@@ -53,13 +53,17 @@
   async function createDatabase() {
     const name = newDbName.trim() || 'Untitled DB';
     newDbName = ''; creating = false;
+    const emptyDb = await openDatabase();
+    const data = emptyDb.export();
+    emptyDb.close();
+    const base64 = btoa(String.fromCharCode(...new Uint8Array(data)));
     const res = await fetch('/api/database', {
       method: 'POST',
       headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'create', name })
+      body: JSON.stringify({ action: 'import', name, data: base64 })
     });
-    const data = await res.json();
-    if (data.database) databases = [data.database, ...databases];
+    const result = await res.json();
+    if (result.database) databases = [result.database, ...databases];
   }
 
   async function importDatabase() {
