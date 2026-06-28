@@ -69,9 +69,17 @@ export const GET: RequestHandler = async ({ request, url, cookies }) => {
 
         if (folderId === null || isRootDb || isChildDb) {
           files.push({
-            ...item,
-            id: item.metaFileId || key,
+            metaFileId: item.metaFileId,
+            metaMessageId: item.metaMessageId,
+            fileName: item.name + '.sqlite',
+            type: 'application/x-sqlite3',
+            totalBytes: item.totalBytes,
+            time: item.time,
+            telegramFileId: item.telegramFileId,
+            telegramMessageId: item.telegramMessageId,
+            folderId: item.folderId || undefined,
             _database: true,
+            id: item.metaFileId,
           });
         }
         continue;
