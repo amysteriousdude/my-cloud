@@ -38,6 +38,9 @@
   let activePanel = $state<'schema' | 'query'>('schema');
   let databasesFolderId = $state<string | null>(null);
 
+  let hasUnsavedChanges = $state(false);
+  let saveToast = $state(false);
+
   let creatingTable = $state(false);
   let newTableName = $state('');
   let newColumns = $state<{ name: string; type: string; pk: boolean }[]>([
@@ -48,6 +51,9 @@
   let newRowValues = $state<string[]>([]);
   let editingCell = $state<{ row: number; col: number } | null>(null);
   let editValue = $state('');
+  let addingColumn = $state(false);
+  let newColName = $state('');
+  let newColType = $state('TEXT');
 
   onMount(async () => {
     await ensureDatabasesFolder();
@@ -228,6 +234,7 @@
   function execSql(sql: string) {
     if (!sqlDb) return;
     sqlQuery(sqlDb, sql);
+    hasUnsavedChanges = true;
     refreshSchema();
     if (activeTable) {
       try {
@@ -245,10 +252,14 @@
       headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'update', dbId: openedDb.dbId, data: base64 })
     });
+    hasUnsavedChanges = false;
+    saveToast = true;
+    setTimeout(() => saveToast = false, 2000);
   }
 
   function handleQueryKeydown(e: KeyboardEvent) {
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); runQuery(); }
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveDb(); }
   }
 
   function startCreateTable() {
@@ -283,12 +294,16 @@
   }
 
   function addColumnToTable() {
-    if (!sqlDb || !activeTable) return;
-    const name = prompt('Column name:');
-    if (!name?.trim()) return;
-    const type = prompt('Column type (TEXT, INTEGER, REAL, BLOB):', 'TEXT');
+    addingColumn = true;
+    newColName = '';
+    newColType = 'TEXT';
+  }
+
+  function confirmAddColumn() {
+    if (!sqlDb || !activeTable || !newColName.trim()) return;
     try {
-      execSql(`ALTER TABLE "${activeTable}" ADD COLUMN "${name.trim()}" ${type || 'TEXT'}`);
+      execSql(`ALTER TABLE "${activeTable}" ADD COLUMN "${newColName.trim()}" ${newColType}`);
+      addingColumn = false;
     } catch (e: any) {
       queryError = e.message;
     }
@@ -347,15 +362,22 @@
     }
   }
 
+  let deletingTable = $state<string | null>(null);
+
   function deleteTable(tableName: string) {
     if (!sqlDb) return;
-    if (!confirm(`Delete table "${tableName}"?`)) return;
+    deletingTable = tableName;
+  }
+
+  function confirmDeleteTable() {
+    if (!sqlDb || !deletingTable) return;
     try {
-      execSql(`DROP TABLE "${tableName}"`);
-      if (activeTable === tableName) {
+      execSql(`DROP TABLE "${deletingTable}"`);
+      if (activeTable === deletingTable) {
         activeTable = null;
         tableData = null;
       }
+      deletingTable = null;
     } catch (e: any) {
       queryError = e.message;
     }
@@ -469,6 +491,7 @@
         <button class="back-btn" onclick={closeDb}>&larr;</button>
         <IconDatabase size={16} />
         <span>{openedDb.name}</span>
+        {#if hasUnsavedChanges}<span class="unsaved-dot" title="Unsaved changes"></span>{/if}
       </div>
       <div class="editor-actions">
         <button class="db-btn" onclick={saveDb}>
@@ -477,6 +500,7 @@
         <button class="db-btn" onclick={() => downloadDb(openedDb!)}>
           <IconDownload size={14} /> Download
         </button>
+        <span class="save-hint">Ctrl+S</span>
       </div>
     </div>
 
@@ -510,12 +534,35 @@
                     </div>
                   {/each}
                   <div class="schema-col-actions">
-                    <button class="db-btn-sm" onclick={addColumnToTable}>
-                      <IconColumnInsertRight size={12} /> Add Column
-                    </button>
-                    <button class="db-btn-sm danger" onclick={() => deleteTable(table.name)}>
-                      <IconTrash size={12} /> Drop
-                    </button>
+                    {#if addingColumn}
+                      <div class="inline-form">
+                        <input type="text" placeholder="name" bind:value={newColName} autofocus
+                          onkeydown={(e) => { if (e.key === 'Enter') confirmAddColumn(); if (e.key === 'Escape') addingColumn = false; }} />
+                        <select bind:value={newColType}>
+                          <option value="INTEGER">INT</option>
+                          <option value="TEXT">TEXT</option>
+                          <option value="REAL">REAL</option>
+                          <option value="BLOB">BLOB</option>
+                        </select>
+                        <button class="db-btn-sm" onclick={confirmAddColumn}><IconCheck size={12} /></button>
+                        <button class="db-btn-sm" onclick={() => addingColumn = false}><IconX size={12} /></button>
+                      </div>
+                    {:else}
+                      <button class="db-btn-sm" onclick={addColumnToTable}>
+                        <IconColumnInsertRight size={12} /> Add Column
+                      </button>
+                    {/if}
+                    {#if deletingTable === table.name}
+                      <div class="inline-form">
+                        <span class="delete-confirm-text">Drop "{table.name}"?</span>
+                        <button class="db-btn-sm danger" onclick={confirmDeleteTable}><IconCheck size={12} /> Yes</button>
+                        <button class="db-btn-sm" onclick={() => deletingTable = null}><IconX size={12} /></button>
+                      </div>
+                    {:else}
+                      <button class="db-btn-sm danger" onclick={() => deleteTable(table.name)}>
+                        <IconTrash size={12} />
+                      </button>
+                    {/if}
                   </div>
                 </div>
               {/if}
@@ -678,6 +725,10 @@
   {/if}
 </div>
 
+{#if saveToast}
+  <div class="save-toast"><IconCheck size={14} /> Saved</div>
+{/if}
+
 <style>
   .db-root { display: flex; flex-direction: column; height: 100%; padding: 16px; gap: 12px; overflow: hidden; }
 
@@ -733,9 +784,12 @@
 
   .editor-header { display: flex; justify-content: space-between; align-items: center; }
   .editor-title { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; color: var(--text-1); }
+  .unsaved-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: pulse 1.5s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
   .back-btn { background: none; border: none; color: var(--text-3); cursor: pointer; font-size: 18px; padding: 4px 8px; border-radius: 6px; }
   .back-btn:hover { color: var(--text-1); background: var(--bg-2); }
-  .editor-actions { display: flex; gap: 6px; }
+  .editor-actions { display: flex; gap: 6px; align-items: center; }
+  .save-hint { font-size: 10px; color: var(--text-3); font-family: var(--font-mono); }
 
   .editor-body { display: flex; flex: 1; gap: 12px; overflow: hidden; }
 
@@ -763,7 +817,14 @@
   .col-pk, .col-nn { font-size: 9px; padding: 1px 4px; border-radius: 3px; font-weight: 600; }
   .col-pk { background: var(--accent); color: #fff; }
   .col-nn { background: var(--bg-3); color: var(--text-3); }
-  .schema-col-actions { display: flex; gap: 4px; padding-top: 6px; }
+  .schema-col-actions { display: flex; gap: 4px; padding-top: 6px; flex-wrap: wrap; }
+  .inline-form { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+  .inline-form input { padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border);
+    background: var(--bg-1); color: var(--text-1); font-size: 11px; outline: none; width: 80px; }
+  .inline-form input:focus { border-color: var(--accent); }
+  .inline-form select { padding: 3px 6px; border-radius: 4px; border: 1px solid var(--border);
+    background: var(--bg-1); color: var(--text-1); font-size: 11px; }
+  .delete-confirm-text { font-size: 11px; color: var(--red); }
   .schema-empty { padding: 20px; text-align: center; color: var(--text-3); font-size: 12px; }
 
   .create-table-btn { display: flex; align-items: center; gap: 6px; width: 100%; padding: 8px 10px; border: 1px dashed var(--border);
@@ -820,4 +881,15 @@
   .add-row-actions { display: flex; gap: 4px; margin-left: auto; }
 
   .pagination { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 8px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-3); }
+
+  .save-toast {
+    position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 6px;
+    padding: 8px 16px; border-radius: 999px;
+    background: var(--green); color: #fff;
+    font-size: 12px; font-weight: 600; z-index: 999;
+    box-shadow: 0 4px 12px rgba(0,0,0,.3);
+    animation: toastIn .2s ease-out;
+  }
+  @keyframes toastIn { from { opacity: 0; transform: translateX(-50%) translateY(8px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
 </style>

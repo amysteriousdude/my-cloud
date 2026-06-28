@@ -58,6 +58,8 @@
   let repositioning = $state(false);
   let dragIdx = $state<number>(-1);
   let dragOverIdx = $state<number>(-1);
+  let moreDragIdx = $state<number>(-1);
+  let moreDragOverIdx = $state<number>(-1);
 
   let mainTabIds = $state<Tab[]>(['files', 'generators', 'translator', 'draw']);
   let mainTabs = $derived(ALL_TABS.filter(t => mainTabIds.includes(t.id)));
@@ -164,6 +166,28 @@
       mainTabIds = mainTabIds.filter(id => id !== tabId);
       saveMainTabs();
     }
+  }
+
+  function onMoreDragStart(e: DragEvent, idx: number) {
+    moreDragIdx = idx;
+    if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+  }
+
+  function onMoreDragOver(e: DragEvent, idx: number) {
+    e.preventDefault();
+    moreDragOverIdx = idx;
+  }
+
+  function onMoreDragEnd() {
+    if (moreDragIdx >= 0 && moreDragOverIdx >= 0 && moreDragIdx !== moreDragOverIdx) {
+      const newIds = [...mainTabIds];
+      const [moved] = newIds.splice(moreDragIdx, 1);
+      newIds.splice(moreDragOverIdx, 0, moved);
+      mainTabIds = newIds;
+      saveMainTabs();
+    }
+    moreDragIdx = -1;
+    moreDragOverIdx = -1;
   }
 
   // ── Reposition dock ────────────────────────────────────────────
@@ -289,22 +313,33 @@
         <button class="dock-more-close" onclick={() => showMore = false}><IconX size={16}/></button>
       </div>
       <div class="dock-more-grid">
-        {#each ALL_TABS as tab}
-          {@const isMain = mainTabIds.includes(tab.id)}
-          {@const active = activeTab === tab.id}
-          <div class="dock-more-card" class:active class:is-main={isMain}
+        {#each mainTabIds as tabId, i (tabId)}
+          {@const tab = ALL_TABS.find(t => t.id === tabId)}
+          {@const active = activeTab === tabId}
+          {#if tab}
+            <div class="dock-more-card" class:active class:is-main={true}
+              class:drag-over={moreDragOverIdx === i}
+              draggable="true"
+              ondragstart={(e) => onMoreDragStart(e, i)}
+              ondragover={(e) => onMoreDragOver(e, i)}
+              ondragend={onMoreDragEnd}
+              onclick={() => { ontabchange(tab.id); showMore = false; }} role="button" tabindex="0">
+              <div class="dock-more-icon"><tab.icon size={22} stroke={1.5}/></div>
+              <span class="dock-more-label">{tab.label}</span>
+              <button class="dock-more-remove" onclick={(e) => { e.stopPropagation(); removeTabFromMain(tab.id); }} title="Remove from dock">✕</button>
+            </div>
+          {/if}
+        {/each}
+        {#each ALL_TABS.filter(t => !mainTabIds.includes(t.id)) as tab (tab.id)}
+          <div class="dock-more-card"
             onclick={() => { ontabchange(tab.id); showMore = false; }} role="button" tabindex="0">
             <div class="dock-more-icon"><tab.icon size={22} stroke={1.5}/></div>
             <span class="dock-more-label">{tab.label}</span>
-            {#if isMain}
-              <button class="dock-more-remove" onclick={(e) => { e.stopPropagation(); removeTabFromMain(tab.id); }} title="Remove from dock">✕</button>
-            {:else}
-              <button class="dock-more-add" onclick={(e) => { e.stopPropagation(); addTabToMain(tab.id); }} title="Add to dock">+</button>
-            {/if}
+            <button class="dock-more-add" onclick={(e) => { e.stopPropagation(); addTabToMain(tab.id); }} title="Add to dock">+</button>
           </div>
         {/each}
       </div>
-      <div class="dock-more-hint">Drag icons in the dock to reorder · Click + to add to dock</div>
+      <div class="dock-more-hint">Drag tabs to reorder · Click + to add to dock</div>
     </div>
   </div>
 {/if}
@@ -529,6 +564,7 @@
   .dock-more-card:hover { border-color: var(--border-hover); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,.2); }
   .dock-more-card.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--bg-3)); }
   .dock-more-card.is-main { border-color: color-mix(in srgb, var(--green) 60%, var(--border)); }
+  .dock-more-card.drag-over { border-color: var(--accent) !important; background: color-mix(in srgb, var(--accent) 8%, var(--bg-3)); transform: scale(1.03); }
   .dock-more-icon { color: var(--text-2); }
   .dock-more-card.active .dock-more-icon { color: var(--accent); }
   .dock-more-label { font-size: 12px; font-weight: 500; color: var(--text-2); }
@@ -707,7 +743,7 @@
     position: fixed;
     bottom: 0; left: 50%;
     transform: translateX(-50%);
-    width: 300px; height: 24px;
+    width: 400px; height: 60px;
     z-index: 250;
   }
 
@@ -718,7 +754,7 @@
   .dock.auto-hide.hide-dock {
     pointer-events: none;
   }
-  .dock-auto-hide.hide-dock.pos-bottom {
+  .dock.auto-hide.hide-dock.pos-bottom {
     transform: translateX(-50%) translateY(calc(100% + 32px));
     opacity: 0;
   }
