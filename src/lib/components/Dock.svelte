@@ -4,11 +4,12 @@
     IconLock, IconTerminal, IconBook, IconLanguage, IconApi,
     IconSun, IconMoon, IconDeviceDesktop, IconLogout, IconCloud,
     IconDots, IconX, IconSettings,
+    IconDatabase,
   } from '@tabler/icons-svelte';
   import { env } from '$env/dynamic/public';
   const NAME = env.PUBLIC_NAME ?? "Omar";
 
-  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester';
+  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database';
 
   let {
     user,
@@ -47,6 +48,7 @@
     { id: 'dictionary', icon: IconBook,        label: 'Dictionary' },
     { id: 'translator', icon: IconLanguage,    label: 'Translator' },
     { id: 'apitester',  icon: IconApi,         label: 'API Tester' },
+    { id: 'database',  icon: IconDatabase,    label: 'Databases' },
   ];
 
   // ── State ──────────────────────────────────────────────────────

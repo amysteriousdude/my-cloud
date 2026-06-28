@@ -16,6 +16,7 @@
   import Dictionary from '$lib/tabs/Dictionary.svelte';
   import Translator from '$lib/tabs/Translator.svelte';
   import ApiTester  from '$lib/tabs/ApiTester.svelte';
+  import Database   from '$lib/tabs/Database.svelte';
   import Toast      from '$lib/components/Toast.svelte';
   import { env } from '$env/dynamic/public';
   const NAME = env.PUBLIC_NAME ?? "Omar";
@@ -26,7 +27,7 @@
   let encryptedApiKey = $derived(data.encryptedApiKey);
 
   // Tab state
-  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester';
+  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database';
   let activeTab = $state<Tab>('files');
   let editorFile = $state<{ metaFileId: string; fileName: string } | null>(null);
   let filesRefreshNonce = $state(0);
@@ -217,6 +218,8 @@
         <Translator />
       {:else if activeTab === 'apitester'}
         <ApiTester />
+      {:else if activeTab === 'database'}
+        <Database {apiKey} />
       {/if}
     </main>
   </div>
