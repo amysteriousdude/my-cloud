@@ -46,6 +46,7 @@ export type DatabaseRecord = {
   _type: 'database';
   tags?: string[];
   favorite?: boolean;
+  folderId?: string;
 };
 
 const BOT_TOKEN = (typeof process !== 'undefined' && process.env?.TELEGRAM_BOT_TOKEN) || '';
@@ -483,7 +484,7 @@ export async function listDatabases(): Promise<DatabaseRecord[]> {
   return Object.values(registry).filter((r: any) => r?._type === 'database') as DatabaseRecord[];
 }
 
-export async function createDatabase(name: string, dbData: Uint8Array, description?: string): Promise<DatabaseRecord> {
+export async function createDatabase(name: string, dbData: Uint8Array, description?: string, folderId?: string): Promise<DatabaseRecord> {
   const tmp = `/tmp/_db_${Date.now()}.sqlite`;
   await fs.promises.writeFile(tmp, Buffer.from(dbData));
   const { message_id: telegramMessageId, file_id: telegramFileId } = await uploadFileStream(tmp, `${name}.sqlite`);
@@ -499,6 +500,7 @@ export async function createDatabase(name: string, dbData: Uint8Array, descripti
     metaFileId, metaMessageId,
     telegramFileId, telegramMessageId,
     _type: 'database',
+    ...(folderId ? { folderId } : {}),
   };
 
   await acquireMutex();

@@ -53,12 +53,25 @@ export const GET: RequestHandler = async ({ request, url, cookies }) => {
         const isRootLevel = folderId === null && itemParent === null;
         const isChildMatch = folderId !== null && itemParent === folderId;
 
-        // When no folderId is supplied, return the whole tree so the client can
-        // diff and render the current folder correctly without stale partial data.
         if (folderId === null || isRootLevel || isChildMatch) {
           folders.push({
             ...item,
             id: item.folderId
+          });
+        }
+        continue;
+      }
+
+      if (item._type === 'database') {
+        const dbFolder = normalizeFolderId(item.folderId);
+        const isRootDb = folderId === null && dbFolder === null;
+        const isChildDb = folderId !== null && dbFolder === folderId;
+
+        if (folderId === null || isRootDb || isChildDb) {
+          files.push({
+            ...item,
+            id: item.metaFileId || key,
+            _database: true,
           });
         }
         continue;

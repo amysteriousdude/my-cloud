@@ -12,7 +12,7 @@
 
   type DbRecord = {
     dbId: string; name: string; description?: string; totalBytes: number;
-    time: string; _type: 'database'; favorite?: boolean;
+    time: string; _type: 'database'; favorite?: boolean; metaFileId: string; folderId?: string;
   };
   type TableInfo = { name: string; columns: { name: string; type: string; notnull: boolean; pk: boolean }[]; indexes: { name: string; columns: string[] }[] };
 
@@ -36,8 +36,32 @@
   let renamingDb = $state<string | null>(null);
   let renameValue = $state('');
   let activePanel = $state<'schema' | 'query'>('schema');
+  let databasesFolderId = $state<string | null>(null);
 
-  onMount(() => { loadDatabases(); });
+  onMount(async () => {
+    await ensureDatabasesFolder();
+    await loadDatabases();
+  });
+
+  async function ensureDatabasesFolder() {
+    const res = await fetch('/api/telegram/folderOps', {
+      method: 'GET',
+      headers: { 'X-Api-Key': apiKey }
+    });
+    const data = await res.json();
+    const existing = (data.folders || []).find((f: any) => f.name === 'Databases');
+    if (existing) {
+      databasesFolderId = existing.folderId || existing.id || null;
+    } else {
+      const createRes = await fetch('/api/telegram/folderOps', {
+        method: 'POST',
+        headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'create', name: 'Databases' })
+      });
+      const createData = await createRes.json();
+      databasesFolderId = createData.folder?.folderId || null;
+    }
+  }
 
   async function loadDatabases() {
     loading = true;
@@ -60,7 +84,7 @@
     const res = await fetch('/api/database', {
       method: 'POST',
       headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'import', name, data: base64 })
+      body: JSON.stringify({ action: 'import', name, data: base64, folderId: databasesFolderId })
     });
     const result = await res.json();
     if (result.database) databases = [result.database, ...databases];
@@ -78,7 +102,7 @@
       const res = await fetch('/api/database', {
         method: 'POST',
         headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'import', name: file.name.replace(/\.(sqlite|db|sqlite3)$/, ''), data: base64 })
+        body: JSON.stringify({ action: 'import', name: file.name.replace(/\.(sqlite|db|sqlite3)$/, ''), data: base64, folderId: databasesFolderId })
       });
       const data = await res.json();
       if (data.database) databases = [data.database, ...databases];
@@ -119,11 +143,7 @@
   }
 
   async function downloadDb(db: DbRecord) {
-    const res = await fetch('/api/database', {
-      method: 'POST',
-      headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'download', dbId: db.dbId })
-    });
+    const res = await fetch(`/api/telegram/getRequestFile?api_key=${encodeURIComponent(apiKey)}&meta_file_id=${encodeURIComponent(db.metaFileId)}&download=true`);
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -140,14 +160,10 @@
     sqlInput = '';
     activePanel = 'schema';
 
-    const res = await fetch('/api/database', {
-      method: 'POST',
-      headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'download', dbId: db.dbId })
-    });
+    const res = await fetch(`/api/telegram/getRequestFile?api_key=${encodeURIComponent(apiKey)}&meta_file_id=${encodeURIComponent(db.metaFileId)}`);
     const buf = await res.arrayBuffer();
     sqlDb = await openDatabase(new Uint8Array(buf));
-    schema = getSchema(sqlDb);
+    schema = getSchema(sqlDb).tables;
   }
 
   function closeDb() {
@@ -179,8 +195,8 @@
     try {
       const result = sqlQuery(sqlDb, sqlInput.trim());
       queryResult = result;
-      schema = getSchema(sqlDb);
-      if (activeTable) {
+    schema = getSchema(sqlDb).tables;
+    if (activeTable) {
         const refreshed = sqlQuery(sqlDb, `SELECT * FROM "${activeTable}"`);
         tableData = refreshed;
       }
@@ -196,7 +212,7 @@
     await fetch('/api/database', {
       method: 'POST',
       headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'import', name: openedDb.name, data: base64 })
+      body: JSON.stringify({ action: 'update', dbId: openedDb.dbId, data: base64 })
     });
   }
 
