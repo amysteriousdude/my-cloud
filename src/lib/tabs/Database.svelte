@@ -2,9 +2,9 @@
   import { onMount } from 'svelte';
   import {
     IconDatabase, IconPlus, IconUpload, IconDownload, IconTrash,
-    IconRefresh, IconSearch, IconTable, IconStar, IconStarFilled,
-    IconChevronRight, IconPlayerPlay, IconX, IconCheck, IconEdit,
-    IconFolder, IconCode,
+    IconRefresh, IconTable, IconStar, IconStarFilled,
+    IconPlayerPlay, IconX, IconCheck, IconEdit, IconCode,
+    IconMinus, IconRowInsertBottom, IconColumnInsertRight,
   } from '@tabler/icons-svelte';
   import { openDatabase, getSchema, query as sqlQuery, type Database as SqlDb } from '$lib/sql';
 
@@ -37,6 +37,17 @@
   let renameValue = $state('');
   let activePanel = $state<'schema' | 'query'>('schema');
   let databasesFolderId = $state<string | null>(null);
+
+  let creatingTable = $state(false);
+  let newTableName = $state('');
+  let newColumns = $state<{ name: string; type: string; pk: boolean }[]>([
+    { name: 'id', type: 'INTEGER', pk: true }
+  ]);
+
+  let addingRow = $state(false);
+  let newRowValues = $state<string[]>([]);
+  let editingCell = $state<{ row: number; col: number } | null>(null);
+  let editValue = $state('');
 
   onMount(async () => {
     await ensureDatabasesFolder();
@@ -159,6 +170,8 @@
     queryError = '';
     sqlInput = '';
     activePanel = 'schema';
+    creatingTable = false;
+    addingRow = false;
 
     const res = await fetch(`/api/telegram/getRequestFile?api_key=${encodeURIComponent(apiKey)}&meta_file_id=${encodeURIComponent(db.metaFileId)}`);
     const buf = await res.arrayBuffer();
@@ -176,11 +189,18 @@
     queryResult = null;
   }
 
+  function refreshSchema() {
+    if (!sqlDb) return;
+    schema = getSchema(sqlDb).tables;
+  }
+
   async function selectTable(tableName: string) {
     if (!sqlDb) return;
     activeTable = tableName;
     activePanel = 'schema';
     tablePage = 0;
+    addingRow = false;
+    editingCell = null;
     try {
       const result = sqlQuery(sqlDb, `SELECT * FROM "${tableName}"`);
       tableData = result;
@@ -195,14 +215,25 @@
     try {
       const result = sqlQuery(sqlDb, sqlInput.trim());
       queryResult = result;
-    schema = getSchema(sqlDb).tables;
-    if (activeTable) {
+      refreshSchema();
+      if (activeTable) {
         const refreshed = sqlQuery(sqlDb, `SELECT * FROM "${activeTable}"`);
         tableData = refreshed;
       }
     } catch (e: any) {
       queryError = e.message || 'Query failed';
     } finally { running = false; }
+  }
+
+  function execSql(sql: string) {
+    if (!sqlDb) return;
+    sqlQuery(sqlDb, sql);
+    refreshSchema();
+    if (activeTable) {
+      try {
+        tableData = sqlQuery(sqlDb, `SELECT * FROM "${activeTable}"`);
+      } catch {}
+    }
   }
 
   async function saveDb() {
@@ -218,6 +249,116 @@
 
   function handleQueryKeydown(e: KeyboardEvent) {
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); runQuery(); }
+  }
+
+  function startCreateTable() {
+    creatingTable = true;
+    newTableName = '';
+    newColumns = [{ name: 'id', type: 'INTEGER', pk: true }];
+  }
+
+  function addColumnSlot() {
+    newColumns = [...newColumns, { name: '', type: 'TEXT', pk: false }];
+  }
+
+  function removeColumnSlot(idx: number) {
+    newColumns = newColumns.filter((_, i) => i !== idx);
+  }
+
+  function confirmCreateTable() {
+    const name = newTableName.trim();
+    if (!name || !sqlDb) return;
+    const colDefs = newColumns
+      .filter(c => c.name.trim())
+      .map(c => `"${c.name.trim()}" ${c.type}${c.pk ? ' PRIMARY KEY' : ''}`)
+      .join(', ');
+    if (!colDefs) return;
+    try {
+      execSql(`CREATE TABLE "${name}" (${colDefs})`);
+      creatingTable = false;
+      selectTable(name);
+    } catch (e: any) {
+      queryError = e.message;
+    }
+  }
+
+  function addColumnToTable() {
+    if (!sqlDb || !activeTable) return;
+    const name = prompt('Column name:');
+    if (!name?.trim()) return;
+    const type = prompt('Column type (TEXT, INTEGER, REAL, BLOB):', 'TEXT');
+    try {
+      execSql(`ALTER TABLE "${activeTable}" ADD COLUMN "${name.trim()}" ${type || 'TEXT'}`);
+    } catch (e: any) {
+      queryError = e.message;
+    }
+  }
+
+  function startAddRow() {
+    if (!tableData) return;
+    addingRow = true;
+    newRowValues = tableData.columns.map(() => '');
+  }
+
+  function confirmAddRow() {
+    if (!sqlDb || !activeTable || !tableData) return;
+    const cols = tableData.columns.map(c => `"${c}"`).join(', ');
+    const vals = newRowValues.map(v => v === '' ? 'NULL' : `'${v.replace(/'/g, "''")}'`).join(', ');
+    try {
+      execSql(`INSERT INTO "${activeTable}" (${cols}) VALUES (${vals})`);
+      addingRow = false;
+    } catch (e: any) {
+      queryError = e.message;
+    }
+  }
+
+  function startEditCell(row: number, col: number) {
+    editingCell = { row, col };
+    editValue = tableData?.values[row]?.[col] ?? '';
+  }
+
+  function confirmEditCell() {
+    if (!sqlDb || !activeTable || !tableData || !editingCell) return;
+    const col = tableData.columns[editingCell.col];
+    const row = tableData.values[editingCell.row];
+    const pkCol = schema.find(t => t.name === activeTable)?.columns.find(c => c.pk);
+    if (!pkCol) { editingCell = null; return; }
+    const pkIdx = tableData.columns.indexOf(pkCol.name);
+    const pkVal = row[pkIdx];
+    const newVal = editValue === '' ? 'NULL' : `'${editValue.replace(/'/g, "''")}'`;
+    try {
+      execSql(`UPDATE "${activeTable}" SET "${col}" = ${newVal} WHERE "${pkCol.name}" = ${pkVal}`);
+    } catch (e: any) {
+      queryError = e.message;
+    }
+    editingCell = null;
+  }
+
+  function deleteRow(rowIdx: number) {
+    if (!sqlDb || !activeTable || !tableData) return;
+    const pkCol = schema.find(t => t.name === activeTable)?.columns.find(c => c.pk);
+    if (!pkCol) return;
+    const pkIdx = tableData.columns.indexOf(pkCol.name);
+    const pkVal = tableData.values[rowIdx][pkIdx];
+    try {
+      execSql(`DELETE FROM "${activeTable}" WHERE "${pkCol.name}" = ${pkVal}`);
+    } catch (e: any) {
+      queryError = e.message;
+    }
+  }
+
+  function deleteTable(tableName: string) {
+    if (!sqlDb) return;
+    if (!confirm(`Delete table "${tableName}"?`)) return;
+    try {
+      execSql(`DROP TABLE "${tableName}"`);
+      if (activeTable === tableName) {
+        activeTable = null;
+        tableData = null;
+      }
+    } catch (e: any) {
+      queryError = e.message;
+    }
   }
 
   function formatBytes(b: number) {
@@ -243,7 +384,6 @@
 
 <div class="db-root">
   {#if !openedDb}
-    <!-- ═══ BOX GRID VIEW ═══ -->
     <div class="db-header">
       <div class="db-title">
         <IconDatabase size={18} stroke={1.5} />
@@ -257,9 +397,9 @@
         <button class="db-btn" onclick={importDatabase}>
           <IconUpload size={14} /> Import
         </button>
-          <button class="db-btn-icon" onclick={loadDatabases} title="Refresh">
-            <span class:spinning={loading}><IconRefresh size={14} /></span>
-          </button>
+        <button class="db-btn-icon" onclick={loadDatabases} title="Refresh">
+          <span class:spinning={loading}><IconRefresh size={14} /></span>
+        </button>
       </div>
     </div>
 
@@ -324,10 +464,9 @@
     {/if}
 
   {:else}
-    <!-- ═══ DB EDITOR VIEW ═══ -->
     <div class="editor-header">
       <div class="editor-title">
-        <button class="back-btn" onclick={closeDb}>← Back</button>
+        <button class="back-btn" onclick={closeDb}>&larr;</button>
         <IconDatabase size={16} />
         <span>{openedDb.name}</span>
       </div>
@@ -342,7 +481,6 @@
     </div>
 
     <div class="editor-body">
-      <!-- LEFT PANEL: Schema + Tables -->
       <div class="panel schema-panel">
         <div class="panel-tabs">
           <button class="panel-tab" class:active={activePanel === 'schema'} onclick={() => activePanel = 'schema'}>
@@ -371,21 +509,51 @@
                       {#if col.notnull}<span class="col-nn">NN</span>{/if}
                     </div>
                   {/each}
-                  {#if table.indexes.length}
-                    <div class="schema-section">Indexes</div>
-                    {#each table.indexes as idx}
-                      <div class="schema-idx">{idx.name} ({idx.columns.join(', ')})</div>
-                    {/each}
-                  {/if}
+                  <div class="schema-col-actions">
+                    <button class="db-btn-sm" onclick={addColumnToTable}>
+                      <IconColumnInsertRight size={12} /> Add Column
+                    </button>
+                    <button class="db-btn-sm danger" onclick={() => deleteTable(table.name)}>
+                      <IconTrash size={12} /> Drop
+                    </button>
+                  </div>
                 </div>
               {/if}
             {/each}
-            {#if !schema.length}
+
+            {#if creatingTable}
+              <div class="create-table-form">
+                <input type="text" placeholder="Table name" bind:value={newTableName} autofocus />
+                {#each newColumns as col, i}
+                  <div class="create-col-row">
+                    <input type="text" placeholder="column" bind:value={col.name} class="col-name-input" />
+                    <select bind:value={col.type}>
+                      <option value="INTEGER">INTEGER</option>
+                      <option value="TEXT">TEXT</option>
+                      <option value="REAL">REAL</option>
+                      <option value="BLOB">BLOB</option>
+                    </select>
+                    <button class="db-btn-sm" class:active={col.pk} onclick={() => col.pk = !col.pk}>PK</button>
+                    <button class="db-btn-sm danger" onclick={() => removeColumnSlot(i)}><IconMinus size={12} /></button>
+                  </div>
+                {/each}
+                <div class="create-table-actions">
+                  <button class="db-btn-sm" onclick={addColumnSlot}><IconPlus size={12} /> Column</button>
+                  <button class="db-btn accent" onclick={confirmCreateTable}><IconCheck size={12} /> Create</button>
+                  <button class="db-btn ghost" onclick={() => creatingTable = false}>Cancel</button>
+                </div>
+              </div>
+            {:else}
+              <button class="create-table-btn" onclick={startCreateTable}>
+                <IconPlus size={14} /> Create Table
+              </button>
+            {/if}
+
+            {#if !schema.length && !creatingTable}
               <div class="schema-empty">No tables yet</div>
             {/if}
           </div>
         {:else}
-          <!-- QUERY PANEL -->
           <div class="query-panel">
             <textarea class="sql-input" bind:value={sqlInput}
               onkeydown={handleQueryKeydown}
@@ -428,13 +596,34 @@
         {/if}
       </div>
 
-      <!-- RIGHT: DATA TABLE -->
       <div class="panel data-panel">
         {#if activeTable && tableData}
           <div class="data-header">
             <span class="data-table-name">{activeTable}</span>
-            <span class="data-row-count">{tableData.values.length} rows</span>
+            <div class="data-header-actions">
+              <span class="data-row-count">{tableData.values.length} rows</span>
+              <button class="db-btn-sm" onclick={startAddRow} title="Add row">
+                <IconRowInsertBottom size={12} /> Add Row
+              </button>
+            </div>
           </div>
+
+          {#if addingRow}
+            <div class="add-row-form">
+              {#each newRowValues as val, i}
+                <input type="text" placeholder={tableData.columns[i]} bind:value={newRowValues[i]} class="row-input" />
+              {/each}
+              <div class="add-row-actions">
+                <button class="db-btn accent" onclick={confirmAddRow}><IconCheck size={12} /> Add</button>
+                <button class="db-btn ghost" onclick={() => addingRow = false}>Cancel</button>
+              </div>
+            </div>
+          {/if}
+
+          {#if queryError}
+            <div class="query-error">{queryError}</div>
+          {/if}
+
           {#if tableData.values.length}
             <div class="table-wrap">
               <table class="data-table">
@@ -442,13 +631,27 @@
                   {#each tableData.columns as col}
                     <th>{col}</th>
                   {/each}
+                  <th class="th-actions"></th>
                 </tr></thead>
                 <tbody>
-                  {#each paginatedValues() as row}
+                  {#each paginatedValues() as row, ri}
                     <tr>
-                      {#each row as cell}
-                        <td>{cell ?? 'NULL'}</td>
+                      {#each row as cell, ci}
+                        <td ondblclick={() => startEditCell(tablePage * PAGE_SIZE + ri, ci)}>
+                          {#if editingCell?.row === tablePage * PAGE_SIZE + ri && editingCell?.col === ci}
+                            <input type="text" class="cell-edit" bind:value={editValue}
+                              onkeydown={(e) => { if (e.key === 'Enter') confirmEditCell(); if (e.key === 'Escape') editingCell = null; }}
+                              onblur={confirmEditCell} autofocus />
+                          {:else}
+                            <span class="cell-value">{cell ?? 'NULL'}</span>
+                          {/if}
+                        </td>
                       {/each}
+                      <td class="td-actions">
+                        <button class="db-btn-sm danger" onclick={() => deleteRow(tablePage * PAGE_SIZE + ri)} title="Delete row">
+                          <IconTrash size={11} />
+                        </button>
+                      </td>
                     </tr>
                   {/each}
                 </tbody>
@@ -456,9 +659,9 @@
             </div>
             {#if totalPages() > 1}
               <div class="pagination">
-                <button class="db-btn-sm" disabled={tablePage === 0} onclick={() => tablePage--}>← Prev</button>
-                <span>Page {tablePage + 1} / {totalPages()}</span>
-                <button class="db-btn-sm" disabled={tablePage >= totalPages() - 1} onclick={() => tablePage++}>Next →</button>
+                <button class="db-btn-sm" disabled={tablePage === 0} onclick={() => tablePage--}>Prev</button>
+                <span>{tablePage + 1} / {totalPages()}</span>
+                <button class="db-btn-sm" disabled={tablePage >= totalPages() - 1} onclick={() => tablePage++}>Next</button>
               </div>
             {/if}
           {:else}
@@ -478,13 +681,11 @@
 <style>
   .db-root { display: flex; flex-direction: column; height: 100%; padding: 16px; gap: 12px; overflow: hidden; }
 
-  /* Header */
   .db-header { display: flex; justify-content: space-between; align-items: center; }
   .db-title { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; color: var(--text-1); }
   .db-count { font-size: 12px; color: var(--text-3); background: var(--bg-2); padding: 2px 8px; border-radius: 10px; }
   .db-actions { display: flex; gap: 6px; }
 
-  /* Buttons */
   .db-btn { display: flex; align-items: center; gap: 5px; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border);
     background: var(--bg-2); color: var(--text-2); font-size: 12px; cursor: pointer; transition: all .15s; }
   .db-btn:hover { background: var(--bg-3); color: var(--text-1); }
@@ -497,24 +698,22 @@
   .db-btn-sm { display: flex; align-items: center; gap: 3px; padding: 4px 8px; border-radius: 6px; border: none;
     background: var(--bg-2); color: var(--text-3); font-size: 11px; cursor: pointer; }
   .db-btn-sm:hover { background: var(--bg-3); color: var(--text-1); }
+  .db-btn-sm.active { background: var(--accent); color: #fff; }
   .db-btn-sm.danger:hover { background: #ff4444; color: #fff; }
   .db-btn-sm:disabled { opacity: 0.4; cursor: default; }
   .spinning { animation: spin 1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  /* Create form */
   .create-form { display: flex; gap: 8px; align-items: center; padding: 12px; background: var(--bg-2); border-radius: 10px; }
   .create-form input { flex: 1; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border);
     background: var(--bg-1); color: var(--text-1); font-size: 13px; outline: none; }
   .create-form input:focus { border-color: var(--accent); }
 
-  /* Empty state */
   .db-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1;
     color: var(--text-3); gap: 8px; }
   .db-empty p { margin: 0; font-size: 14px; }
   .db-empty-sub { font-size: 12px; }
 
-  /* Box grid */
   .db-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; overflow-y: auto; padding-bottom: 16px; }
   .db-box { padding: 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg-2);
     display: flex; flex-direction: column; gap: 8px; transition: border-color .15s; cursor: default; }
@@ -532,45 +731,55 @@
   .rename-input { padding: 3px 6px; border-radius: 4px; border: 1px solid var(--accent); background: var(--bg-1);
     color: var(--text-1); font-size: 12px; width: 120px; outline: none; }
 
-  /* Editor */
   .editor-header { display: flex; justify-content: space-between; align-items: center; }
   .editor-title { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; color: var(--text-1); }
-  .back-btn { background: none; border: none; color: var(--text-3); cursor: pointer; font-size: 13px; padding: 4px 8px; border-radius: 6px; }
+  .back-btn { background: none; border: none; color: var(--text-3); cursor: pointer; font-size: 18px; padding: 4px 8px; border-radius: 6px; }
   .back-btn:hover { color: var(--text-1); background: var(--bg-2); }
   .editor-actions { display: flex; gap: 6px; }
 
   .editor-body { display: flex; flex: 1; gap: 12px; overflow: hidden; }
 
-  /* Panels */
   .panel { display: flex; flex-direction: column; border-radius: 12px; border: 1px solid var(--border); background: var(--bg-2); overflow: hidden; }
-  .schema-panel { width: 280px; min-width: 220px; flex-shrink: 0; }
+  .schema-panel { width: 300px; min-width: 240px; flex-shrink: 0; }
   .data-panel { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
 
   .panel-tabs { display: flex; border-bottom: 1px solid var(--border); }
-  .panel-tab { flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px; padding: 8px;
+  .panel-tab { flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px; padding: 10px;
     font-size: 12px; color: var(--text-3); background: none; border: none; cursor: pointer; border-bottom: 2px solid transparent; }
   .panel-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
   .panel-tab:hover { color: var(--text-1); }
 
-  .schema-list { overflow-y: auto; flex: 1; padding: 4px; }
-  .schema-table { display: flex; align-items: center; gap: 6px; width: 100%; padding: 7px 8px; border: none;
-    background: none; color: var(--text-2); font-size: 12px; cursor: pointer; border-radius: 6px; text-align: left; }
+  .schema-list { overflow-y: auto; flex: 1; padding: 6px; display: flex; flex-direction: column; gap: 2px; }
+  .schema-table { display: flex; align-items: center; gap: 6px; width: 100%; padding: 8px 10px; border: none;
+    background: none; color: var(--text-2); font-size: 12px; cursor: pointer; border-radius: 8px; text-align: left; transition: .1s; }
   .schema-table:hover { background: var(--bg-3); color: var(--text-1); }
   .schema-table.active { background: var(--accent); color: #fff; }
   .schema-table.active .col-count { color: rgba(255,255,255,0.7); }
   .col-count { margin-left: auto; font-size: 10px; color: var(--text-3); }
-  .schema-columns { padding: 0 8px 8px 28px; }
+  .schema-columns { padding: 0 8px 8px 28px; display: flex; flex-direction: column; gap: 2px; }
   .schema-col { display: flex; align-items: center; gap: 6px; padding: 3px 0; font-size: 11px; color: var(--text-2); }
   .col-name { font-family: var(--font-mono); }
   .col-type { font-size: 10px; color: var(--text-3); }
   .col-pk, .col-nn { font-size: 9px; padding: 1px 4px; border-radius: 3px; font-weight: 600; }
   .col-pk { background: var(--accent); color: #fff; }
   .col-nn { background: var(--bg-3); color: var(--text-3); }
-  .schema-section { font-size: 10px; color: var(--text-3); text-transform: uppercase; padding: 8px 0 4px; letter-spacing: 0.5px; }
-  .schema-idx { font-size: 11px; color: var(--text-3); font-family: var(--font-mono); padding: 2px 0; }
+  .schema-col-actions { display: flex; gap: 4px; padding-top: 6px; }
   .schema-empty { padding: 20px; text-align: center; color: var(--text-3); font-size: 12px; }
 
-  /* Query */
+  .create-table-btn { display: flex; align-items: center; gap: 6px; width: 100%; padding: 8px 10px; border: 1px dashed var(--border);
+    background: none; color: var(--text-3); font-size: 12px; cursor: pointer; border-radius: 8px; margin-top: 4px; }
+  .create-table-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .create-table-form { padding: 10px; background: var(--bg-3); border-radius: 8px; margin-top: 4px; display: flex; flex-direction: column; gap: 6px; }
+  .create-table-form input { padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--bg-1); color: var(--text-1); font-size: 12px; outline: none; }
+  .create-table-form input:focus { border-color: var(--accent); }
+  .create-table-form select { padding: 5px 8px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--bg-1); color: var(--text-1); font-size: 11px; outline: none; }
+  .create-col-row { display: flex; gap: 4px; align-items: center; }
+  .col-name-input { flex: 1 !important; }
+  .create-table-actions { display: flex; gap: 4px; margin-top: 4px; }
+
   .query-panel { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
   .sql-input { flex: 1; min-height: 80px; padding: 10px; border: none; background: var(--bg-1); color: var(--text-1);
     font-family: var(--font-mono); font-size: 12px; resize: none; outline: none; }
@@ -580,8 +789,8 @@
   .query-result { overflow: auto; flex: 1; }
   .result-meta { padding: 6px 10px; font-size: 11px; color: var(--text-3); border-top: 1px solid var(--border); }
 
-  /* Data table */
   .data-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  .data-header-actions { display: flex; align-items: center; gap: 10px; }
   .data-table-name { font-size: 13px; font-weight: 600; color: var(--text-1); font-family: var(--font-mono); }
   .data-row-count { font-size: 11px; color: var(--text-3); }
   .data-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1;
@@ -596,6 +805,19 @@
   .data-table td { padding: 5px 10px; color: var(--text-2); border-bottom: 1px solid var(--border);
     font-family: var(--font-mono); font-size: 11px; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .data-table tr:hover td { background: var(--bg-3); }
+  .cell-value { cursor: pointer; }
+  .cell-edit { width: 100%; padding: 2px 4px; border: 1px solid var(--accent); border-radius: 3px;
+    background: var(--bg-1); color: var(--text-1); font-family: var(--font-mono); font-size: 11px; outline: none; }
+  .th-actions { width: 32px; }
+  .td-actions { width: 32px; text-align: center; }
+  .td-actions .db-btn-sm { opacity: 0; transition: .1s; }
+  .data-table tr:hover .td-actions .db-btn-sm { opacity: 1; }
+
+  .add-row-form { display: flex; gap: 6px; padding: 8px 12px; background: var(--bg-3); align-items: center; flex-wrap: wrap; }
+  .row-input { padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg-1);
+    color: var(--text-1); font-family: var(--font-mono); font-size: 11px; outline: none; min-width: 80px; }
+  .row-input:focus { border-color: var(--accent); }
+  .add-row-actions { display: flex; gap: 4px; margin-left: auto; }
 
   .pagination { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 8px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-3); }
 </style>

@@ -681,6 +681,9 @@
 
   .dock-more-btn {
     color: var(--text-2);
+    background: none;
+    border: none;
+    font-family: inherit;
   }
   .dock-more-btn:hover { color: var(--text-1); background: color-mix(in srgb, var(--text-1) 8%, transparent); }
   .dock-more-btn.active {
