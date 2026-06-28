@@ -237,9 +237,9 @@
         <button class="db-btn" onclick={importDatabase}>
           <IconUpload size={14} /> Import
         </button>
-        <button class="db-btn-icon" onclick={loadDatabases} title="Refresh">
-          <IconRefresh size={14} class:spinning={loading} />
-        </button>
+          <button class="db-btn-icon" onclick={loadDatabases} title="Refresh">
+            <span class:spinning={loading}><IconRefresh size={14} /></span>
+          </button>
       </div>
     </div>
 
