@@ -42,26 +42,24 @@ export const POST: RequestHandler = async ({ request, url, cookies }) => {
 
     if (body.action === 'create') {
       let bytes: Uint8Array;
-      if (body.data) {
+      if (body.data && body.data.length > 0) {
         bytes = Uint8Array.from(atob(body.data), c => c.charCodeAt(0));
-      } else {
-        // Minimal valid SQLite database (header only)
-        const header = new Uint8Array(100);
-        const encoder = new TextEncoder();
-        const sig = encoder.encode('SQLite format 3\0');
-        header.set(sig);
-        header[16] = 64; // page size 64
-        header[18] = 1;  // file format write version
-        header[19] = 1;  // file format read version
-        header[20] = 64; // reserved space
-        header[21] = 1;  // max embedded payload fraction
-        header[22] = 64; // min embedded payload fraction
-        header[23] = 32; // leaf payload fraction
-        header[28] = 1;  // file change counter (4 bytes BE)
-        header[56] = 2;  // page count (4 bytes BE) — 2 pages total
-        bytes = header;
       }
-      if (bytes.length === 0) return Response.json({ error: 'Database file is empty' }, { status: 400 });
+      if (!bytes || bytes.length === 0) {
+        // Minimal valid SQLite database
+        bytes = new Uint8Array(100);
+        const encoder = new TextEncoder();
+        bytes.set(encoder.encode('SQLite format 3\0'));
+        bytes[16] = 64;
+        bytes[18] = 1;
+        bytes[19] = 1;
+        bytes[20] = 64;
+        bytes[21] = 1;
+        bytes[22] = 64;
+        bytes[23] = 32;
+        bytes[28] = 1;
+        bytes[56] = 2;
+      }
       const db = await createDatabase(body.name || 'Untitled DB', bytes, body.description, body.folderId);
       return Response.json({ database: db });
     }
