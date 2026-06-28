@@ -41,7 +41,26 @@ export const POST: RequestHandler = async ({ request, url, cookies }) => {
     const body = await request.json();
 
     if (body.action === 'create') {
-      const bytes = body.data ? Uint8Array.from(atob(body.data), c => c.charCodeAt(0)) : new Uint8Array(0);
+      let bytes: Uint8Array;
+      if (body.data) {
+        bytes = Uint8Array.from(atob(body.data), c => c.charCodeAt(0));
+      } else {
+        // Minimal valid SQLite database (header only)
+        const header = new Uint8Array(100);
+        const encoder = new TextEncoder();
+        const sig = encoder.encode('SQLite format 3\0');
+        header.set(sig);
+        header[16] = 64; // page size 64
+        header[18] = 1;  // file format write version
+        header[19] = 1;  // file format read version
+        header[20] = 64; // reserved space
+        header[21] = 1;  // max embedded payload fraction
+        header[22] = 64; // min embedded payload fraction
+        header[23] = 32; // leaf payload fraction
+        header[28] = 1;  // file change counter (4 bytes BE)
+        header[56] = 2;  // page count (4 bytes BE) — 2 pages total
+        bytes = header;
+      }
       if (bytes.length === 0) return Response.json({ error: 'Database file is empty' }, { status: 400 });
       const db = await createDatabase(body.name || 'Untitled DB', bytes, body.description, body.folderId);
       return Response.json({ database: db });
