@@ -1896,15 +1896,6 @@
   .rp-lcount { font-size: 9px; color: #333350; }
   .rp-lay-opacity { padding: 2px 0; }
 
-  .rp-quick-colors { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; }
-  .rp-qc { width: 100%; aspect-ratio: 1; border-radius: 3px; border: 1px solid #3a3a4a; cursor: pointer; transition: .1s; }
-  .rp-qc:hover { border-color: #666680; transform: scale(1.1); }
-  .rp-qc.active { border-color: #e0e0f0; box-shadow: 0 0 0 1px #5050c0; }
-
-  .rp-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; font-size: 10px; }
-  .rp-info-label { color: #444460; }
-  .rp-info-val { color: #8888a0; text-align: right; font-family: 'Geist Mono', monospace; font-size: 9px; }
-
   .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.7); display: flex; align-items: center; justify-content: center; z-index: 9999; }
   .modal-box { background: #1e1e2a; border: 1px solid #3a3a4a; border-radius: 8px; padding: 16px; min-width: 300px; max-width: 400px; box-shadow: 0 12px 48px rgba(0,0,0,.6); }
   .modal-title { font-size: 13px; font-weight: 600; color: #e0e0f0; margin-bottom: 12px; }
@@ -1932,7 +1923,6 @@
   .sel-lock { width: 24px; height: 24px; border-radius: 4px; border: 1px solid #3a3a4a; background: #16161e; color: #8888a0; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: .1s; }
   .sel-lock:hover { border-color: #5050c0; color: #e0e0f0; }
   .sel-lock.active { border-color: #5050c0; color: #5050c0; background: rgba(80,80,192,.15); }
-  .sel-info { padding: 3px 4px; font-size: 11px; color: #555570; display: flex; flex-direction: column; gap: 2px; }
   .sel-actions { display: flex; gap: 4px; padding: 4px; }
   .sel-btn { flex: 1; padding: 4px 0; border-radius: 4px; border: 1px solid #3a3a4a; background: #16161e; color: #8888a0; font-size: 11px; cursor: pointer; transition: .1s; }
   .sel-btn:hover { border-color: #5050c0; color: #e0e0f0; }

@@ -292,8 +292,8 @@
         {#each ALL_TABS as tab}
           {@const isMain = mainTabIds.includes(tab.id)}
           {@const active = activeTab === tab.id}
-          <button class="dock-more-card" class:active class:is-main={isMain}
-            onclick={() => { ontabchange(tab.id); showMore = false; }}>
+          <div class="dock-more-card" class:active class:is-main={isMain}
+            onclick={() => { ontabchange(tab.id); showMore = false; }} role="button" tabindex="0">
             <div class="dock-more-icon"><tab.icon size={22} stroke={1.5}/></div>
             <span class="dock-more-label">{tab.label}</span>
             {#if isMain}
@@ -301,7 +301,7 @@
             {:else}
               <button class="dock-more-add" onclick={(e) => { e.stopPropagation(); addTabToMain(tab.id); }} title="Add to dock">+</button>
             {/if}
-          </button>
+          </div>
         {/each}
       </div>
       <div class="dock-more-hint">Drag icons in the dock to reorder · Click + to add to dock</div>
