@@ -232,12 +232,12 @@
   function handleOutsideClick(e: MouseEvent) {
     const target = e.target as HTMLElement;
     if (!target.closest('.dock-more-overlay') && !target.closest('.dock-more-btn')) showMore = false;
-    if (!target.closest('.dock-user-panel') && !target.closest('.dock-avatar-float')) showUser = false;
+    if (!target.closest('.dock-user-panel') && !target.closest('.dock-avatar-item')) showUser = false;
   }
 
   function handleOutsideTouch(e: TouchEvent) {
     const target = e.target as HTMLElement;
-    if (!target.closest('.dock-item') && !target.closest('.dock-avatar-float')) {
+    if (!target.closest('.dock-item') && !target.closest('.dock-avatar-item')) {
       longPressTooltipTab = null;
     }
   }
@@ -419,20 +419,23 @@
     <span class="dock-item-label">More</span>
   </button>
 
-</div>
+  <div class="dock-sep"></div>
 
-<!-- ── User avatar — top-right corner ──────────────────────────── -->
-{#if user}
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div
-    class="dock-avatar-float"
-    onclick={(e) => { e.stopPropagation(); showUser = !showUser; showMore = false; }}
-    role="button"
-    tabindex="-1"
-  >
-    {user.username[0].toUpperCase()}
-  </div>
-{/if}
+  <!-- User avatar in dock -->
+  {#if user}
+    <div
+      class="dock-item dock-avatar-item"
+      onclick={(e) => { e.stopPropagation(); showUser = !showUser; showMore = false; }}
+      onmouseenter={(e) => onItemHover('user', e)}
+      onmouseleave={onItemLeave}
+      role="button"
+      tabindex="-1"
+    >
+      <div class="dock-avatar-circle">{user.username[0].toUpperCase()}</div>
+    </div>
+  {/if}
+
+</div>
 
 <style>
   /* ── Floating pill tooltip ────────────────────────────────────── */
@@ -513,26 +516,26 @@
 
   .dock-more-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-    gap: 8px;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
   }
   .dock-more-card {
-    display: flex; flex-direction: column; align-items: center; gap: 6px;
-    padding: 12px 8px; border-radius: 10px;
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    padding: 16px 10px; border-radius: 12px;
     border: 1px solid var(--border); background: var(--bg-3);
-    cursor: pointer; transition: .13s; position: relative;
+    cursor: pointer; transition: .15s; position: relative;
     font-family: 'Geist', sans-serif;
   }
-  .dock-more-card:hover { border-color: var(--border-hover); transform: translateY(-1px); }
-  .dock-more-card.active { border-color: var(--accent); background: var(--accent-soft); }
-  .dock-more-card.is-main { border-color: var(--green); }
+  .dock-more-card:hover { border-color: var(--border-hover); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,.2); }
+  .dock-more-card.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--bg-3)); }
+  .dock-more-card.is-main { border-color: color-mix(in srgb, var(--green) 60%, var(--border)); }
   .dock-more-icon { color: var(--text-2); }
   .dock-more-card.active .dock-more-icon { color: var(--accent); }
-  .dock-more-label { font-size: 11px; font-weight: 500; color: var(--text-2); }
+  .dock-more-label { font-size: 12px; font-weight: 500; color: var(--text-2); }
   .dock-more-card.active .dock-more-label { color: var(--accent); }
   .dock-more-add, .dock-more-remove {
-    position: absolute; top: 4px; right: 4px;
-    width: 18px; height: 18px; border-radius: 50%;
+    position: absolute; top: 6px; right: 6px;
+    width: 20px; height: 20px; border-radius: 50%;
     border: none; font-size: 12px; cursor: pointer;
     display: flex; align-items: center; justify-content: center;
     transition: .1s;
@@ -542,8 +545,8 @@
   .dock-more-remove { background: var(--red); color: #fff; }
   .dock-more-remove:hover { opacity: .8; }
   .dock-more-hint {
-    margin-top: 12px; text-align: center;
-    font-size: 10px; color: var(--text-3);
+    margin-top: 14px; text-align: center;
+    font-size: 11px; color: var(--text-3);
   }
 
   /* ── User panel ────────────────────────────────────────────────── */
@@ -599,8 +602,8 @@
 
   /* Position variants */
   .dock.pos-bottom {
-    bottom: 0; left: 50%; transform: translateX(-50%);
-    border-radius: 16px 16px 0 0;
+    bottom: 16px; left: 50%; transform: translateX(-50%);
+    border-radius: 999px;
   }
   .dock.pos-top {
     top: 16px; left: 50%; transform: translateX(-50%);
@@ -679,25 +682,22 @@
   .dock-more-btn {
     color: var(--text-2);
   }
-  .dock-more-btn:hover { color: var(--text-1); }
+  .dock-more-btn:hover { color: var(--text-1); background: color-mix(in srgb, var(--text-1) 8%, transparent); }
   .dock-more-btn.active {
     background: color-mix(in srgb, var(--text-1) 12%, transparent);
     color: var(--text-1);
   }
 
-  /* Floating user avatar — top right */
-  .dock-avatar-float {
-    position: fixed;
-    top: 16px; right: 16px;
-    z-index: 300;
-    width: 36px; height: 36px; border-radius: 50%;
+  /* User avatar in dock */
+  .dock-avatar-item { padding: 4px 6px; }
+  .dock-avatar-circle {
+    width: 28px; height: 28px; border-radius: 50%;
     background: var(--accent); color: #fff;
     display: flex; align-items: center; justify-content: center;
-    font-size: 14px; font-weight: 700; cursor: pointer;
+    font-size: 12px; font-weight: 700; cursor: pointer;
     transition: all .15s cubic-bezier(.16,1,.3,1);
-    box-shadow: 0 2px 8px rgba(0,0,0,.3);
   }
-  .dock-avatar-float:hover { transform: scale(1.1); box-shadow: 0 4px 16px rgba(99,102,241,.4); }
+  .dock-avatar-item:hover .dock-avatar-circle { box-shadow: 0 2px 8px rgba(99,102,241,.5); transform: scale(1.1); }
 
   /* ── Auto-hide hover zone ────────────────────────────────────── */
   .dock-hover-zone {
@@ -715,8 +715,8 @@
   .dock.auto-hide.hide-dock {
     pointer-events: none;
   }
-  .dock.auto-hide.hide-dock.pos-bottom {
-    transform: translateX(-50%) translateY(100%);
+  .dock-auto-hide.hide-dock.pos-bottom {
+    transform: translateX(-50%) translateY(calc(100% + 32px));
     opacity: 0;
   }
   .dock.auto-hide.hide-dock.pos-top {
@@ -734,9 +734,10 @@
 
   /* Mobile */
   @media (max-width: 600px) {
-    .dock.pos-bottom { bottom: 0; padding: 4px 6px; }
+    .dock.pos-bottom { bottom: 12px; padding: 4px 6px; }
     .dock-more-panel { width: 95vw; }
-    .dock-more-grid { grid-template-columns: repeat(3, 1fr); }
+    .dock-more-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .dock-more-card { padding: 12px 8px; }
     .dock-item { min-width: 36px; padding: 3px 6px 2px; }
     .dock-item-label { font-size: 9px; }
     .dock-pill-tip { opacity: 0; pointer-events: none; transition: opacity .15s; }
