@@ -569,24 +569,32 @@
             {/each}
 
             {#if creatingTable}
-              <div class="create-table-form">
-                <input type="text" placeholder="Table name" bind:value={newTableName} autofocus />
-                {#each newColumns as col, i}
-                  <div class="create-col-row">
-                    <input type="text" placeholder="column" bind:value={col.name} class="col-name-input" />
-                    <select bind:value={col.type}>
-                      <option value="INTEGER">INTEGER</option>
-                      <option value="TEXT">TEXT</option>
-                      <option value="REAL">REAL</option>
-                      <option value="BLOB">BLOB</option>
-                    </select>
-                    <button class="db-btn-sm" class:active={col.pk} onclick={() => col.pk = !col.pk}>PK</button>
-                    <button class="db-btn-sm danger" onclick={() => removeColumnSlot(i)}><IconMinus size={12} /></button>
-                  </div>
-                {/each}
-                <div class="create-table-actions">
-                  <button class="db-btn-sm" onclick={addColumnSlot}><IconPlus size={12} /> Column</button>
-                  <button class="db-btn accent" onclick={confirmCreateTable}><IconCheck size={12} /> Create</button>
+              <div class="create-table-card">
+                <div class="ct-label">Table Name</div>
+                <input type="text" placeholder="e.g. users" bind:value={newTableName} class="ct-name-input" autofocus />
+                <div class="ct-label">Columns</div>
+                <div class="ct-columns">
+                  {#each newColumns as col, i}
+                    <div class="ct-col-row">
+                      <input type="text" placeholder="column_name" bind:value={col.name} class="ct-col-name" />
+                      <select bind:value={col.type} class="ct-col-type">
+                        <option value="INTEGER">INTEGER</option>
+                        <option value="TEXT">TEXT</option>
+                        <option value="REAL">REAL</option>
+                        <option value="BLOB">BLOB</option>
+                      </select>
+                      <button class="ct-pk-btn" class:active={col.pk} onclick={() => col.pk = !col.pk} title="Primary Key">PK</button>
+                      <button class="ct-rm-btn" onclick={() => removeColumnSlot(i)} title="Remove column"><IconX size={14} /></button>
+                    </div>
+                  {/each}
+                </div>
+                <button class="ct-add-col" onclick={addColumnSlot}>
+                  <IconPlus size={14} /> Add Column
+                </button>
+                <div class="ct-actions">
+                  <button class="db-btn accent" onclick={confirmCreateTable}>
+                    <IconCheck size={14} /> Create Table
+                  </button>
                   <button class="db-btn ghost" onclick={() => creatingTable = false}>Cancel</button>
                 </div>
               </div>
@@ -730,7 +738,7 @@
 {/if}
 
 <style>
-  .db-root { display: flex; flex-direction: column; height: 100%; padding: 16px; gap: 12px; overflow: hidden; }
+  .db-root { display: flex; flex-direction: column; height: 100%; padding: 16px; gap: 12px; overflow: hidden; overflow-x: hidden; }
 
   .db-header { display: flex; justify-content: space-between; align-items: center; }
   .db-title { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; color: var(--text-1); }
@@ -791,11 +799,11 @@
   .editor-actions { display: flex; gap: 6px; align-items: center; }
   .save-hint { font-size: 10px; color: var(--text-3); font-family: var(--font-mono); }
 
-  .editor-body { display: flex; flex: 1; gap: 12px; overflow: hidden; }
+  .editor-body { display: flex; flex: 1; gap: 12px; overflow: hidden; min-width: 0; }
 
-  .panel { display: flex; flex-direction: column; border-radius: 12px; border: 1px solid var(--border); background: var(--bg-2); overflow: hidden; }
-  .schema-panel { width: 300px; min-width: 240px; flex-shrink: 0; }
-  .data-panel { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+  .panel { display: flex; flex-direction: column; border-radius: 12px; border: 1px solid var(--border); background: var(--bg-2); overflow: hidden; min-width: 0; }
+  .schema-panel { width: 320px; min-width: 260px; flex-shrink: 0; }
+  .data-panel { flex: 1; overflow: hidden; display: flex; flex-direction: column; min-width: 0; }
 
   .panel-tabs { display: flex; border-bottom: 1px solid var(--border); }
   .panel-tab { flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px; padding: 10px;
@@ -819,27 +827,56 @@
   .col-nn { background: var(--bg-3); color: var(--text-3); }
   .schema-col-actions { display: flex; gap: 4px; padding-top: 6px; flex-wrap: wrap; }
   .inline-form { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
-  .inline-form input { padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border);
-    background: var(--bg-1); color: var(--text-1); font-size: 11px; outline: none; width: 80px; }
+  .inline-form input { padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--bg-1); color: var(--text-1); font-size: 12px; outline: none; width: 90px; }
   .inline-form input:focus { border-color: var(--accent); }
-  .inline-form select { padding: 3px 6px; border-radius: 4px; border: 1px solid var(--border);
-    background: var(--bg-1); color: var(--text-1); font-size: 11px; }
-  .delete-confirm-text { font-size: 11px; color: var(--red); }
+  .inline-form select { padding: 5px 8px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--bg-1); color: var(--text-1); font-size: 12px; }
+  .delete-confirm-text { font-size: 11px; color: var(--red); white-space: nowrap; }
   .schema-empty { padding: 20px; text-align: center; color: var(--text-3); font-size: 12px; }
 
-  .create-table-btn { display: flex; align-items: center; gap: 6px; width: 100%; padding: 8px 10px; border: 1px dashed var(--border);
+  .create-table-btn { display: flex; align-items: center; gap: 6px; width: 100%; padding: 10px 12px; border: 1px dashed var(--border);
     background: none; color: var(--text-3); font-size: 12px; cursor: pointer; border-radius: 8px; margin-top: 4px; }
   .create-table-btn:hover { border-color: var(--accent); color: var(--accent); }
 
-  .create-table-form { padding: 10px; background: var(--bg-3); border-radius: 8px; margin-top: 4px; display: flex; flex-direction: column; gap: 6px; }
-  .create-table-form input { padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border);
-    background: var(--bg-1); color: var(--text-1); font-size: 12px; outline: none; }
-  .create-table-form input:focus { border-color: var(--accent); }
-  .create-table-form select { padding: 5px 8px; border-radius: 6px; border: 1px solid var(--border);
-    background: var(--bg-1); color: var(--text-1); font-size: 11px; outline: none; }
-  .create-col-row { display: flex; gap: 4px; align-items: center; }
-  .col-name-input { flex: 1 !important; }
-  .create-table-actions { display: flex; gap: 4px; margin-top: 4px; }
+  .create-table-card {
+    padding: 14px; background: var(--bg-3); border-radius: 10px; margin-top: 6px;
+    display: flex; flex-direction: column; gap: 8px; border: 1px solid var(--border);
+  }
+  .ct-label { font-size: 11px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.5px; }
+  .ct-name-input {
+    width: 100%; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--bg-1); color: var(--text-1); font-size: 13px; outline: none; box-sizing: border-box;
+  }
+  .ct-name-input:focus { border-color: var(--accent); }
+  .ct-columns { display: flex; flex-direction: column; gap: 4px; }
+  .ct-col-row { display: flex; gap: 4px; align-items: center; }
+  .ct-col-name {
+    flex: 1; min-width: 0; padding: 7px 10px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--bg-1); color: var(--text-1); font-size: 12px; font-family: var(--font-mono); outline: none;
+  }
+  .ct-col-name:focus { border-color: var(--accent); }
+  .ct-col-type {
+    width: 90px; flex-shrink: 0; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--bg-1); color: var(--text-1); font-size: 12px; outline: none;
+  }
+  .ct-pk-btn {
+    padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--bg-2); color: var(--text-3); font-size: 11px; font-weight: 600; cursor: pointer;
+  }
+  .ct-pk-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .ct-pk-btn:hover { border-color: var(--accent); }
+  .ct-rm-btn {
+    padding: 6px; border-radius: 6px; border: none;
+    background: transparent; color: var(--text-3); cursor: pointer; display: flex;
+  }
+  .ct-rm-btn:hover { color: var(--red); }
+  .ct-add-col {
+    display: flex; align-items: center; gap: 4px; padding: 6px 0;
+    background: none; border: none; color: var(--text-3); font-size: 12px; cursor: pointer;
+  }
+  .ct-add-col:hover { color: var(--accent); }
+  .ct-actions { display: flex; gap: 8px; margin-top: 4px; }
 
   .query-panel { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
   .sql-input { flex: 1; min-height: 80px; padding: 10px; border: none; background: var(--bg-1); color: var(--text-1);
@@ -858,7 +895,7 @@
     color: var(--text-3); gap: 8px; }
   .data-empty p { margin: 0; font-size: 12px; }
 
-  .table-wrap { overflow: auto; flex: 1; }
+  .table-wrap { overflow: auto; flex: 1; min-width: 0; }
   .data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
   .data-table th { padding: 6px 10px; text-align: left; font-weight: 600; color: var(--text-2); background: var(--bg-3);
     border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 1; white-space: nowrap;
