@@ -13,6 +13,7 @@
   type DbRecord = {
     dbId: string; name: string; description?: string; totalBytes: number;
     time: string; _type: 'database'; favorite?: boolean; metaFileId: string; folderId?: string;
+    telegramFileId?: string; telegramMessageId?: number;
   };
   type TableInfo = { name: string; columns: { name: string; type: string; notnull: boolean; pk: boolean }[]; indexes: { name: string; columns: string[] }[] };
 
@@ -83,9 +84,35 @@
   async function loadDatabases() {
     loading = true;
     try {
-      const res = await fetch('/api/database', { headers: { 'X-Api-Key': apiKey } });
-      const data = await res.json();
-      databases = (data.databases || []).sort((a: DbRecord, b: DbRecord) =>
+      const [dbRes, lsRes] = await Promise.all([
+        fetch('/api/database', { headers: { 'X-Api-Key': apiKey } }),
+        databasesFolderId ? fetch(`/api/telegram/ls?folderId=${encodeURIComponent(databasesFolderId)}`, { headers: { 'X-Api-Key': apiKey } }) : null
+      ]);
+      const dbData = await dbRes.json();
+      const dbs: DbRecord[] = dbData.databases || [];
+
+      if (lsRes) {
+        const lsData = await lsRes.json();
+        const existingIds = new Set(dbs.map(d => d.metaFileId));
+        for (const file of (lsData.files || [])) {
+          if (file._database) continue;
+          if (!file.fileName?.match(/\.(sqlite|db|sqlite3)$/i)) continue;
+          if (existingIds.has(file.metaFileId)) continue;
+          dbs.push({
+            dbId: 'file:' + file.metaFileId,
+            name: file.fileName.replace(/\.(sqlite|db|sqlite3)$/i, ''),
+            totalBytes: file.totalBytes,
+            time: file.time,
+            metaFileId: file.metaFileId,
+            telegramFileId: file.telegramFileId,
+            telegramMessageId: file.telegramMessageId,
+            _type: 'database',
+            folderId: file.folderId,
+          });
+        }
+      }
+
+      databases = dbs.sort((a, b) =>
         (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0) || new Date(b.time).getTime() - new Date(a.time).getTime()
       );
     } finally { loading = false; }
@@ -97,7 +124,7 @@
     const emptyDb = await openDatabase();
     const data = emptyDb.export();
     emptyDb.close();
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(data)));
+    const base64 = toBase64(new Uint8Array(data));
     const res = await fetch('/api/database', {
       method: 'POST',
       headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
@@ -115,7 +142,7 @@
       const file = input.files?.[0];
       if (!file) return;
       const buf = await file.arrayBuffer();
-      const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+      const base64 = toBase64(new Uint8Array(buf));
       const res = await fetch('/api/database', {
         method: 'POST',
         headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
@@ -128,21 +155,25 @@
   }
 
   async function deleteDb(dbId: string) {
-    await fetch('/api/database', {
-      method: 'POST',
-      headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'delete', dbId })
-    });
+    if (!dbId.startsWith('file:')) {
+      await fetch('/api/database', {
+        method: 'POST',
+        headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete', dbId })
+      });
+    }
     databases = databases.filter(d => d.dbId !== dbId);
     if (openedDb?.dbId === dbId) closeDb();
   }
 
   async function toggleFavorite(dbId: string) {
-    await fetch('/api/database', {
-      method: 'POST',
-      headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'toggleFavorite', dbId })
-    });
+    if (!dbId.startsWith('file:')) {
+      await fetch('/api/database', {
+        method: 'POST',
+        headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'toggleFavorite', dbId })
+      });
+    }
     databases = databases.map(d => d.dbId === dbId ? { ...d, favorite: !d.favorite } : d);
   }
 
@@ -150,11 +181,13 @@
     const name = renameValue.trim();
     if (!name) return;
     renamingDb = null;
-    await fetch('/api/database', {
-      method: 'POST',
-      headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'rename', dbId, name })
-    });
+    if (!dbId.startsWith('file:')) {
+      await fetch('/api/database', {
+        method: 'POST',
+        headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'rename', dbId, name })
+      });
+    }
     databases = databases.map(d => d.dbId === dbId ? { ...d, name } : d);
     if (openedDb?.dbId === dbId) openedDb = { ...openedDb, name };
   }
@@ -246,12 +279,27 @@
   async function saveDb() {
     if (!sqlDb || !openedDb) return;
     const data = sqlDb.export();
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(data)));
-    await fetch('/api/database', {
-      method: 'POST',
-      headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'update', dbId: openedDb.dbId, data: base64 })
-    });
+    const base64 = toBase64(new Uint8Array(data));
+
+    if (openedDb.dbId.startsWith('file:')) {
+      const res = await fetch('/api/database', {
+        method: 'POST',
+        headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'import', name: openedDb.name, data: base64, folderId: databasesFolderId })
+      });
+      const result = await res.json();
+      if (result.database) {
+        openedDb = result.database;
+        databases = databases.map(d => d.metaFileId === openedDb!.metaFileId ? result.database : d);
+      }
+    } else {
+      await fetch('/api/database', {
+        method: 'POST',
+        headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'update', dbId: openedDb.dbId, data: base64 })
+      });
+    }
+
     hasUnsavedChanges = false;
     saveToast = true;
     setTimeout(() => saveToast = false, 2000);
@@ -381,6 +429,15 @@
     } catch (e: any) {
       queryError = e.message;
     }
+  }
+
+  function toBase64(bytes: Uint8Array): string {
+    let binary = '';
+    const chunk = 8192;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    }
+    return btoa(binary);
   }
 
   function formatBytes(b: number) {
