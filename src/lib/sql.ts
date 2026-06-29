@@ -209,29 +209,47 @@ async function getSchemaWa(wa: NonNullable<Database['_wa']>): Promise<SchemaResu
 
 async function queryWa(wa: NonNullable<Database['_wa']>, sql: string): Promise<QueryResult> {
   const { sqlite3, db } = wa;
-  try {
-    const rows = await collectRows(sqlite3, db, sql);
-    const columns = rows._columns || [];
-    const values = rows._values || [];
-    const changes = sqlite3.changes(db);
-    return { columns, values, rowsAffected: changes };
-  } catch (e: any) {
-    throw new Error(e.message || 'SQL error');
-  }
+  const { columns, values } = await collectRowsWithMeta(sqlite3, db, sql);
+  const changes = sqlite3.changes(db);
+  return { columns, values, rowsAffected: changes };
 }
 
-async function collectRows(sqlite3: any, db: number, sql: string): Promise<any[]> & { _columns: string[]; _values: any[][] } {
-  const result: any[] = [];
-  let columns: string[] = [];
+async function collectRowsWithMeta(sqlite3: any, db: number, sql: string): Promise<{ columns: string[]; values: any[][] }> {
+  const columns: string[] = [];
   const values: any[][] = [];
 
-  await sqlite3.exec(db, sql, (row: any[], cols: string[]) => {
-    if (columns.length === 0) columns = cols;
-    values.push([...row]);
-    result.push(row);
-  });
+  const str = sqlite3.str_new(db, sql);
+  try {
+    let prepared: any = null;
+    const sqlPtr = sqlite3.str_value(str);
+    prepared = await sqlite3.prepare_v2(db, sqlPtr);
 
+    if (prepared && prepared.stmt) {
+      const colCount = sqlite3.column_count(prepared.stmt);
+      for (let i = 0; i < colCount; i++) {
+        columns.push(sqlite3.column_name(prepared.stmt, i));
+      }
+
+      while (await sqlite3.step(prepared.stmt) === 0) { // SQLITE_ROW = 0
+        const row: any[] = [];
+        for (let i = 0; i < colCount; i++) {
+          row.push(sqlite3.column(prepared.stmt, i));
+        }
+        values.push(row);
+      }
+      await sqlite3.finalize(prepared.stmt);
+    }
+  } finally {
+    sqlite3.str_finish(str);
+  }
+
+  return { columns, values };
+}
+
+async function collectRows(sqlite3: any, db: number, sql: string): Promise<any[]> {
+  const { columns, values } = await collectRowsWithMeta(sqlite3, db, sql);
+  const result: any[] = values;
   Object.defineProperty(result, '_columns', { value: columns });
   Object.defineProperty(result, '_values', { value: values });
-  return result as any;
+  return result;
 }

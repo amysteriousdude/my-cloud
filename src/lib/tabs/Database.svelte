@@ -42,6 +42,8 @@
 
   let hasUnsavedChanges = $state(false);
   let saveToast = $state(false);
+  let openingDb = $state(false);
+  let openingDbName = $state('');
 
   let creatingTable = $state(false);
   let newTableName = $state('');
@@ -198,6 +200,8 @@
   }
 
   async function openDb(db: DbFile) {
+    openingDb = true;
+    openingDbName = db.fileName;
     openedDb = db;
     activeTable = null;
     tableData = null;
@@ -208,10 +212,17 @@
     creatingTable = false;
     addingRow = false;
 
-    const res = await fetch(`/api/telegram/getRequestFile?api_key=${encodeURIComponent(apiKey)}&meta_file_id=${encodeURIComponent(db.metaFileId)}`);
-    const buf = await res.arrayBuffer();
-    sqlDb = await openDatabase(new Uint8Array(buf), db.fileName);
-    schema = (await getSchema(sqlDb)).tables;
+    try {
+      const res = await fetch(`/api/telegram/getRequestFile?api_key=${encodeURIComponent(apiKey)}&meta_file_id=${encodeURIComponent(db.metaFileId)}`);
+      const buf = await res.arrayBuffer();
+      sqlDb = await openDatabase(new Uint8Array(buf), db.fileName);
+      schema = (await getSchema(sqlDb)).tables;
+    } catch (e: any) {
+      queryError = e.message || 'Failed to open database';
+      openedDb = null;
+    } finally {
+      openingDb = false;
+    }
   }
 
   async function closeDb() {
@@ -537,6 +548,13 @@
       </div>
     </div>
 
+    {#if openingDb}
+      <div class="loading-overlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Opening {openingDbName}...</div>
+        <div class="loading-sub">Downloading and parsing database</div>
+      </div>
+    {:else}
     <div class="editor-body">
       <div class="panel schema-panel">
         <div class="panel-tabs">
@@ -763,6 +781,7 @@
         {/if}
       </div>
     </div>
+    {/if}
   {/if}
 </div>
 
@@ -830,6 +849,11 @@
   .back-btn:hover { color: var(--text-1); background: var(--bg-2); }
   .editor-actions { display: flex; gap: 6px; align-items: center; }
   .save-hint { font-size: 10px; color: var(--text-3); font-family: var(--font-mono); }
+
+  .loading-overlay { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; gap: 16px; }
+  .loading-spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
+  .loading-text { font-size: 14px; font-weight: 600; color: var(--text-1); }
+  .loading-sub { font-size: 12px; color: var(--text-3); }
 
   .editor-body { display: flex; flex: 1; gap: 12px; overflow: hidden; min-width: 0; }
 
