@@ -220,17 +220,32 @@ export const GET: RequestHandler = async ({ request, url }) => {
       const writer = writable.getWriter();
 
       (async () => {
+        let bytesWritten = 0;
         try {
-          for (const chunk of sorted) {
+          for (let i = 0; i < sorted.length; i++) {
+            const chunk = sorted[i];
             const { body, fromCache } = await fetchChunkFromCacheOrOrigin(chunk.file_id);
             if (fromCache) cacheHits++; else cacheMisses++;
-            await pumpToWriter(body, writer);
+
+            const reader = body.getReader();
+            while (true) {
+              const { value, done } = await reader.read();
+              if (done) break;
+              if (value) {
+                await writer.write(value);
+                bytesWritten += value.length;
+              }
+            }
           }
-        } catch {
-          // same rationale as above
-        } finally {
-          await writer.close().catch(() => {});
+          if (totalBytes > 0 && bytesWritten !== totalBytes) {
+            console.error(`Chunked stream mismatch: wrote ${bytesWritten} bytes but meta says ${totalBytes}`);
+          }
+        } catch (err) {
+          console.error(`Chunked stream error after ${bytesWritten} bytes:`, (err as Error)?.message || err);
+          try { await writer.abort(err as Error); } catch {}
+          return;
         }
+        await writer.close();
       })();
 
       return new Response(readable, {

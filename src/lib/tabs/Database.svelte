@@ -137,7 +137,7 @@
   async function createDatabase() {
     const name = newDbName.trim() || 'Untitled DB';
     newDbName = ''; creating = false;
-    const emptyDb = await openDatabase(undefined, `${name}.sqlite`);
+    const emptyDb = await openDatabase();
     const data = emptyDb.export();
     emptyDb.close();
     const result = await uploadSqliteBytes(new Uint8Array(data), `${name}.sqlite`);
@@ -214,11 +214,17 @@
 
     try {
       const res = await fetch(`/api/telegram/getRequestFile?api_key=${encodeURIComponent(apiKey)}&meta_file_id=${encodeURIComponent(db.metaFileId)}`);
-      if (!res.ok) throw new Error(`Download failed: ${res.status}`);
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || `Download failed: ${res.status}`);
+      }
       const buf = await res.arrayBuffer();
+      if (buf.byteLength < 100) throw new Error(`Download too small (${buf.byteLength} bytes) — file may be corrupt`);
+      const header = new Uint8Array(buf.slice(0, 16));
+      const sig = String.fromCharCode(...header.slice(0, 6));
+      if (!sig.startsWith('SQLite')) throw new Error(`Not a valid SQLite file (header: ${sig})`);
       console.log(`Downloaded ${buf.byteLength} bytes for ${db.fileName}`);
-      sqlDb = await openDatabase(new Uint8Array(buf), db.fileName);
-      console.log(`Database opened as ${sqlDb._type}`);
+      sqlDb = await openDatabase(new Uint8Array(buf));
       schema = (await getSchema(sqlDb)).tables;
       console.log(`Schema loaded: ${schema.length} tables`);
     } catch (e: any) {
