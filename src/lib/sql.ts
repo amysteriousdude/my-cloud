@@ -81,7 +81,12 @@ function opfsSupported(): boolean {
 
 async function writeToOPFS(filename: string, data: Uint8Array): Promise<void> {
   const root = await navigator.storage.getDirectory();
-  const fileHandle = await root.getFileHandle(filename, { create: true });
+  const parts = filename.split('/').filter(Boolean);
+  let dir = root;
+  for (let i = 0; i < parts.length - 1; i++) {
+    dir = await dir.getDirectoryHandle(parts[i], { create: true });
+  }
+  const fileHandle = await dir.getFileHandle(parts[parts.length - 1], { create: true });
   const accessHandle = await fileHandle.createSyncAccessHandle();
   accessHandle.write(data, { at: 0 });
   accessHandle.truncate(data.length);
@@ -90,7 +95,12 @@ async function writeToOPFS(filename: string, data: Uint8Array): Promise<void> {
 
 async function readFromOPFS(filename: string): Promise<Uint8Array> {
   const root = await navigator.storage.getDirectory();
-  const fileHandle = await root.getFileHandle(filename);
+  const parts = filename.split('/').filter(Boolean);
+  let dir = root;
+  for (let i = 0; i < parts.length - 1; i++) {
+    dir = await dir.getDirectoryHandle(parts[i]);
+  }
+  const fileHandle = await dir.getFileHandle(parts[parts.length - 1]);
   const file = await fileHandle.getFile();
   return new Uint8Array(await file.arrayBuffer());
 }
@@ -102,7 +112,7 @@ export async function openDatabase(data?: Uint8Array, filename?: string): Promis
     try {
       const sqlite3 = await getWaSqlite();
       await getVFS();
-      const name = filename || `db_${Date.now()}.sqlite`;
+      const name = `/databases/${filename || `db_${Date.now()}.sqlite`}`;
       await writeToOPFS(name, data);
       const db = await sqlite3.open_v2(name);
       return { _type: 'wasqlite', _wa: { sqlite3, db, filename: name, modified: false } };
@@ -230,7 +240,7 @@ async function collectRowsWithMeta(sqlite3: any, db: number, sql: string): Promi
         columns.push(sqlite3.column_name(prepared.stmt, i));
       }
 
-      while (await sqlite3.step(prepared.stmt) === 0) { // SQLITE_ROW = 0
+      while (await sqlite3.step(prepared.stmt) === 100) { // SQLITE_ROW = 100
         const row: any[] = [];
         for (let i = 0; i < colCount; i++) {
           row.push(sqlite3.column(prepared.stmt, i));

@@ -214,12 +214,16 @@
 
     try {
       const res = await fetch(`/api/telegram/getRequestFile?api_key=${encodeURIComponent(apiKey)}&meta_file_id=${encodeURIComponent(db.metaFileId)}`);
+      if (!res.ok) throw new Error(`Download failed: ${res.status}`);
       const buf = await res.arrayBuffer();
+      console.log(`Downloaded ${buf.byteLength} bytes for ${db.fileName}`);
       sqlDb = await openDatabase(new Uint8Array(buf), db.fileName);
+      console.log(`Database opened as ${sqlDb._type}`);
       schema = (await getSchema(sqlDb)).tables;
+      console.log(`Schema loaded: ${schema.length} tables`);
     } catch (e: any) {
+      console.error('Failed to open database:', e);
       queryError = e.message || 'Failed to open database';
-      openedDb = null;
     } finally {
       openingDb = false;
     }
@@ -554,6 +558,11 @@
         <div class="loading-text">Opening {openingDbName}...</div>
         <div class="loading-sub">Downloading and parsing database</div>
       </div>
+    {:else if queryError && !sqlDb}
+      <div class="error-overlay">
+        <div class="query-error">{queryError}</div>
+        <button class="db-btn" onclick={closeDb} style="margin-top:12px">Back to list</button>
+      </div>
     {:else}
     <div class="editor-body">
       <div class="panel schema-panel">
@@ -854,6 +863,9 @@
   .loading-spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
   .loading-text { font-size: 14px; font-weight: 600; color: var(--text-1); }
   .loading-sub { font-size: 12px; color: var(--text-3); }
+
+  .error-overlay { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; gap: 8px; }
+  .error-overlay .query-error { max-width: 500px; text-align: center; }
 
   .editor-body { display: flex; flex: 1; gap: 12px; overflow: hidden; min-width: 0; }
 
