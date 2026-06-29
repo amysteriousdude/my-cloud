@@ -62,29 +62,6 @@ export const GET: RequestHandler = async ({ request, url, cookies }) => {
         continue;
       }
 
-      if (item._type === 'database') {
-        const dbFolder = normalizeFolderId(item.folderId);
-        const isRootDb = folderId === null && dbFolder === null;
-        const isChildDb = folderId !== null && dbFolder === folderId;
-
-        if (folderId === null || isRootDb || isChildDb) {
-          files.push({
-            metaFileId: item.metaFileId,
-            metaMessageId: item.metaMessageId,
-            fileName: item.name + '.sqlite',
-            type: 'application/x-sqlite3',
-            totalBytes: item.totalBytes,
-            time: item.time,
-            telegramFileId: item.telegramFileId,
-            telegramMessageId: item.telegramMessageId,
-            folderId: item.folderId || undefined,
-            _database: true,
-            id: item.metaFileId,
-          });
-        }
-        continue;
-      }
-
       const fileFolder = normalizeFolderId(item.folderId);
       const isRootFiles = folderId === null && fileFolder === null;
       const isChildFiles = folderId !== null && fileFolder === folderId;

@@ -6,20 +6,21 @@
     IconPlayerPlay, IconX, IconCheck, IconEdit, IconCode,
     IconMinus, IconRowInsertBottom, IconColumnInsertRight,
   } from '@tabler/icons-svelte';
-  import { openDatabase, getSchema, query as sqlQuery, type Database as SqlDb } from '$lib/sql';
+  import { openDatabase, getSchema, query as sqlQuery, exportDatabase, closeDatabase, type Database as SqlDb } from '$lib/sql';
+  import { TG_SAFE_CHUNK_BYTES } from '$lib/telegramLimits';
 
   let { apiKey }: { apiKey: string } = $props();
 
-  type DbRecord = {
-    dbId: string; name: string; description?: string; totalBytes: number;
-    time: string; _type: 'database'; favorite?: boolean; metaFileId: string; folderId?: string;
-    telegramFileId?: string; telegramMessageId?: number;
+  type DbFile = {
+    metaFileId: string; metaMessageId: number; fileName: string; type: string;
+    totalBytes: number; time: string; telegramFileId: string; telegramMessageId: number;
+    favorite?: boolean; folderId?: string; id: string;
   };
   type TableInfo = { name: string; columns: { name: string; type: string; notnull: boolean; pk: boolean }[]; indexes: { name: string; columns: string[] }[] };
 
-  let databases = $state<DbRecord[]>([]);
+  let databases = $state<DbFile[]>([]);
   let loading = $state(false);
-  let openedDb = $state<DbRecord | null>(null);
+  let openedDb = $state<DbFile | null>(null);
   let sqlDb = $state<SqlDb | null>(null);
   let schema = $state<TableInfo[]>([]);
   let activeTable = $state<string | null>(null);
@@ -84,54 +85,63 @@
   async function loadDatabases() {
     loading = true;
     try {
-      const [dbRes, lsRes] = await Promise.all([
-        fetch('/api/database', { headers: { 'X-Api-Key': apiKey } }),
-        databasesFolderId ? fetch(`/api/telegram/ls?folderId=${encodeURIComponent(databasesFolderId)}`, { headers: { 'X-Api-Key': apiKey } }) : null
-      ]);
-      const dbData = await dbRes.json();
-      const dbs: DbRecord[] = dbData.databases || [];
-
-      if (lsRes) {
-        const lsData = await lsRes.json();
-        const existingIds = new Set(dbs.map(d => d.metaFileId));
-        for (const file of (lsData.files || [])) {
-          if (file._database) continue;
-          if (!file.fileName?.match(/\.(sqlite|db|sqlite3)$/i)) continue;
-          if (existingIds.has(file.metaFileId)) continue;
-          dbs.push({
-            dbId: 'file:' + file.metaFileId,
-            name: file.fileName.replace(/\.(sqlite|db|sqlite3)$/i, ''),
-            totalBytes: file.totalBytes,
-            time: file.time,
-            metaFileId: file.metaFileId,
-            telegramFileId: file.telegramFileId,
-            telegramMessageId: file.telegramMessageId,
-            _type: 'database',
-            folderId: file.folderId,
-          });
-        }
-      }
-
-      databases = dbs.sort((a, b) =>
-        (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0) || new Date(b.time).getTime() - new Date(a.time).getTime()
-      );
+      const res = await fetch(`/api/telegram/ls?folderId=${encodeURIComponent(databasesFolderId || '')}`, { headers: { 'X-Api-Key': apiKey } });
+      const data = await res.json();
+      databases = (data.files || []).filter((f: any) => f.fileName?.match(/\.(sqlite|db|sqlite3)$/i));
     } finally { loading = false; }
+  }
+
+  async function uploadSqliteBytes(bytes: Uint8Array, fileName: string): Promise<{ metaFileId: string; metaMessageId: number } | null> {
+    const CHUNK = TG_SAFE_CHUNK_BYTES;
+    const numChunks = Math.max(1, Math.ceil(bytes.length / CHUNK));
+    const chunks: { index: number; file_id: string; message_id: number; size: number }[] = [];
+
+    for (let i = 0; i < numChunks; i++) {
+      const start = i * CHUNK;
+      const end = Math.min(start + CHUNK, bytes.length);
+      const blob = new Blob([bytes.slice(start, end)]);
+
+      const res = await fetch('/api/telegram/uploadChunk', {
+        method: 'POST',
+        headers: {
+          'X-Api-Key': apiKey,
+          'X-Chunk-Index': String(i),
+          'X-File-Name': encodeURIComponent(fileName),
+          'Content-Type': 'application/octet-stream'
+        },
+        body: blob
+      });
+      if (!res.ok) return null;
+      chunks.push(await res.json());
+    }
+
+    const finRes = await fetch('/api/telegram/finalizeUpload', {
+      method: 'POST',
+      headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileName, type: 'application/x-sqlite3', totalBytes: bytes.length, chunks, folderId: databasesFolderId })
+    });
+    if (!finRes.ok) return null;
+    const fin = await finRes.json();
+    return { metaFileId: fin.metaFileId, metaMessageId: fin.metaMessageId };
+  }
+
+  async function deleteFileByMetaId(metaFileId: string) {
+    await fetch('/api/telegram/deleteFile', {
+      method: 'DELETE',
+      headers: { 'X-Api-Key': apiKey, 'X-Meta-File-Id': metaFileId }
+    });
   }
 
   async function createDatabase() {
     const name = newDbName.trim() || 'Untitled DB';
     newDbName = ''; creating = false;
-    const emptyDb = await openDatabase();
+    const emptyDb = await openDatabase(undefined, `${name}.sqlite`);
     const data = emptyDb.export();
     emptyDb.close();
-    const base64 = toBase64(new Uint8Array(data));
-    const res = await fetch('/api/database', {
-      method: 'POST',
-      headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'create', name, data: base64, folderId: databasesFolderId })
-    });
-    const result = await res.json();
-    if (result.database) databases = [result.database, ...databases];
+    const result = await uploadSqliteBytes(new Uint8Array(data), `${name}.sqlite`);
+    if (result) {
+      await loadDatabases();
+    }
   }
 
   async function importDatabase() {
@@ -142,66 +152,52 @@
       const file = input.files?.[0];
       if (!file) return;
       const buf = await file.arrayBuffer();
-      const base64 = toBase64(new Uint8Array(buf));
-      const res = await fetch('/api/database', {
-        method: 'POST',
-        headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'import', name: file.name.replace(/\.(sqlite|db|sqlite3)$/, ''), data: base64, folderId: databasesFolderId })
-      });
-      const data = await res.json();
-      if (data.database) databases = [data.database, ...databases];
+      const result = await uploadSqliteBytes(new Uint8Array(buf), file.name);
+      if (result) {
+        await loadDatabases();
+      }
     };
     input.click();
   }
 
-  async function deleteDb(dbId: string) {
-    if (!dbId.startsWith('file:')) {
-      await fetch('/api/database', {
-        method: 'POST',
-        headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'delete', dbId })
-      });
-    }
-    databases = databases.filter(d => d.dbId !== dbId);
-    if (openedDb?.dbId === dbId) closeDb();
+  async function deleteDb(db: DbFile) {
+    await deleteFileByMetaId(db.metaFileId);
+    databases = databases.filter(d => d.metaFileId !== db.metaFileId);
+    if (openedDb?.metaFileId === db.metaFileId) closeDb();
   }
 
-  async function toggleFavorite(dbId: string) {
-    if (!dbId.startsWith('file:')) {
-      await fetch('/api/database', {
-        method: 'POST',
-        headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'toggleFavorite', dbId })
-      });
-    }
-    databases = databases.map(d => d.dbId === dbId ? { ...d, favorite: !d.favorite } : d);
+  async function toggleFavorite(db: DbFile) {
+    await fetch('/api/telegram/toggleFavorite', {
+      method: 'POST',
+      headers: { 'X-Api-Key': apiKey, 'X-Meta-File-Id': db.metaFileId }
+    });
+    databases = databases.map(d => d.metaFileId === db.metaFileId ? { ...d, favorite: !d.favorite } : d);
+    if (openedDb?.metaFileId === db.metaFileId) openedDb = { ...openedDb, favorite: !openedDb.favorite };
   }
 
-  async function renameDb(dbId: string) {
+  async function renameDb(db: DbFile) {
     const name = renameValue.trim();
     if (!name) return;
     renamingDb = null;
-    if (!dbId.startsWith('file:')) {
-      await fetch('/api/database', {
-        method: 'POST',
-        headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'rename', dbId, name })
-      });
-    }
-    databases = databases.map(d => d.dbId === dbId ? { ...d, name } : d);
-    if (openedDb?.dbId === dbId) openedDb = { ...openedDb, name };
+    await fetch('/api/telegram/renameFile', {
+      method: 'PATCH',
+      headers: { 'X-Api-Key': apiKey, 'X-Meta-File-Id': db.metaFileId, 'X-New-Name': encodeURIComponent(name + '.sqlite') }
+    });
+    const newName = name + '.sqlite';
+    databases = databases.map(d => d.metaFileId === db.metaFileId ? { ...d, fileName: newName } : d);
+    if (openedDb?.metaFileId === db.metaFileId) openedDb = { ...openedDb, fileName: newName };
   }
 
-  async function downloadDb(db: DbRecord) {
+  async function downloadDb(db: DbFile) {
     const res = await fetch(`/api/telegram/getRequestFile?api_key=${encodeURIComponent(apiKey)}&meta_file_id=${encodeURIComponent(db.metaFileId)}&download=true`);
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = `${db.name}.sqlite`; a.click();
+    a.href = url; a.download = db.fileName; a.click();
     URL.revokeObjectURL(url);
   }
 
-  async function openDb(db: DbRecord) {
+  async function openDb(db: DbFile) {
     openedDb = db;
     activeTable = null;
     tableData = null;
@@ -214,12 +210,12 @@
 
     const res = await fetch(`/api/telegram/getRequestFile?api_key=${encodeURIComponent(apiKey)}&meta_file_id=${encodeURIComponent(db.metaFileId)}`);
     const buf = await res.arrayBuffer();
-    sqlDb = await openDatabase(new Uint8Array(buf));
-    schema = getSchema(sqlDb).tables;
+    sqlDb = await openDatabase(new Uint8Array(buf), db.fileName);
+    schema = (await getSchema(sqlDb)).tables;
   }
 
-  function closeDb() {
-    sqlDb?.close();
+  async function closeDb() {
+    if (sqlDb) await closeDatabase(sqlDb);
     sqlDb = null;
     openedDb = null;
     schema = [];
@@ -228,9 +224,9 @@
     queryResult = null;
   }
 
-  function refreshSchema() {
+  async function refreshSchema() {
     if (!sqlDb) return;
-    schema = getSchema(sqlDb).tables;
+    schema = (await getSchema(sqlDb)).tables;
   }
 
   async function selectTable(tableName: string) {
@@ -241,22 +237,22 @@
     addingRow = false;
     editingCell = null;
     try {
-      const result = sqlQuery(sqlDb, `SELECT * FROM "${tableName}"`);
+      const result = await sqlQuery(sqlDb, `SELECT * FROM "${tableName}"`);
       tableData = result;
     } catch { tableData = { columns: [], values: [] }; }
   }
 
-  function runQuery() {
+  async function runQuery() {
     if (!sqlDb || !sqlInput.trim()) return;
     running = true;
     queryError = '';
     queryResult = null;
     try {
-      const result = sqlQuery(sqlDb, sqlInput.trim());
+      const result = await sqlQuery(sqlDb, sqlInput.trim());
       queryResult = result;
-      refreshSchema();
+      await refreshSchema();
       if (activeTable) {
-        const refreshed = sqlQuery(sqlDb, `SELECT * FROM "${activeTable}"`);
+        const refreshed = await sqlQuery(sqlDb, `SELECT * FROM "${activeTable}"`);
         tableData = refreshed;
       }
     } catch (e: any) {
@@ -264,40 +260,28 @@
     } finally { running = false; }
   }
 
-  function execSql(sql: string) {
+  async function execSql(sql: string) {
     if (!sqlDb) return;
-    sqlQuery(sqlDb, sql);
+    await sqlQuery(sqlDb, sql);
     hasUnsavedChanges = true;
-    refreshSchema();
+    await refreshSchema();
     if (activeTable) {
       try {
-        tableData = sqlQuery(sqlDb, `SELECT * FROM "${activeTable}"`);
+        tableData = await sqlQuery(sqlDb, `SELECT * FROM "${activeTable}"`);
       } catch {}
     }
   }
 
   async function saveDb() {
     if (!sqlDb || !openedDb) return;
-    const data = sqlDb.export();
-    const base64 = toBase64(new Uint8Array(data));
+    const bytes = await exportDatabase(sqlDb);
 
-    if (openedDb.dbId.startsWith('file:')) {
-      const res = await fetch('/api/database', {
-        method: 'POST',
-        headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'import', name: openedDb.name, data: base64, folderId: databasesFolderId })
-      });
-      const result = await res.json();
-      if (result.database) {
-        openedDb = result.database;
-        databases = databases.map(d => d.metaFileId === openedDb!.metaFileId ? result.database : d);
-      }
-    } else {
-      await fetch('/api/database', {
-        method: 'POST',
-        headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'update', dbId: openedDb.dbId, data: base64 })
-      });
+    await deleteFileByMetaId(openedDb.metaFileId);
+    const result = await uploadSqliteBytes(bytes, openedDb.fileName);
+    if (result) {
+      await loadDatabases();
+      const updated = databases.find(d => d.metaFileId === result.metaFileId);
+      if (updated) openedDb = updated;
     }
 
     hasUnsavedChanges = false;
@@ -324,7 +308,7 @@
     newColumns = newColumns.filter((_, i) => i !== idx);
   }
 
-  function confirmCreateTable() {
+  async function confirmCreateTable() {
     const name = newTableName.trim();
     if (!name || !sqlDb) return;
     const colDefs = newColumns
@@ -333,9 +317,9 @@
       .join(', ');
     if (!colDefs) return;
     try {
-      execSql(`CREATE TABLE "${name}" (${colDefs})`);
+      await execSql(`CREATE TABLE "${name}" (${colDefs})`);
       creatingTable = false;
-      selectTable(name);
+      await selectTable(name);
     } catch (e: any) {
       queryError = e.message;
     }
@@ -347,10 +331,10 @@
     newColType = 'TEXT';
   }
 
-  function confirmAddColumn() {
+  async function confirmAddColumn() {
     if (!sqlDb || !activeTable || !newColName.trim()) return;
     try {
-      execSql(`ALTER TABLE "${activeTable}" ADD COLUMN "${newColName.trim()}" ${newColType}`);
+      await execSql(`ALTER TABLE "${activeTable}" ADD COLUMN "${newColName.trim()}" ${newColType}`);
       addingColumn = false;
     } catch (e: any) {
       queryError = e.message;
@@ -363,12 +347,12 @@
     newRowValues = tableData.columns.map(() => '');
   }
 
-  function confirmAddRow() {
+  async function confirmAddRow() {
     if (!sqlDb || !activeTable || !tableData) return;
     const cols = tableData.columns.map(c => `"${c}"`).join(', ');
     const vals = newRowValues.map(v => v === '' ? 'NULL' : `'${v.replace(/'/g, "''")}'`).join(', ');
     try {
-      execSql(`INSERT INTO "${activeTable}" (${cols}) VALUES (${vals})`);
+      await execSql(`INSERT INTO "${activeTable}" (${cols}) VALUES (${vals})`);
       addingRow = false;
     } catch (e: any) {
       queryError = e.message;
@@ -380,7 +364,7 @@
     editValue = tableData?.values[row]?.[col] ?? '';
   }
 
-  function confirmEditCell() {
+  async function confirmEditCell() {
     if (!sqlDb || !activeTable || !tableData || !editingCell) return;
     const col = tableData.columns[editingCell.col];
     const row = tableData.values[editingCell.row];
@@ -390,21 +374,21 @@
     const pkVal = row[pkIdx];
     const newVal = editValue === '' ? 'NULL' : `'${editValue.replace(/'/g, "''")}'`;
     try {
-      execSql(`UPDATE "${activeTable}" SET "${col}" = ${newVal} WHERE "${pkCol.name}" = ${pkVal}`);
+      await execSql(`UPDATE "${activeTable}" SET "${col}" = ${newVal} WHERE "${pkCol.name}" = ${pkVal}`);
     } catch (e: any) {
       queryError = e.message;
     }
     editingCell = null;
   }
 
-  function deleteRow(rowIdx: number) {
+  async function deleteRow(rowIdx: number) {
     if (!sqlDb || !activeTable || !tableData) return;
     const pkCol = schema.find(t => t.name === activeTable)?.columns.find(c => c.pk);
     if (!pkCol) return;
     const pkIdx = tableData.columns.indexOf(pkCol.name);
     const pkVal = tableData.values[rowIdx][pkIdx];
     try {
-      execSql(`DELETE FROM "${activeTable}" WHERE "${pkCol.name}" = ${pkVal}`);
+      await execSql(`DELETE FROM "${activeTable}" WHERE "${pkCol.name}" = ${pkVal}`);
     } catch (e: any) {
       queryError = e.message;
     }
@@ -417,10 +401,10 @@
     deletingTable = tableName;
   }
 
-  function confirmDeleteTable() {
+  async function confirmDeleteTable() {
     if (!sqlDb || !deletingTable) return;
     try {
-      execSql(`DROP TABLE "${deletingTable}"`);
+      await execSql(`DROP TABLE "${deletingTable}"`);
       if (activeTable === deletingTable) {
         activeTable = null;
         tableData = null;
@@ -431,15 +415,6 @@
     }
   }
 
-  function toBase64(bytes: Uint8Array): string {
-    let binary = '';
-    const chunk = 8192;
-    for (let i = 0; i < bytes.length; i += chunk) {
-      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
-    }
-    return btoa(binary);
-  }
-
   function formatBytes(b: number) {
     if (b < 1024) return b + ' B';
     if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
@@ -448,6 +423,10 @@
 
   function formatDate(iso: string) {
     return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  function dbDisplayName(db: DbFile) {
+    return db.fileName.replace(/\.(sqlite|db|sqlite3)$/i, '');
   }
 
   let paginatedValues = $derived((() => {
@@ -502,38 +481,35 @@
       </div>
     {:else}
       <div class="db-grid">
-        {#each databases as db (db.dbId)}
+        {#each databases as db (db.metaFileId)}
           <div class="db-box" class:favorite={db.favorite}>
             <div class="db-box-header">
               <button class="db-box-name" onclick={() => openDb(db)}>
                 <IconDatabase size={16} />
-                {db.name}
+                {dbDisplayName(db)}
               </button>
-              <button class="star-btn" onclick={() => toggleFavorite(db.dbId)}>
+              <button class="star-btn" onclick={() => toggleFavorite(db)}>
                 {#if db.favorite}<IconStarFilled size={14} />{:else}<IconStar size={14} />{/if}
               </button>
             </div>
-            {#if db.description}
-              <div class="db-box-desc">{db.description}</div>
-            {/if}
             <div class="db-box-meta">
               <span>{formatBytes(db.totalBytes)}</span>
               <span>{formatDate(db.time)}</span>
             </div>
             <div class="db-box-actions">
-              {#if renamingDb === db.dbId}
+              {#if renamingDb === db.metaFileId}
                 <input type="text" class="rename-input" bind:value={renameValue}
-                  onkeydown={(e) => { if (e.key === 'Enter') renameDb(db.dbId); if (e.key === 'Escape') renamingDb = null; }}
+                  onkeydown={(e) => { if (e.key === 'Enter') renameDb(db); if (e.key === 'Escape') renamingDb = null; }}
                   onclick={(e) => e.stopPropagation()} autofocus />
               {:else}
-                <button class="db-btn-sm" onclick={(e) => { e.stopPropagation(); renamingDb = db.dbId; renameValue = db.name; }} title="Rename">
+                <button class="db-btn-sm" onclick={(e) => { e.stopPropagation(); renamingDb = db.metaFileId; renameValue = dbDisplayName(db); }} title="Rename">
                   <IconEdit size={12} />
                 </button>
               {/if}
               <button class="db-btn-sm" onclick={(e) => { e.stopPropagation(); downloadDb(db); }} title="Download">
                 <IconDownload size={12} />
               </button>
-              <button class="db-btn-sm danger" onclick={(e) => { e.stopPropagation(); deleteDb(db.dbId); }} title="Delete">
+              <button class="db-btn-sm danger" onclick={(e) => { e.stopPropagation(); deleteDb(db); }} title="Delete">
                 <IconTrash size={12} />
               </button>
             </div>
@@ -547,7 +523,7 @@
       <div class="editor-title">
         <button class="back-btn" onclick={closeDb}>&larr;</button>
         <IconDatabase size={16} />
-        <span>{openedDb.name}</span>
+        <span>{dbDisplayName(openedDb)}</span>
         {#if hasUnsavedChanges}<span class="unsaved-dot" title="Unsaved changes"></span>{/if}
       </div>
       <div class="editor-actions">
@@ -841,7 +817,6 @@
   .db-box-name:hover { color: var(--accent); }
   .star-btn { background: none; border: none; color: var(--text-3); cursor: pointer; padding: 2px; }
   .star-btn:hover { color: #f5a623; }
-  .db-box-desc { font-size: 12px; color: var(--text-3); }
   .db-box-meta { display: flex; gap: 12px; font-size: 11px; color: var(--text-3); }
   .db-box-actions { display: flex; gap: 4px; margin-top: auto; }
   .rename-input { padding: 3px 6px; border-radius: 4px; border: 1px solid var(--accent); background: var(--bg-1);

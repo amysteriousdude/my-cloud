@@ -33,22 +33,6 @@ export type FileRecord = {
   parentId?: string;
 };
 
-export type DatabaseRecord = {
-  dbId: string;
-  name: string;
-  description?: string;
-  totalBytes: number;
-  time: string;
-  metaFileId: string;
-  metaMessageId: number;
-  telegramFileId: string;
-  telegramMessageId: number;
-  _type: 'database';
-  tags?: string[];
-  favorite?: boolean;
-  folderId?: string;
-};
-
 const BOT_TOKEN = (typeof process !== 'undefined' && process.env?.TELEGRAM_BOT_TOKEN) || '';
 const CHAT_ID = (typeof process !== 'undefined' && process.env?.TELEGRAM_BACKUP_CHAT_ID) || '';
 const TELE_API = BOT_TOKEN ? `https://api.telegram.org/bot${BOT_TOKEN}` : null;
@@ -477,119 +461,6 @@ export async function deleteFile(metaFileId: string): Promise<boolean> {
   }
 }
 
-/* -------------------- Database CRUD -------------------- */
-
-export async function listDatabases(): Promise<DatabaseRecord[]> {
-  const registry = await readRegistry() ?? {};
-  return Object.values(registry).filter((r: any) => r?._type === 'database') as DatabaseRecord[];
-}
-
-export async function createDatabase(name: string, dbData: Uint8Array, description?: string, folderId?: string): Promise<DatabaseRecord> {
-  const tmp = `/tmp/_db_${Date.now()}.sqlite`;
-  await fs.promises.writeFile(tmp, Buffer.from(dbData));
-  const { message_id: telegramMessageId, file_id: telegramFileId } = await uploadFileStream(tmp, `${name}.sqlite`);
-
-  const meta = { name, totalBytes: dbData.length, type: 'application/x-sqlite3', time: new Date().toISOString() };
-  const { message_id: metaMessageId, file_id: metaFileId } = await uploadJsonToTelegram(meta, `${name}.sqlite.meta.json`);
-
-  const dbId = `db:${crypto.randomUUID()}`;
-  const record: DatabaseRecord = {
-    dbId, name, description,
-    totalBytes: dbData.length,
-    time: meta.time,
-    metaFileId, metaMessageId,
-    telegramFileId, telegramMessageId,
-    _type: 'database',
-    ...(folderId ? { folderId } : {}),
-  };
-
-  await acquireMutex();
-  try {
-    const registry = await readRegistry() ?? {};
-    registry[dbId] = record;
-    await writeRegistryInternal(registry);
-  } finally {
-    releaseMutex();
-  }
-
-  return record;
-}
-
-export async function deleteDatabase(dbId: string): Promise<boolean> {
-  await acquireMutex();
-  try {
-    const registry = await readRegistry() ?? {};
-    const rec = registry[dbId] as DatabaseRecord;
-    if (!rec || rec._type !== 'database') return false;
-
-    const toDelete = [rec.telegramMessageId, rec.metaMessageId].filter(id => id > 0);
-    await Promise.all(
-      toDelete.map(message_id =>
-        axios.post(`${TELE_API}/deleteMessage`, null, {
-          params: { chat_id: CHAT_ID, message_id }
-        }).catch(() => {})
-      )
-    );
-
-    delete registry[dbId];
-    await writeRegistryInternal(registry);
-    return true;
-  } finally {
-    releaseMutex();
-  }
-}
-
-export async function renameDatabase(dbId: string, newName: string): Promise<boolean> {
-  await acquireMutex();
-  try {
-    const registry = await readRegistry() ?? {};
-    const rec = registry[dbId] as DatabaseRecord;
-    if (!rec || rec._type !== 'database') return false;
-    rec.name = newName;
-    await writeRegistryInternal(registry);
-    return true;
-  } finally {
-    releaseMutex();
-  }
-}
-
-export async function toggleDatabaseFavorite(dbId: string): Promise<boolean> {
-  await acquireMutex();
-  try {
-    const registry = await readRegistry() ?? {};
-    const rec = registry[dbId] as DatabaseRecord;
-    if (!rec || rec._type !== 'database') return false;
-    rec.favorite = !rec.favorite;
-    await writeRegistryInternal(registry);
-    return true;
-  } finally {
-    releaseMutex();
-  }
-}
-
-export async function updateDatabaseFile(dbId: string, dbData: Uint8Array): Promise<boolean> {
-  await acquireMutex();
-  try {
-    const registry = await readRegistry() ?? {};
-    const rec = registry[dbId] as DatabaseRecord;
-    if (!rec || rec._type !== 'database') return false;
-
-    const tmp = `/tmp/_db_${Date.now()}.sqlite`;
-    await fs.promises.writeFile(tmp, Buffer.from(dbData));
-    const { message_id, file_id } = await uploadFileStream(tmp, `${rec.name}.sqlite`);
-
-    rec.telegramMessageId = message_id;
-    rec.telegramFileId = file_id;
-    rec.totalBytes = dbData.length;
-    rec.time = new Date().toISOString();
-
-    await writeRegistryInternal(registry);
-    return true;
-  } finally {
-    releaseMutex();
-  }
-}
-
 /* -------------------- File upload (never pins) -------------------- */
 
 export async function uploadFileToTelegram(tmpPath: string, filename?: string): Promise<{ message_id: number; file_id: string }> {
@@ -865,10 +736,4 @@ export default {
   pinChatMessage,
   acquireMutex,
   releaseMutex,
-  listDatabases,
-  createDatabase,
-  deleteDatabase,
-  renameDatabase,
-  toggleDatabaseFavorite,
-  updateDatabaseFile,
 };
