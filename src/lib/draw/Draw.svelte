@@ -400,8 +400,8 @@
       return;
     }
 
-    // ── Transform handle interaction (works with any tool) ──
-    if (hasSelection && showTransformControls) {
+    // ── Transform handle interaction (MOVE tool only) ──
+    if (hasSelection && showTransformControls && tool === "move") {
       const handleHit = hitTestTransformHandle(e);
       if (handleHit) {
         const bbox = getSelectionBBox();
@@ -415,6 +415,20 @@
     }
 
     if (tool === "eyedropper") { pickColor(e); return; }
+    if (tool === "fill") {
+      const pt = svgPoint(e);
+      const s: Stroke = {
+        id: uid(), tool: "fill", color: fgColor, baseWidth: 0,
+        opacity: opacity / 100, fill: true,
+        points: [{ x: 0, y: 0, pressure: 0.5, time: performance.now() }],
+        shapeType: "rect", sx: 0, sy: 0, ex: w, ey: h,
+        layerId: getActiveLayer().id,
+      };
+      getActiveLayer().strokes = [...getActiveLayer().strokes, s];
+      pushHistory({ action: "stroke", layerId: s.layerId, strokes: [s] });
+      layers = [...layers];
+      return;
+    }
     if (tool === "select") {
       const els = document.elementsFromPoint(e.clientX, e.clientY);
       let hitId: string | null = null;
@@ -1559,8 +1573,8 @@
           <label class="ob-check"><input type="checkbox" bind:checked={showTransformControls}/> Transform controls</label>
           {#if hasSelection}
             <div class="ob-sep"></div>
-            <button class="ob-btn" onclick={duplicateSelected}>Duplicate</button>
-            <button class="ob-btn" onclick={deleteSelected}>Delete</button>
+            <button class="ob-btn ob-btn-wide" onclick={duplicateSelected}>Duplicate</button>
+            <button class="ob-btn ob-btn-wide" onclick={deleteSelected}>Delete</button>
           {/if}
         {:else if ["line","rect","ellipse","arrow","triangle"].includes(tool)}
           <label class="ob-label">Stroke
@@ -1595,11 +1609,6 @@
             <input type="range" min="0" max="100" value="32" class="ob-slider"/>
             <span class="ob-val">32</span>
           </label>
-        {/if}
-
-        {#if !["move","select"].includes(tool)}
-          <div class="ob-spacer"></div>
-          <label class="ob-check ob-right"><input type="checkbox" bind:checked={showTransformControls}/> Transform</label>
         {/if}
       </div>
 
@@ -1693,23 +1702,19 @@
               {/if}
             {/each}
 
-            {#if selectedIds.size > 0 && showTransformControls}
+            {#if selectedIds.size > 0 && showTransformControls && tool === "move"}
               {@const selBbox = getSelectionBBox()}
               {#if selBbox}
                 {@const th = getTransformHandles(selBbox)}
                 <g class="transform-group" transform="rotate({selectionRotation}, {th.cx}, {th.cy})">
-                  <!-- Bounding box -->
                   <rect x={selBbox.x} y={selBbox.y} width={selBbox.w} height={selBbox.h} fill="none" stroke="#fff" stroke-width={1.5 / zoom} pointer-events="none"/>
                   <rect x={selBbox.x} y={selBbox.y} width={selBbox.w} height={selBbox.h} fill="none" stroke="#4488ff" stroke-width={1 / zoom} stroke-dasharray="{4/zoom} {3/zoom}" pointer-events="none"/>
-                  <!-- Edge midpoints -->
                   {#each th.edges as h}
                     <rect x={h.x - 4/zoom} y={h.y - 4/zoom} width={8/zoom} height={8/zoom} fill="#fff" stroke="#4488ff" stroke-width={1/zoom} style="cursor:{h.cursor}" data-handle={h.id}/>
                   {/each}
-                  <!-- Corner handles -->
                   {#each th.corners as h}
                     <rect x={h.x - 4/zoom} y={h.y - 4/zoom} width={8/zoom} height={8/zoom} fill="#fff" stroke="#4488ff" stroke-width={1/zoom} style="cursor:{h.cursor}" data-handle={h.id}/>
                   {/each}
-                  <!-- Rotation lines + handles -->
                   {#each th.rotations as r, ri}
                     {@const corner = th.corners[ri]}
                     <line x1={corner.x} y1={corner.y} x2={r.x} y2={r.y} stroke="#4488ff" stroke-width={0.75/zoom} pointer-events="none"/>
@@ -1719,14 +1724,20 @@
               {/if}
             {/if}
 
-            {#if selectedIds.size > 0 && !showTransformControls}
-              {@const layer = getActiveLayer()}
-              {#each layer.strokes.filter(s => selectedIds.has(s.id)) as s (s.id)}
-                {@const bbox = getStrokeBBox(s)}
-                {#if bbox}
-                  <rect x={bbox.x - 2} y={bbox.y - 2} width={bbox.w + 4} height={bbox.h + 4} fill="none" stroke="#4488ff" stroke-width="1.5" stroke-dasharray="4 3" pointer-events="none"/>
-                {/if}
-              {/each}
+            {#if selectedIds.size > 0}
+              {#if !(showTransformControls && tool === "move")}
+                {@const layer = getActiveLayer()}
+                {#each layer.strokes.filter(s => selectedIds.has(s.id)) as s (s.id)}
+                  {@const bbox = getStrokeBBox(s)}
+                  {#if bbox}
+                    <rect x={bbox.x - 2} y={bbox.y - 2} width={bbox.w + 4} height={bbox.h + 4} fill="none" stroke="#4488ff" stroke-width="1.5" stroke-dasharray="4 3" pointer-events="none"/>
+                  {/if}
+                {/each}
+              {/if}
+              {@const selBbox = getSelectionBBox()}
+              {#if selBbox}
+                <rect x={selBbox.x - 1} y={selBbox.y - 1} width={selBbox.w + 2} height={selBbox.h + 2} fill="none" stroke="#4488ff" stroke-width="1" stroke-dasharray="6 3" pointer-events="none"/>
+              {/if}
             {/if}
 
             {#if marqueeStart && marqueeEnd}
@@ -2011,7 +2022,8 @@
 </div>
 
 <style>
-  .draw-root { display: flex; flex-direction: column; height: 100%; width: 100%; overflow: hidden; background: #1a1a2e; user-select: none; }
+  .draw-root { display: flex; flex-direction: column; height: 100%; width: 100%; overflow: hidden; background: #1a1a2e; user-select: none; outline: none; }
+  .draw-root:focus, .draw-root:active { outline: none; }
 
   .menu-bar { display: flex; align-items: center; background: #16161e; border-bottom: 1px solid #2a2a35; height: 24px; flex-shrink: 0; padding: 0 4px; }
   .mb-item { position: relative; padding: 2px 7px; font-size: 11px; color: #8888a0; cursor: pointer; border-radius: 3px; transition: .1s; }
@@ -2069,20 +2081,22 @@
   .ob-btn { display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 3px; border: 1px solid #3a3a4a; background: #1e1e2a; color: #8888a0; font-size: 11px; font-weight: 600; cursor: pointer; transition: .1s; flex-shrink: 0; }
   .ob-btn:hover { border-color: #5050c0; color: #e0e0f0; }
   .ob-btn.active { border-color: #5050c0; background: #5050c0; color: #fff; }
+  .ob-btn-wide { width: auto; padding: 0 8px; gap: 0; }
   .ob-italic { font-style: italic; }
   .ob-select { background: #12121a; border: 1px solid #3a3a4a; border-radius: 3px; padding: 2px 4px; color: #b0b0c0; font-size: 10px; font-family: 'Geist', sans-serif; outline: none; max-width: 120px; }
   .ob-select:focus { border-color: #5050c0; }
 
   .canvas-container { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 0; position: relative; }
-  .ruler { background: #1c1c28; overflow: hidden; flex-shrink: 0; }
-  .ruler-h { height: 20px; width: 100%; }
-  .ruler-v { position: absolute; left: 0; top: 20px; bottom: 0; width: 20px; z-index: 2; }
+  .ruler { background: #1c1c28; overflow: hidden; flex-shrink: 0; border-color: #2a2a35; }
+  .ruler-h { height: 20px; width: 100%; border-bottom: 1px solid #2a2a35; }
+  .ruler-v { position: absolute; left: 0; top: 20px; bottom: 0; width: 20px; z-index: 2; border-right: 1px solid #2a2a35; }
   .ruler-corner { position: absolute; left: 0; top: 0; width: 20px; height: 20px; background: #1c1c28; border-right: 1px solid #2a2a35; border-bottom: 1px solid #2a2a35; z-index: 3; }
   .ruler-canvas { width: 100%; height: 100%; display: block; }
 
-  .canvas-wrap { flex: 1; overflow: hidden; position: relative; background: #12121a; min-height: 0; display: flex; align-items: center; justify-content: center; isolation: isolate; }
+  .canvas-wrap { flex: 1; overflow: hidden; position: relative; background: #12121a; min-height: 0; display: flex; align-items: center; justify-content: center; isolation: isolate; margin-left: 20px; margin-top: 20px; }
   .canvas-wrap.panning { cursor: grab !important; }
-  .draw-svg { display: block; box-shadow: 0 0 0 1px rgba(255,255,255,.03), 0 4px 24px rgba(0,0,0,.6); cursor: crosshair; flex-shrink: 0; position: relative; z-index: 2; }
+  .draw-svg { display: block; box-shadow: 0 0 0 1px rgba(255,255,255,.03), 0 4px 24px rgba(0,0,0,.6); cursor: crosshair; flex-shrink: 0; position: relative; z-index: 2; outline: none; -webkit-tap-highlight-color: transparent; }
+  .draw-svg:focus, .draw-svg:active, .draw-svg:focus-visible { outline: none; }
   .grid-overlay { position: absolute; pointer-events: none; z-index: 1; }
 
   .brush-cursor { position: absolute; pointer-events: none; border: 1.5px solid; border-radius: 50%; transform: translate(-50%, -50%); z-index: 9999; mix-blend-mode: normal; isolation: isolate; will-change: transform; transition: width .05s, height .05s, opacity .15s; }
