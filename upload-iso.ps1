@@ -1,1 +1,0 @@
-TELEGRAM_BOT_TOKEN=8607135898:AAE7Ldb4Cu1kehm4n9_OSOY2BqEf7LcyJfU TELEGRAM_CHAT_ID=-5277858622 node scripts/upload-direct.mjs D:\isos\archlinux-2026.02.01-x86_64.iso b68ac141-ad27-4928-bc10-307029733b1f https://cloud.omarplayz.eu.org

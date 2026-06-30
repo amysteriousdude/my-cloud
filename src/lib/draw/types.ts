@@ -47,6 +47,8 @@ export type Layer = {
   opacity: number;
   strokes: Stroke[];
   blendMode?: BlendMode;
+  fill?: number;
+  locked?: boolean;
 };
 
 export type BlendMode = "normal" | "multiply" | "screen" | "overlay" | "darken" | "lighten";

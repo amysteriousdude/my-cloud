@@ -139,13 +139,13 @@
 
   // ── Layers ──────────────────────────────────────────────────────────
   let layers = $state<Layer[]>([
-    { id: "bg", name: "Background", visible: true, opacity: 100, strokes: [] },
+    { id: "bg", name: "Background", visible: true, opacity: 100, strokes: [], blendMode: "normal", fill: 100 },
   ]);
   let activeLayerIdx = $state(0);
 
   function addLayer() {
     const id = "L" + Date.now().toString(36);
-    layers.push({ id, name: `Layer ${layers.length + 1}`, visible: true, opacity: 100, strokes: [] });
+    layers.push({ id, name: `Layer ${layers.length + 1}`, visible: true, opacity: 100, strokes: [], blendMode: "normal", fill: 100 });
     activeLayerIdx = layers.length - 1;
   }
 
@@ -355,6 +355,12 @@
   let selectionVersion = $state(0);
   let hasSelection = $derived(selectionVersion > 0 && selectedIds.size > 0);
 
+  // ── Transform handles ──────────────────────────────────────────────
+  let showTransformControls = $state(true);
+  let transformHandle = $state<string | null>(null);
+  let transformStart = $state<{mx:number;my:number;bbox:{x:number;y:number;w:number;h:number};rotation:number}>({mx:0,my:0,bbox:{x:0,y:0,w:0,h:0},rotation:0});
+  let selectionRotation = $state(0);
+
   // ── Strokes ─────────────────────────────────────────────────────────
   let drawing = $state(false);
   let currentStroke = $state<Stroke | null>(null);
@@ -392,6 +398,20 @@
       panning = true;
       panStart = { x: e.clientX - panX, y: e.clientY - panY };
       return;
+    }
+
+    // ── Transform handle interaction (works with any tool) ──
+    if (hasSelection && showTransformControls) {
+      const handleHit = hitTestTransformHandle(e);
+      if (handleHit) {
+        const bbox = getSelectionBBox();
+        if (bbox) {
+          transformHandle = handleHit;
+          transformStart = { mx: e.clientX, my: e.clientY, bbox: { ...bbox }, rotation: selectionRotation };
+          svgEl.setPointerCapture(e.pointerId);
+          return;
+        }
+      }
     }
 
     if (tool === "eyedropper") { pickColor(e); return; }
@@ -503,6 +523,49 @@
       return;
     }
 
+    // ── Transform handle drag ──
+    if (transformHandle) {
+      const dx = (e.clientX - transformStart.mx) / zoom;
+      const dy = (e.clientY - transformStart.my) / zoom;
+      const sb = transformStart.bbox;
+
+      if (transformHandle === "move") {
+        moveStrokes(dx, dy);
+      } else if (transformHandle.startsWith("rotate-")) {
+        const cx = sb.x + sb.w / 2;
+        const cy = sb.y + sb.h / 2;
+        const svgRect = svgEl.getBoundingClientRect();
+        const mx = (e.clientX - svgRect.left) / zoom;
+        const my = (e.clientY - svgRect.top) / zoom;
+        const angle = Math.atan2(my - cy, mx - cx) * 180 / Math.PI;
+        const prevAngle = Math.atan2((transformStart.my - svgRect.top) / zoom - cy, (transformStart.mx - svgRect.left) / zoom - cx) * 180 / Math.PI;
+        const deltaAngle = angle - prevAngle;
+        selectionRotation += deltaAngle;
+        rotateStrokes(deltaAngle, cx, cy);
+        transformStart.mx = e.clientX;
+        transformStart.my = e.clientY;
+      } else {
+        // Resize handle
+        let newX = sb.x, newY = sb.y, newW = sb.w, newH = sb.h;
+        if (transformHandle.includes("e")) { newW = Math.max(1, sb.w + dx); }
+        if (transformHandle.includes("w")) { newX = sb.x + dx; newW = Math.max(1, sb.w - dx); }
+        if (transformHandle.includes("s")) { newH = Math.max(1, sb.h + dy); }
+        if (transformHandle.includes("n")) { newY = sb.y + dy; newH = Math.max(1, sb.h - dy); }
+        if (shiftHeld) {
+          const aspect = sb.w / sb.h;
+          if (transformHandle === "n" || transformHandle === "s") { newW = newH * aspect; newX = sb.x + (sb.w - newW) / 2; }
+          else if (transformHandle === "e" || transformHandle === "w") { newH = newW / aspect; newY = sb.y + (sb.h - newH) / 2; }
+          else { const avg = (Math.abs(dx) + Math.abs(dy)) / 2; newW = sb.w + (dx > 0 ? avg : -avg); newH = newW / aspect; newX = transformHandle.includes("w") ? sb.x + sb.w - newW : sb.x; newY = transformHandle.includes("n") ? sb.y + sb.h - newH : sb.y; }
+        }
+        // Move strokes to new bbox position
+        const moveDx = newX - sb.x;
+        const moveDy = newY - sb.y;
+        if (moveDx !== 0 || moveDy !== 0) moveStrokes(moveDx, moveDy);
+        if (newW !== sb.w || newH !== sb.h) resizeSelected(newW, newH);
+      }
+      return;
+    }
+
     if (tool === "select" && marqueeStart) {
       marqueeEnd = { x: e.clientX, y: e.clientY };
       return;
@@ -563,6 +626,10 @@
 
   function pointerUp(_e: PointerEvent) {
     if (panning) { panning = false; return; }
+    if (transformHandle) {
+      transformHandle = null;
+      return;
+    }
     if (tool === "select") {
       if (marqueeStart && marqueeEnd) {
         const svgRect = svgEl.getBoundingClientRect();
@@ -737,15 +804,16 @@
     for (const layer of layers) {
       if (!layer.visible) continue;
       const erStrokes = layer.strokes.filter(s => isEraserStroke(s));
+      const blendMode = layer.blendMode && layer.blendMode !== "normal" ? `mix-blend-mode:${layer.blendMode};` : "";
       if (erStrokes.length > 0) {
         defs += `<mask id="em${layer.id}" maskUnits="userSpaceOnUse" x="0" y="0" width="${w}" height="${h}"><rect width="${w}" height="${h}" fill="white"/>`;
         for (const s of erStrokes) defs += renderEraserInMask(s);
         defs += `</mask>`;
-        inner += `<g style="isolation:isolate" opacity="${layer.opacity / 100}" mask="url(#em${layer.id})">`;
+        inner += `<g style="isolation:isolate;${blendMode}" opacity="${layer.opacity / 100}" mask="url(#em${layer.id})">`;
         for (const s of layer.strokes) { if (!isEraserStroke(s)) inner += renderStroke(s, false); }
         inner += "</g>";
       } else {
-        inner += `<g style="isolation:isolate" opacity="${layer.opacity / 100}">`;
+        inner += `<g style="isolation:isolate;${blendMode}" opacity="${layer.opacity / 100}">`;
         inner += renderLayerEraserSvg(layer);
         inner += "</g>";
       }
@@ -941,6 +1009,79 @@
     layers = [...layers];
   }
 
+  // ── Transform handle positions ────────────────────────────────────
+  function getTransformHandles(bbox: {x:number;y:number;w:number;h:number}) {
+    const cx = bbox.x + bbox.w / 2;
+    const cy = bbox.y + bbox.h / 2;
+    const handles: {id:string;x:number;y:number;cursor:string}[] = [];
+    const corners = [
+      { id: "nw", x: bbox.x, y: bbox.y, cursor: "nwse-resize" },
+      { id: "ne", x: bbox.x + bbox.w, y: bbox.y, cursor: "nesw-resize" },
+      { id: "se", x: bbox.x + bbox.w, y: bbox.y + bbox.h, cursor: "nwse-resize" },
+      { id: "sw", x: bbox.x, y: bbox.y + bbox.h, cursor: "nesw-resize" },
+    ];
+    const edges = [
+      { id: "n", x: cx, y: bbox.y, cursor: "ns-resize" },
+      { id: "e", x: bbox.x + bbox.w, y: cy, cursor: "ew-resize" },
+      { id: "s", x: cx, y: bbox.y + bbox.h, cursor: "ns-resize" },
+      { id: "w", x: bbox.x, y: cy, cursor: "ew-resize" },
+    ];
+    const rotOffset = 22;
+    const rotations = [
+      { id: "rotate-nw", x: bbox.x - rotOffset, y: bbox.y - rotOffset, cursor: "crosshair" },
+      { id: "rotate-ne", x: bbox.x + bbox.w + rotOffset, y: bbox.y - rotOffset, cursor: "crosshair" },
+      { id: "rotate-se", x: bbox.x + bbox.w + rotOffset, y: bbox.y + bbox.h + rotOffset, cursor: "crosshair" },
+      { id: "rotate-sw", x: bbox.x - rotOffset, y: bbox.y + bbox.h + rotOffset, cursor: "crosshair" },
+    ];
+    for (const c of corners) handles.push(c);
+    for (const e of edges) handles.push(e);
+    for (const r of rotations) handles.push(r);
+    return { cx, cy, corners, edges, rotations, all: handles };
+  }
+
+  function hitTestTransformHandle(e: PointerEvent): string | null {
+    if (!showTransformControls || !hasSelection) return null;
+    const bbox = getSelectionBBox();
+    if (!bbox) return null;
+    const svgRect = svgEl.getBoundingClientRect();
+    const mx = (e.clientX - svgRect.left) / zoom;
+    const my = (e.clientY - svgRect.top) / zoom;
+    const th = getTransformHandles(bbox);
+    const hitRadius = 8 / zoom;
+    for (const h of th.all) {
+      const dx = mx - h.x;
+      const dy = my - h.y;
+      if (Math.sqrt(dx * dx + dy * dy) < hitRadius) return h.id;
+    }
+    if (mx >= bbox.x && mx <= bbox.x + bbox.w && my >= bbox.y && my <= bbox.y + bbox.h) return "move";
+    return null;
+  }
+
+  function rotateStrokes(angleDeg: number, cx: number, cy: number) {
+    const rad = (angleDeg * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    const layer = getActiveLayer();
+    for (const id of selectedIds) {
+      const s = layer.strokes.find(st => st.id === id);
+      if (!s) continue;
+      if (s.shapeType) {
+        const rx1 = cos * (s.sx! - cx) - sin * (s.sy! - cy) + cx;
+        const ry1 = sin * (s.sx! - cx) + cos * (s.sy! - cy) + cy;
+        const rx2 = cos * (s.ex! - cx) - sin * (s.ey! - cy) + cx;
+        const ry2 = sin * (s.ex! - cx) + cos * (s.ey! - cy) + cy;
+        s.sx = rx1; s.sy = ry1; s.ex = rx2; s.ey = ry2;
+      } else {
+        for (const p of s.points) {
+          const rx = cos * (p.x - cx) - sin * (p.y - cy) + cx;
+          const ry = sin * (p.x - cx) + cos * (p.y - cy) + cy;
+          p.x = rx; p.y = ry;
+        }
+      }
+    }
+    layers = [...layers];
+  }
+
   function setSelectionOpacity(val: number) {
     const layer = getActiveLayer();
     for (const id of selectedIds) {
@@ -1008,6 +1149,10 @@
       if (e.key === "0") { e.preventDefault(); fitToScreen(); return; }
       if (e.key === "=" || e.key === "+") { e.preventDefault(); zoomTo(Math.min(MAX_ZOOM, zoom * 1.5)); return; }
       if (e.key === "-") { e.preventDefault(); zoomTo(Math.max(MIN_ZOOM, zoom / 1.5)); return; }
+      if (e.key === "a") { e.preventDefault(); menuAction("select-all"); return; }
+      if (e.key === "d" && !e.shiftKey) { e.preventDefault(); menuAction("deselect"); return; }
+      if (e.key === "d" && e.shiftKey) { e.preventDefault(); menuAction("select-inverse"); return; }
+      if (e.key === "i" && e.shiftKey) { e.preventDefault(); menuAction("select-inverse"); return; }
       if (e.key === "v") {
         navigator.clipboard.read().then(items => {
           for (const item of items) {
@@ -1085,7 +1230,9 @@
   });
 
   // ── UI panels ───────────────────────────────────────────────────────
-  let rightPanel = $state<"brush" | "color" | "layers" | "selection">("brush");
+  let rightPanel = $state<"brush" | "color" | "layers" | "selection" | "history" | "channels" | "paths">("brush");
+  let topPanelTab = $state<"history" | "color" | "brush">("color");
+  let bottomPanelTab = $state<"layers" | "channels" | "paths">("layers");
   let brushCategory = $state<"all" | BrushPreset["category"]>("all");
 
   let filteredPresets = $derived(
@@ -1118,6 +1265,33 @@
       case "resize": openResizeDialog(); break;
       case "flip-h": break;
       case "flip-v": break;
+      case "select-all": {
+        const layer = getActiveLayer();
+        selectedIds.clear();
+        for (const s of layer.strokes) selectedIds.add(s.id);
+        selectedIds = selectedIds;
+        selectionVersion++;
+        if (selectedIds.size > 0) rightPanel = "selection";
+        break;
+      }
+      case "deselect": {
+        selectedIds.clear();
+        selectedIds = selectedIds;
+        selectionVersion = 0;
+        break;
+      }
+      case "select-inverse": {
+        const layer = getActiveLayer();
+        const newSet = new Set<string>();
+        for (const s of layer.strokes) { if (!selectedIds.has(s.id)) newSet.add(s.id); }
+        selectedIds = newSet;
+        selectionVersion++;
+        break;
+      }
+      case "toggle-history": rightPanel = rightPanel === "history" ? "brush" : "history"; break;
+      case "toggle-color": rightPanel = rightPanel === "color" ? "brush" : "color"; break;
+      case "toggle-brush": rightPanel = rightPanel === "brush" ? "layers" : "brush"; break;
+      case "show-layers": rightPanel = "layers"; break;
     }
   }
 
@@ -1249,6 +1423,11 @@
         { label: "---" },
         { label: "Clear Layer", action: "clear", key: "" },
       ]},
+      { label: "Select", items: [
+        { label: "All", action: "select-all", key: "Ctrl+A" },
+        { label: "Deselect", action: "deselect", key: "Ctrl+D" },
+        { label: "Inverse", action: "select-inverse", key: "Ctrl+Shift+I" },
+      ]},
       { label: "View", items: [
         { label: "Fit to Screen", action: "fit", key: "Ctrl+0" },
         { label: "Zoom 100%", action: "zoom-100", key: "" },
@@ -1263,6 +1442,12 @@
         { label: "---" },
         { label: "Flip Horizontal", action: "flip-h", key: "" },
         { label: "Flip Vertical", action: "flip-v", key: "" },
+      ]},
+      { label: "Window", items: [
+        { label: rightPanel === "history" ? "✓ History" : "  History", action: "toggle-history", key: "" },
+        { label: rightPanel === "color" ? "✓ Color" : "  Color", action: "toggle-color", key: "" },
+        { label: rightPanel === "brush" ? "✓ Brush" : "  Brush", action: "toggle-brush", key: "" },
+        { label: "  Layers", action: "show-layers", key: "" },
       ]},
       { label: "Help", items: [
         { label: "Shortcuts: B/N/P/E/Shift+E/L/U/O/A/I/G/T", action: "", key: "" },
@@ -1340,15 +1525,16 @@
       <div class="options-bar">
         <span class="ob-tool">{tool}</span>
         <div class="ob-sep"></div>
-        <label class="ob-label">Size
-          <input type="range" min="0.5" max="150" step="0.5" bind:value={lineWidth} class="ob-slider"/>
-          <span class="ob-val">{lineWidth.toFixed(1)}</span>
-        </label>
-        <label class="ob-label">Opacity
-          <input type="range" min="1" max="100" bind:value={opacity} class="ob-slider"/>
-          <span class="ob-val">{opacity}%</span>
-        </label>
+
         {#if ["brush","pencil","pen","eraser","chalk"].includes(tool)}
+          <label class="ob-label">Size
+            <input type="range" min="0.5" max="150" step="0.5" bind:value={lineWidth} class="ob-slider"/>
+            <span class="ob-val">{lineWidth.toFixed(1)}</span>
+          </label>
+          <label class="ob-label">Opacity
+            <input type="range" min="1" max="100" bind:value={opacity} class="ob-slider"/>
+            <span class="ob-val">{opacity}%</span>
+          </label>
           <label class="ob-label">Hardness
             <input type="range" min="1" max="100" bind:value={hardness} class="ob-slider"/>
             <span class="ob-val">{hardness}</span>
@@ -1357,18 +1543,34 @@
             <input type="range" min="0" max="1" step="0.05" bind:value={smoothing} class="ob-slider"/>
             <span class="ob-val">{Math.round(smoothing*100)}%</span>
           </label>
-          <label class="ob-label">Taper
-            <input type="range" min="0" max="1" step="0.05" bind:value={taper} class="ob-slider"/>
-            <span class="ob-val">{Math.round(taper*100)}%</span>
+          <label class="ob-check"><input type="checkbox" bind:checked={pressureSize}/> P→Size</label>
+          <label class="ob-check"><input type="checkbox" bind:checked={pressureOpacity}/> P→Opacity</label>
+          <div class="ob-spacer"></div>
+          <select bind:value={activePresetIdx} class="ob-select" onchange={(e) => { const p = BRUSH_PRESETS[parseInt((e.target as HTMLSelectElement).value)]; if (p) applyPreset(p); }}>
+            {#each BRUSH_PRESETS as p, i}
+              <option value={i}>{p.icon} {p.name}</option>
+            {/each}
+          </select>
+        {:else if tool === "move"}
+          <label class="ob-check"><input type="checkbox" bind:checked={showTransformControls}/> Transform controls</label>
+        {:else if tool === "select"}
+          <label class="ob-check"><input type="checkbox" bind:checked={showTransformControls}/> Transform controls</label>
+          {#if hasSelection}
+            <div class="ob-sep"></div>
+            <button class="ob-btn" onclick={duplicateSelected}>Duplicate</button>
+            <button class="ob-btn" onclick={deleteSelected}>Delete</button>
+          {/if}
+        {:else if ["line","rect","ellipse","arrow","triangle"].includes(tool)}
+          <label class="ob-label">Stroke
+            <input type="range" min="0.5" max="50" step="0.5" bind:value={lineWidth} class="ob-slider"/>
+            <span class="ob-val">{lineWidth.toFixed(1)}</span>
           </label>
-          <label class="ob-check"><input type="checkbox" bind:checked={pressureSize}/> Pressure→Size</label>
-          <label class="ob-check"><input type="checkbox" bind:checked={pressureOpacity}/> Pressure→Opacity</label>
-        {/if}
-        {#if tool === "text"}
-          <label class="ob-label">Size
-            <input type="range" min="8" max="200" bind:value={fontSize} class="ob-slider"/>
-            <span class="ob-val">{fontSize}px</span>
+          <label class="ob-label">Opacity
+            <input type="range" min="1" max="100" bind:value={opacity} class="ob-slider"/>
+            <span class="ob-val">{opacity}%</span>
           </label>
+          <label class="ob-check"><input type="checkbox" bind:checked={fillShapes}/> Fill</label>
+        {:else if tool === "text"}
           <label class="ob-label">Font
             <select bind:value={fontFamily} class="ob-select">
               {#each FONT_FAMILIES as f}
@@ -1376,25 +1578,26 @@
               {/each}
             </select>
           </label>
+          <label class="ob-label">Size
+            <input type="range" min="8" max="200" bind:value={fontSize} class="ob-slider"/>
+            <span class="ob-val">{fontSize}px</span>
+          </label>
           <button class="ob-btn" class:active={fontWeight === "700"} onclick={() => fontWeight = fontWeight === "700" ? "400" : "700"} title="Bold">B</button>
           <button class="ob-btn ob-italic" class:active={fontStyle === "italic"} onclick={() => fontStyle = fontStyle === "italic" ? "normal" : "italic"} title="Italic">I</button>
           <div class="ob-sep"></div>
           <button class="ob-btn" class:active={textAlign === "left"} onclick={() => textAlign = "left"} title="Align left">≡</button>
           <button class="ob-btn" class:active={textAlign === "center"} onclick={() => textAlign = "center"} title="Align center">☰</button>
           <button class="ob-btn" class:active={textAlign === "right"} onclick={() => textAlign = "right"} title="Align right">≡</button>
+        {:else if tool === "fill"}
+          <label class="ob-label">Tolerance
+            <input type="range" min="0" max="100" value="32" class="ob-slider"/>
+            <span class="ob-val">32</span>
+          </label>
         {/if}
-        {#if ["line","rect","ellipse","arrow","triangle"].includes(tool)}
-          <label class="ob-check"><input type="checkbox" bind:checked={fillShapes}/> Fill</label>
-        {/if}
-        <div class="ob-spacer"></div>
-        {#if ["brush","pencil","pen","eraser","chalk"].includes(tool)}
-          <div class="ob-presets">
-            {#each filteredPresets as p, i}
-              <button class="ob-preset" class:active={activePresetIdx === BRUSH_PRESETS.indexOf(p)} onclick={() => applyPreset(p)} title={p.name}>
-                <span style="font-size:{Math.min(14, Math.max(9, p.size / 2))}px">{p.icon}</span>
-              </button>
-            {/each}
-          </div>
+
+        {#if !["move","select"].includes(tool)}
+          <div class="ob-spacer"></div>
+          <label class="ob-check ob-right"><input type="checkbox" bind:checked={showTransformControls}/> Transform</label>
         {/if}
       </div>
 
@@ -1475,20 +1678,46 @@
                       {/if}
                     </mask>
                   </defs>
-                  <g style="isolation:isolate" opacity={layer.opacity / 100} mask="url(#m{layer.id})">
+                  <g style="isolation:isolate;{layer.blendMode && layer.blendMode !== 'normal' ? `mix-blend-mode:${layer.blendMode};` : ''}" opacity={layer.opacity / 100} mask="url(#m{layer.id})">
                     {#each layer.strokes.filter(s => !isEraserStroke(s)) as s (s.id)}
                       {@html renderStroke(s, false)}
                     {/each}
                   </g>
                 {:else}
-                  <g style="isolation:isolate" opacity={layer.opacity / 100}>
+                  <g style="isolation:isolate;{layer.blendMode && layer.blendMode !== 'normal' ? `mix-blend-mode:${layer.blendMode};` : ''}" opacity={layer.opacity / 100}>
                     {@html renderLayerEraserSvg(layer)}
                   </g>
                 {/if}
               {/if}
             {/each}
 
-            {#if selectedIds.size > 0}
+            {#if selectedIds.size > 0 && showTransformControls}
+              {@const selBbox = getSelectionBBox()}
+              {#if selBbox}
+                {@const th = getTransformHandles(selBbox)}
+                <g class="transform-group" transform="rotate({selectionRotation}, {th.cx}, {th.cy})">
+                  <!-- Bounding box -->
+                  <rect x={selBbox.x} y={selBbox.y} width={selBbox.w} height={selBbox.h} fill="none" stroke="#fff" stroke-width={1.5 / zoom} pointer-events="none"/>
+                  <rect x={selBbox.x} y={selBbox.y} width={selBbox.w} height={selBbox.h} fill="none" stroke="#4488ff" stroke-width={1 / zoom} stroke-dasharray="{4/zoom} {3/zoom}" pointer-events="none"/>
+                  <!-- Edge midpoints -->
+                  {#each th.edges as h}
+                    <rect x={h.x - 4/zoom} y={h.y - 4/zoom} width={8/zoom} height={8/zoom} fill="#fff" stroke="#4488ff" stroke-width={1/zoom} style="cursor:{h.cursor}" data-handle={h.id}/>
+                  {/each}
+                  <!-- Corner handles -->
+                  {#each th.corners as h}
+                    <rect x={h.x - 4/zoom} y={h.y - 4/zoom} width={8/zoom} height={8/zoom} fill="#fff" stroke="#4488ff" stroke-width={1/zoom} style="cursor:{h.cursor}" data-handle={h.id}/>
+                  {/each}
+                  <!-- Rotation lines + handles -->
+                  {#each th.rotations as r, ri}
+                    {@const corner = th.corners[ri]}
+                    <line x1={corner.x} y1={corner.y} x2={r.x} y2={r.y} stroke="#4488ff" stroke-width={0.75/zoom} pointer-events="none"/>
+                    <circle cx={r.x} cy={r.y} r={4/zoom} fill="#fff" stroke="#4488ff" stroke-width={1/zoom} style="cursor:crosshair" data-handle={r.id}/>
+                  {/each}
+                </g>
+              {/if}
+            {/if}
+
+            {#if selectedIds.size > 0 && !showTransformControls}
               {@const layer = getActiveLayer()}
               {#each layer.strokes.filter(s => selectedIds.has(s.id)) as s (s.id)}
                 {@const bbox = getStrokeBBox(s)}
@@ -1585,103 +1814,30 @@
 
     <!-- ═══ RIGHT PANEL ═══ -->
     <div class="right-panel">
-      <!-- ── Color section (top) ── -->
-      <div class="rp-section rp-color-section">
-        <div class="rp-section-header" onclick={() => rightPanel = rightPanel === "color" ? "brush" : "color"}>
-          <span class="rp-section-title">Color</span>
-          <span class="rp-section-chevron" class:open={rightPanel === "color"}>▾</span>
+      <!-- ── Top panel group: History | Swatches ── -->
+      <div class="rp-panel-group">
+        <div class="rp-tabs">
+          <button class="rp-tab" class:active={topPanelTab === "history"} onclick={() => topPanelTab = "history"}>History</button>
+          <button class="rp-tab" class:active={topPanelTab === "color"} onclick={() => topPanelTab = "color"}>Swatches</button>
+          <button class="rp-tab" class:active={topPanelTab === "brush"} onclick={() => topPanelTab = "brush"}>Brush</button>
         </div>
-        {#if rightPanel === "color" || rightPanel === "brush"}
-          <div class="rp-section-body">
-            <ColorPicker bind:value={fgColor}/>
-          </div>
-        {/if}
-      </div>
-
-      <div class="rp-divider"></div>
-
-      <!-- ── Brush / Selection section (middle) ── -->
-      {#if hasSelection}
-        <div class="rp-section rp-brush-section">
-          <div class="rp-section-header" onclick={() => rightPanel = rightPanel === "selection" ? "brush" : "selection"}>
-            <span class="rp-section-title">Selection</span>
-            <span class="rp-section-chevron" class:open={rightPanel === "selection"}>▾</span>
-          </div>
-          {#if rightPanel === "selection"}
-            {@const selStrokes = getSelectedStrokes()}
-            {@const bbox = getSelectionBBox()}
-            <div class="rp-section-body">
-              {#if selStrokes.length > 0 && bbox}
-                <div class="rp-heading">Position</div>
-                <div class="sel-row">
-                  <label class="sel-field">X
-                    <input type="number" value={Math.round(bbox.x)} onchange={(e) => {
-                      const val = parseFloat((e.target as HTMLInputElement).value);
-                      if (!isNaN(val)) moveStrokes(val - bbox.x, 0);
-                    }}/>
-                  </label>
-                  <label class="sel-field">Y
-                    <input type="number" value={Math.round(bbox.y)} onchange={(e) => {
-                      const val = parseFloat((e.target as HTMLInputElement).value);
-                      if (!isNaN(val)) moveStrokes(0, val - bbox.y);
-                    }}/>
-                  </label>
-                </div>
-                <div class="rp-heading">Size</div>
-                <div class="sel-row">
-                  <label class="sel-field">W
-                    <input type="number" min="1" value={Math.round(bbox.w)} onchange={(e) => {
-                      const val = parseFloat((e.target as HTMLInputElement).value);
-                      if (!isNaN(val) && val > 0) {
-                        if (lockAspect && bbox.h > 0) { resizeSelected(val, val * (bbox.h / bbox.w)); }
-                        else { resizeSelected(val, bbox.h); }
-                      }
-                    }}/>
-                  </label>
-                  <label class="sel-field">H
-                    <input type="number" min="1" value={Math.round(bbox.h)} onchange={(e) => {
-                      const val = parseFloat((e.target as HTMLInputElement).value);
-                      if (!isNaN(val) && val > 0) {
-                        if (lockAspect && bbox.w > 0) { resizeSelected(bbox.w * (val / bbox.h), val); }
-                        else { resizeSelected(bbox.w, val); }
-                      }
-                    }}/>
-                  </label>
-                  <!-- svelte-ignore a11y_consider_explicit_label -->
-                  <button class="sel-lock" class:active={lockAspect} onclick={() => lockAspect = !lockAspect} title="Lock aspect ratio">
-                    {#if lockAspect}<IconLock size={14}/>{:else}<IconLockOpen size={14}/>{/if}
-                  </button>
-                </div>
-                <div class="rp-heading">Appearance</div>
-                <label class="sel-field sel-full">Opacity
-                  <input type="range" min="1" max="100" value={Math.round((selStrokes[0]?.opacity ?? 1) * 100)} oninput={(e) => setSelectionOpacity(parseInt((e.target as HTMLInputElement).value))}/>
-                  <span>{Math.round((selStrokes[0]?.opacity ?? 1) * 100)}%</span>
-                </label>
-                {#if selStrokes.every(s => s.tool !== "eraser" && !s.imageData)}
-                  <label class="sel-field sel-full">Color
-                    <input type="color" value={selStrokes[0]?.color ?? "#000000"} oninput={(e) => setSelectionColor((e.target as HTMLInputElement).value)}/>
-                  </label>
-                {/if}
-                <div class="sel-actions">
-                  <button class="sel-btn" onclick={duplicateSelected}>Duplicate</button>
-                  <button class="sel-btn danger" onclick={deleteSelected}>Delete</button>
-                </div>
+        <div class="rp-panel-body">
+          {#if topPanelTab === "history"}
+            <div class="rp-history-list">
+              {#if undoStack.length === 0 && redoStack.length === 0}
+                <p class="rp-empty">No history yet</p>
               {:else}
-                <p class="sel-empty">Select an object to edit</p>
+                {#each [...undoStack].reverse() as entry, i}
+                  <div class="rp-history-item">
+                    <span class="rp-history-icon">{entry.action === "stroke" ? "✏" : entry.action === "clear" ? "🗑" : "◆"}</span>
+                    <span class="rp-history-label">{entry.action === "stroke" ? `Stroke (${entry.strokes.length})` : entry.action === "clear" ? "Clear Layer" : entry.action}</span>
+                  </div>
+                {/each}
               {/if}
             </div>
-          {/if}
-        </div>
-        <div class="rp-divider"></div>
-      {/if}
-
-      <div class="rp-section rp-brush-section">
-        <div class="rp-section-header" onclick={() => rightPanel = rightPanel === "brush" ? "layers" : "brush"}>
-          <span class="rp-section-title">Brush</span>
-          <span class="rp-section-chevron" class:open={rightPanel === "brush"}>▾</span>
-        </div>
-        {#if rightPanel === "brush"}
-          <div class="rp-section-body">
+          {:else if topPanelTab === "color"}
+            <ColorPicker bind:value={fgColor}/>
+          {:else if topPanelTab === "brush"}
             <div class="rp-cats">
               {#each ["all","basic","paint","ink","sketch","special"] as cat}
                 <button class="rp-cat" class:active={brushCategory === cat} onclick={() => brushCategory = cat as any}>{cat}</button>
@@ -1703,42 +1859,149 @@
             <label class="rp-slider">Taper<input type="range" min="0" max="1" step="0.05" bind:value={taper}/><span>{Math.round(taper*100)}%</span></label>
             <label class="rp-slider">Angle<input type="range" min="-90" max="90" bind:value={brushAngle}/><span>{brushAngle}°</span></label>
             <label class="rp-slider">Scatter<input type="range" min="0" max="3" step="0.1" bind:value={scatter}/><span>{scatter.toFixed(1)}</span></label>
-          </div>
-        {/if}
+          {/if}
+        </div>
       </div>
 
       <div class="rp-divider"></div>
 
-      <!-- ── Layers section (bottom, always visible) ── -->
-      <div class="rp-section rp-layers-section">
-        <div class="rp-section-header">
-          <span class="rp-section-title">Layers</span>
-          <div class="rp-layer-actions">
-            <button class="rp-layer-btn" onclick={addLayer} title="Add layer">+</button>
-            <button class="rp-layer-btn" onclick={removeLayer} disabled={layers.length <= 1} title="Delete layer">🗑</button>
-            <button class="rp-layer-btn" onclick={moveLayerUp} disabled={activeLayerIdx >= layers.length - 1} title="Move up">↑</button>
-            <button class="rp-layer-btn" onclick={moveLayerDown} disabled={activeLayerIdx <= 0} title="Move down">↓</button>
+      <!-- ── Selection properties (contextual) ── -->
+      {#if hasSelection}
+        <div class="rp-section">
+          <div class="rp-section-header" onclick={() => {}}>
+            <span class="rp-section-title">Selection</span>
+          </div>
+          {@const selStrokes = getSelectedStrokes()}
+          {@const bbox = getSelectionBBox()}
+          <div class="rp-section-body">
+            {#if selStrokes.length > 0 && bbox}
+              <div class="rp-heading">Position</div>
+              <div class="sel-row">
+                <label class="sel-field">X
+                  <input type="number" value={Math.round(bbox.x)} onchange={(e) => {
+                    const val = parseFloat((e.target as HTMLInputElement).value);
+                    if (!isNaN(val)) moveStrokes(val - bbox.x, 0);
+                  }}/>
+                </label>
+                <label class="sel-field">Y
+                  <input type="number" value={Math.round(bbox.y)} onchange={(e) => {
+                    const val = parseFloat((e.target as HTMLInputElement).value);
+                    if (!isNaN(val)) moveStrokes(0, val - bbox.y);
+                  }}/>
+                </label>
+              </div>
+              <div class="rp-heading">Size</div>
+              <div class="sel-row">
+                <label class="sel-field">W
+                  <input type="number" min="1" value={Math.round(bbox.w)} onchange={(e) => {
+                    const val = parseFloat((e.target as HTMLInputElement).value);
+                    if (!isNaN(val) && val > 0) {
+                      const cur = getSelectionBBox();
+                      if (!cur) return;
+                      if (lockAspect && cur.h > 0) { resizeSelected(val, val * (cur.h / cur.w)); }
+                      else { resizeSelected(val, cur.h); }
+                    }
+                  }}/>
+                </label>
+                <label class="sel-field">H
+                  <input type="number" min="1" value={Math.round(bbox.h)} onchange={(e) => {
+                    const val = parseFloat((e.target as HTMLInputElement).value);
+                    if (!isNaN(val) && val > 0) {
+                      const cur = getSelectionBBox();
+                      if (!cur) return;
+                      if (lockAspect && cur.w > 0) { resizeSelected(cur.w * (val / cur.h), val); }
+                      else { resizeSelected(cur.w, val); }
+                    }
+                  }}/>
+                </label>
+                <button class="sel-lock" class:active={lockAspect} onclick={() => lockAspect = !lockAspect} title="Lock aspect ratio">
+                  {#if lockAspect}<IconLock size={14}/>{:else}<IconLockOpen size={14}/>{/if}
+                </button>
+              </div>
+              <div class="rp-heading">Appearance</div>
+              <label class="sel-field sel-full">Opacity
+                <input type="range" min="1" max="100" value={Math.round((selStrokes[0]?.opacity ?? 1) * 100)} oninput={(e) => setSelectionOpacity(parseInt((e.target as HTMLInputElement).value))}/>
+                <span>{Math.round((selStrokes[0]?.opacity ?? 1) * 100)}%</span>
+              </label>
+              {#if selStrokes.every(s => s.tool !== "eraser" && !s.imageData)}
+                <label class="sel-field sel-full">Color
+                  <input type="color" value={selStrokes[0]?.color ?? "#000000"} oninput={(e) => setSelectionColor((e.target as HTMLInputElement).value)}/>
+                </label>
+              {/if}
+              <div class="sel-actions">
+                <button class="sel-btn" onclick={duplicateSelected}>Duplicate</button>
+                <button class="sel-btn danger" onclick={deleteSelected}>Delete</button>
+              </div>
+            {:else}
+              <p class="sel-empty">Select an object to edit</p>
+            {/if}
           </div>
         </div>
-        <div class="rp-section-body rp-layers-body">
-          {#each [...layers].reverse() as layer, ri (layer.id)}
-            {@const idx = layers.length - 1 - ri}
-            <!-- svelte-ignore a11y_click_events_have_key_events -->
-            <div class="rp-layer" class:active={idx === activeLayerIdx} onclick={() => activeLayerIdx = idx} role="button" tabindex="-1">
-              <!-- svelte-ignore a11y_consider_explicit_label -->
-              <button class="rp-lvis" onclick={(e) => { e.stopPropagation(); layer.visible = !layer.visible; layers = [...layers]; }}>
-                {layer.visible ? "👁" : "—"}
-              </button>
-              <span class="rp-lname">{layer.name}</span>
-              <span class="rp-lcount">{layer.strokes.length}</span>
-            </div>
-            {#if idx === activeLayerIdx}
-              <label class="rp-slider rp-lay-opacity">Opacity
-                <input type="range" min="1" max="100" bind:value={layer.opacity}/>
-                <span>{layer.opacity}%</span>
+        <div class="rp-divider"></div>
+      {/if}
+
+      <!-- ── Bottom panel group: Layers | Channels | Paths ── -->
+      <div class="rp-panel-group rp-bottom-panel">
+        <div class="rp-tabs">
+          <button class="rp-tab" class:active={bottomPanelTab === "layers"} onclick={() => bottomPanelTab = "layers"}>Layers</button>
+          <button class="rp-tab" class:active={bottomPanelTab === "channels"} onclick={() => bottomPanelTab = "channels"}>Channels</button>
+          <button class="rp-tab" class:active={bottomPanelTab === "paths"} onclick={() => bottomPanelTab = "paths"}>Paths</button>
+        </div>
+        <div class="rp-panel-body rp-layers-body">
+          {#if bottomPanelTab === "layers"}
+            <!-- Layer controls row -->
+            <div class="rp-layer-controls">
+              <select bind:value={layers[activeLayerIdx].blendMode} class="rp-blend-select" onchange={() => layers = [...layers]}>
+                {#each ["normal","multiply","screen","overlay","darken","lighten"] as mode}
+                  <option value={mode}>{mode.charAt(0).toUpperCase() + mode.slice(1)}</option>
+                {/each}
+              </select>
+              <label class="rp-layer-opacity-label">Opacity
+                <input type="range" min="0" max="100" bind:value={layers[activeLayerIdx].opacity} class="rp-small-slider"/>
+                <span class="rp-layer-opacity-val">{layers[activeLayerIdx].opacity}%</span>
               </label>
-            {/if}
-          {/each}
+            </div>
+            <div class="rp-layer-controls">
+              <span class="rp-lock-label">Lock:</span>
+              <button class="rp-lock-btn" title="Lock transparent pixels">▦</button>
+              <button class="rp-lock-btn" title="Lock image pixels">🖌</button>
+              <button class="rp-lock-btn" title="Lock position">✥</button>
+              <button class="rp-lock-btn" title="Lock all">🔒</button>
+              <label class="rp-fill-label">Fill
+                <input type="range" min="0" max="100" value="100" class="rp-small-slider"/>
+                <span>100%</span>
+              </label>
+            </div>
+            <!-- Layer list -->
+            {#each [...layers].reverse() as layer, ri (layer.id)}
+              {@const idx = layers.length - 1 - ri}
+              <div class="rp-layer" class:active={idx === activeLayerIdx} onclick={() => activeLayerIdx = idx} role="button" tabindex="-1">
+                <button class="rp-lvis" onclick={(e) => { e.stopPropagation(); layer.visible = !layer.visible; layers = [...layers]; }}>
+                  {layer.visible ? "👁" : "—"}
+                </button>
+                <div class="rp-lthumb" style="background:{layer.strokes.length > 0 ? '#2a2a3e' : '#1a1a26'}"></div>
+                <span class="rp-lname">{layer.name}</span>
+                <span class="rp-lcount">{layer.strokes.length}</span>
+              </div>
+            {/each}
+            <!-- Layer actions bar -->
+            <div class="rp-layer-actions-bar">
+              <button class="rp-layer-btn" onclick={addLayer} title="Add layer">+</button>
+              <button class="rp-layer-btn" onclick={() => {}} title="Add layer mask">◻</button>
+              <button class="rp-layer-btn" onclick={() => {}} title="Add layer group">◻◻</button>
+              <button class="rp-layer-btn" onclick={moveLayerUp} disabled={activeLayerIdx >= layers.length - 1} title="Move up">↑</button>
+              <button class="rp-layer-btn" onclick={moveLayerDown} disabled={activeLayerIdx <= 0} title="Move down">↓</button>
+              <div class="rp-layer-actions-spacer"></div>
+              <button class="rp-layer-btn rp-layer-btn-danger" onclick={removeLayer} disabled={layers.length <= 1} title="Delete layer">🗑</button>
+            </div>
+          {:else if bottomPanelTab === "channels"}
+            <div class="rp-channel"><span class="rp-ch-dot" style="background:#ff4444"></span> Red <span class="rp-ch-shortcut">Ctrl+1</span></div>
+            <div class="rp-channel"><span class="rp-ch-dot" style="background:#44ff44"></span> Green <span class="rp-ch-shortcut">Ctrl+2</span></div>
+            <div class="rp-channel"><span class="rp-ch-dot" style="background:#4444ff"></span> Blue <span class="rp-ch-shortcut">Ctrl+3</span></div>
+            <div class="rp-channel rp-channel-active"><span class="rp-ch-dot" style="background:#fff"></span> RGB <span class="rp-ch-shortcut">Ctrl+~</span></div>
+          {:else if bottomPanelTab === "paths"}
+            <p class="rp-empty">No paths</p>
+          {/if}
         </div>
       </div>
     </div>
@@ -1929,6 +2192,57 @@
   .sel-btn.danger { border-color: #443; }
   .sel-btn.danger:hover { border-color: #f44; color: #f44; background: rgba(255,68,68,.1); }
   .sel-empty { padding: 12px 4px; font-size: 11px; color: #444460; text-align: center; }
+
+  /* ── Tabbed panel groups ── */
+  .rp-panel-group { display: flex; flex-direction: column; flex-shrink: 0; }
+  .rp-bottom-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+  .rp-tabs { display: flex; background: #12121a; border-bottom: 1px solid #2a2a35; flex-shrink: 0; }
+  .rp-tab { flex: 1; padding: 4px 0; background: none; border: none; border-bottom: 2px solid transparent; color: #555570; font-size: 10px; font-weight: 600; cursor: pointer; transition: .15s; font-family: 'Geist', sans-serif; }
+  .rp-tab:hover { color: #8888a0; background: rgba(255,255,255,.02); }
+  .rp-tab.active { color: #e0e0f0; border-bottom-color: #5050c0; background: rgba(80,80,192,.08); }
+  .rp-panel-body { flex: 1; overflow-y: auto; padding: 6px; display: flex; flex-direction: column; gap: 3px; min-height: 0; }
+
+  /* ── History panel ── */
+  .rp-history-list { display: flex; flex-direction: column; gap: 1px; }
+  .rp-history-item { display: flex; align-items: center; gap: 6px; padding: 3px 5px; border-radius: 3px; font-size: 10px; color: #8888a0; cursor: default; transition: .1s; }
+  .rp-history-item:hover { background: #1e1e2c; }
+  .rp-history-icon { font-size: 11px; width: 16px; text-align: center; flex-shrink: 0; }
+  .rp-history-label { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rp-empty { padding: 16px 4px; font-size: 11px; color: #333350; text-align: center; }
+
+  /* ── Layer controls (blend mode, opacity, lock, fill) ── */
+  .rp-layer-controls { display: flex; align-items: center; gap: 4px; padding: 3px 2px; flex-shrink: 0; }
+  .rp-blend-select { flex: 1; background: #12121a; border: 1px solid #2a2a35; border-radius: 3px; padding: 2px 4px; color: #b0b0c0; font-size: 10px; font-family: 'Geist', sans-serif; outline: none; }
+  .rp-blend-select:focus { border-color: #5050c0; }
+  .rp-layer-opacity-label { display: flex; align-items: center; gap: 3px; font-size: 9px; color: #555570; }
+  .rp-layer-opacity-val { font-size: 9px; color: #444460; font-family: 'Geist Mono', monospace; min-width: 28px; text-align: right; }
+  .rp-small-slider { width: 50px; height: 3px; accent-color: #5050c0; }
+  .rp-lock-label { font-size: 9px; color: #555570; margin-right: 2px; }
+  .rp-lock-btn { width: 18px; height: 18px; border-radius: 2px; background: #1e1e2a; border: 1px solid #2a2a35; color: #555570; font-size: 9px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: .1s; }
+  .rp-lock-btn:hover { border-color: #5050c0; color: #8888a0; }
+  .rp-fill-label { display: flex; align-items: center; gap: 3px; font-size: 9px; color: #555570; margin-left: auto; }
+  .rp-fill-label span { font-size: 9px; color: #444460; font-family: 'Geist Mono', monospace; min-width: 28px; }
+
+  /* ── Layer thumbnails ── */
+  .rp-lthumb { width: 28px; height: 20px; border-radius: 2px; border: 1px solid #2a2a35; flex-shrink: 0; }
+
+  /* ── Layer actions bar ── */
+  .rp-layer-actions-bar { display: flex; align-items: center; gap: 2px; padding: 4px 2px; border-top: 1px solid #2a2a35; flex-shrink: 0; }
+  .rp-layer-actions-spacer { flex: 1; }
+  .rp-layer-btn-danger:hover { border-color: #f44 !important; color: #f44 !important; background: rgba(255,68,68,.1) !important; }
+
+  /* ── Channels panel ── */
+  .rp-channel { display: flex; align-items: center; gap: 6px; padding: 4px 5px; border-radius: 3px; font-size: 10px; color: #8888a0; cursor: pointer; transition: .1s; }
+  .rp-channel:hover { background: #1e1e2c; }
+  .rp-channel-active { background: #2a2a3e; color: #e0e0f0; }
+  .rp-ch-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .rp-ch-shortcut { margin-left: auto; font-size: 9px; color: #333350; font-family: 'Geist Mono', monospace; }
+
+  /* ── Options bar enhancements ── */
+  .ob-right { margin-left: auto; }
+
+  /* ── Transform group cursor ── */
+  .transform-group { pointer-events: all; }
 </style>
 
 <input bind:this={fileInputEl} type="file" accept="image/*" style="display:none" onchange={handleImageFile}/>
