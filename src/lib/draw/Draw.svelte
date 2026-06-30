@@ -1455,6 +1455,8 @@
         { label: "X = swap colors", action: "", key: "" },
         { label: "Space+drag = pan", action: "", key: "" },
         { label: "Ctrl+scroll = zoom", action: "", key: "" },
+        { label: "---" },
+        { label: "~ you found a secret! well idk dude it is a cloud what'd u expect ~", action: "", key: "" },
       ]},
     ] as menu}
       <!-- svelte-ignore a11y_no_noninteractive_element_interactions a11y_click_events_have_key_events -->
