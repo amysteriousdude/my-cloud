@@ -1869,12 +1869,12 @@
 
       <!-- ── Selection properties (contextual) ── -->
       {#if hasSelection}
+        {@const selStrokes = getSelectedStrokes()}
+        {@const bbox = getSelectionBBox()}
         <div class="rp-section">
           <div class="rp-section-header" onclick={() => {}}>
             <span class="rp-section-title">Selection</span>
           </div>
-          {@const selStrokes = getSelectedStrokes()}
-          {@const bbox = getSelectionBBox()}
           <div class="rp-section-body">
             {#if selStrokes.length > 0 && bbox}
               <div class="rp-heading">Position</div>
