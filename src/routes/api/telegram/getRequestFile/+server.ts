@@ -7,8 +7,6 @@ const BOT_TOKEN = env.TELEGRAM_BOT_TOKEN!;
 const TELE_API  = `https://api.telegram.org/bot${BOT_TOKEN}`;
 
 // ── Cache ──────────────────────────────────────────────────────────────────
-// Telegram CDN URLs expire after ~1h; cache them for 50min to be safe.
-// Meta JSON almost never changes so cache for 10min.
 const CDN_URL_TTL  = 50 * 60 * 1000;
 const META_TTL     = 10 * 60 * 1000;
 const MAX_RETRIES  = 3;
@@ -43,8 +41,6 @@ async function fetchMeta(metaFileId: string): Promise<any | null> {
   } catch { return null; }
 }
 
-// ──────────────────────────────────────────────────────────────────────────
-
 function isPreviewable(type: string) {
   return type.startsWith('image/') || type.startsWith('video/') || type.startsWith('audio/') || type === 'application/pdf';
 }
@@ -57,32 +53,56 @@ function parseRange(header: string, total: number) {
   return { start, end };
 }
 
-async function pumpToWriter(
-  body: ReadableStream<Uint8Array> | null,
-  writer: WritableStreamDefaultWriter<Uint8Array>
-) {
-  if (!body) throw new Error('Upstream body is null');
-  const reader = body.getReader();
-  try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      if (value) await writer.write(value);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-}
-
 function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function fetchChunkWithRetry(fileId: string, chunkIndex: number): Promise<{ body: ReadableStream<Uint8Array>; fromCache: boolean }> {
+// ── Pre-fetch all CDN URLs in parallel to stay under CF 50-subreq limit ────
+async function prefetchChunkUrls(chunks: { file_id: string }[]): Promise<Map<string, string>> {
+  const urlMap = new Map<string, string>();
+  const uniqueFileIds = [...new Set(chunks.map(c => c.file_id))];
+
+  await Promise.allSettled(
+    uniqueFileIds.map(async (fileId) => {
+      try {
+        const url = await getTelegramUrl(fileId);
+        urlMap.set(fileId, url);
+      } catch (e) {
+        console.error(`getRequestFile: CDN URL pre-fetch failed for ${fileId}:`, (e as Error)?.message);
+      }
+    })
+  );
+
+  return urlMap;
+}
+
+// ── Cache-first chunk fetch using pre-resolved URL ──────────────────────────
+async function fetchChunkWithUrl(fileId: string, cdnUrl: string): Promise<{ body: ReadableStream<Uint8Array>; fromCache: boolean }> {
+  try {
+    const cache = await caches.open('tg-chunks-v1');
+    const cacheReq = new Request(`https://tg-cache/${fileId}`);
+    const hit = await cache.match(cacheReq);
+    if (hit?.body) return { body: hit.body, fromCache: true };
+  } catch {}
+
+  const upstream = await fetch(cdnUrl);
+  if (!upstream.ok) throw new Error(`Upstream failed: ${upstream.status}`);
+  if (!upstream.body) throw new Error('Upstream body is null');
+
+  try {
+    const cache = await caches.open('tg-chunks-v1');
+    const cacheReq = new Request(`https://tg-cache/${fileId}`);
+    await cache.put(cacheReq, upstream.clone());
+  } catch {}
+
+  return { body: upstream.body, fromCache: false };
+}
+
+async function fetchChunkWithRetry(fileId: string, cdnUrl: string, chunkIndex: number): Promise<{ body: ReadableStream<Uint8Array>; fromCache: boolean }> {
   let lastError: Error | null = null;
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
-      return await fetchChunkFromCacheOrOrigin(fileId);
+      return await fetchChunkWithUrl(fileId, cdnUrl);
     } catch (e) {
       lastError = e as Error;
       console.error(`getRequestFile chunk ${chunkIndex} fetch failed (attempt ${attempt + 1}/${MAX_RETRIES}):`, lastError.message);
@@ -90,30 +110,6 @@ async function fetchChunkWithRetry(fileId: string, chunkIndex: number): Promise<
     }
   }
   throw new Error(`Chunk ${chunkIndex} failed after ${MAX_RETRIES} attempts: ${lastError?.message}`);
-}
-
-// ── Cache-first chunk fetch ────────────────────────────────────────────────
-async function fetchChunkFromCacheOrOrigin(fileId: string): Promise<{ body: ReadableStream<Uint8Array>; fromCache: boolean }> {
-  try {
-    const cache = await caches.open('tg-chunks-v1');
-    const cacheReq = new Request(`https://tg-cache/${fileId}`);
-    const hit = await cache.match(cacheReq);
-    if (hit?.body) return { body: hit.body, fromCache: true };
-  } catch { /* cache unavailable — fall through to origin */ }
-
-  // Cache miss: fetch from Telegram CDN
-  const cdnUrl = await getTelegramUrl(fileId);
-  const upstream = await fetch(cdnUrl);
-  if (!upstream.ok) throw new Error(`Upstream failed: ${upstream.status}`);
-
-  // Re-cache for next time (clone so we can return the original body)
-  try {
-    const cache = await caches.open('tg-chunks-v1');
-    const cacheReq = new Request(`https://tg-cache/${fileId}`);
-    await cache.put(cacheReq, upstream.clone());
-  } catch { /* best-effort */ }
-
-  return { body: upstream.body!, fromCache: false };
 }
 
 export const GET: RequestHandler = async ({ request, url }) => {
@@ -152,12 +148,13 @@ export const GET: RequestHandler = async ({ request, url }) => {
     const disposition = `${canPreview ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(meta.fileName)}`;
     const totalBytes: number = meta.totalBytes ?? 0;
     const rangeHeader = request.headers.get('range');
-    let cacheHits = 0;
-    let cacheMisses = 0;
 
     // ── CHUNKED FILE ────────────────────────────────────────────────────────
     if (meta.chunked && Array.isArray(meta.chunks)) {
       const sorted = [...meta.chunks].sort((a: any, b: any) => a.index - b.index);
+
+      // Pre-fetch all CDN URLs upfront to stay under CF 50-subreq limit
+      const urlMap = await prefetchChunkUrls(sorted);
 
       if (rangeHeader && totalBytes > 0) {
         const range = parseRange(rangeHeader, totalBytes);
@@ -182,8 +179,10 @@ export const GET: RequestHandler = async ({ request, url }) => {
               const overlapStart = Math.max(range.start, chunkStart) - chunkStart;
               const overlapEnd   = Math.min(range.end, chunkEnd) - chunkStart;
 
-              const { body, fromCache } = await fetchChunkWithRetry(sorted[i].file_id, i);
-              if (fromCache) cacheHits++; else cacheMisses++;
+              const cdnUrl = urlMap.get(sorted[i].file_id);
+              if (!cdnUrl) { console.error(`getRequestFile chunk ${i}: no CDN URL`); continue; }
+
+              const { body } = await fetchChunkWithRetry(sorted[i].file_id, cdnUrl, i);
 
               const reader = body.getReader();
               let skipped = 0;
@@ -230,12 +229,11 @@ export const GET: RequestHandler = async ({ request, url }) => {
             'Content-Length':      String(range.end - range.start + 1),
             'Accept-Ranges':       'bytes',
             'Cache-Control':       'private, max-age=3600',
-            'X-Cache':             cacheMisses === 0 ? 'HIT' : cacheHits === 0 ? 'MISS' : 'PARTIAL',
           },
         });
       }
 
-      // Full chunked file — serve from cache, fall back to Telegram CDN per chunk
+      // Full chunked file
       const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
       const writer = writable.getWriter();
 
@@ -244,8 +242,10 @@ export const GET: RequestHandler = async ({ request, url }) => {
         try {
           for (let i = 0; i < sorted.length; i++) {
             const chunk = sorted[i];
-            const { body, fromCache } = await fetchChunkWithRetry(chunk.file_id, i);
-            if (fromCache) cacheHits++; else cacheMisses++;
+            const cdnUrl = urlMap.get(chunk.file_id);
+            if (!cdnUrl) { console.error(`getRequestFile chunk ${i}: no CDN URL`); continue; }
+
+            const { body } = await fetchChunkWithRetry(chunk.file_id, cdnUrl, i);
 
             const reader = body.getReader();
             while (true) {
@@ -262,6 +262,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
           if (totalBytes > 0 && bytesWritten !== totalBytes) {
             console.error(`Chunked stream mismatch: wrote ${bytesWritten} bytes but meta says ${totalBytes}`);
           }
+          console.log(`getRequestFile: stream complete — ${bytesWritten} bytes written`);
         } catch (err) {
           console.error(`Chunked stream error after ${bytesWritten} bytes:`, (err as Error)?.message || err);
           try { await writer.abort(err as Error); } catch {}
@@ -278,7 +279,6 @@ export const GET: RequestHandler = async ({ request, url }) => {
           ...(totalBytes > 0 ? { 'Content-Length': String(totalBytes) } : {}),
           'Accept-Ranges':       'bytes',
           'Cache-Control':       'private, max-age=3600',
-          'X-Cache':             cacheMisses === 0 ? 'HIT' : cacheHits === 0 ? 'MISS' : 'PARTIAL',
         },
       });
     }
@@ -303,7 +303,6 @@ export const GET: RequestHandler = async ({ request, url }) => {
           'Content-Length':      String(range.end - range.start + 1),
           'Accept-Ranges':       'bytes',
           'Cache-Control':       'private, max-age=3600',
-          'X-Cache':             'MISS',
         },
       });
     }
@@ -320,7 +319,6 @@ export const GET: RequestHandler = async ({ request, url }) => {
         ...(totalBytes > 0 ? { 'Content-Length': String(totalBytes) } : {}),
         'Accept-Ranges':       'bytes',
         'Cache-Control':       'private, max-age=3600',
-        'X-Cache':             'MISS',
       },
     });
 

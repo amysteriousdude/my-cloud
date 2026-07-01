@@ -30,33 +30,36 @@ function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function fetchChunkWithRetry(fileId: string, chunkIndex: number): Promise<{ body: ReadableStream<Uint8Array>; fromCache: boolean }> {
-  let lastError: Error | null = null;
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    try {
-      return await fetchChunkFromCacheOrOrigin(fileId);
-    } catch (e) {
-      lastError = e as Error;
-      console.error(`public chunk ${chunkIndex} fetch failed (attempt ${attempt + 1}/${MAX_RETRIES}):`, lastError.message);
-      if (attempt < MAX_RETRIES - 1) await delay(RETRY_DELAYS[attempt]);
-    }
-  }
-  throw new Error(`Chunk ${chunkIndex} failed after ${MAX_RETRIES} attempts: ${lastError?.message}`);
+// ── Pre-fetch all CDN URLs in parallel to stay under CF 50-subreq limit ─────
+async function prefetchChunkUrls(chunks: { file_id: string }[]): Promise<Map<string, string>> {
+  const urlMap = new Map<string, string>();
+  const uniqueFileIds = [...new Set(chunks.map(c => c.file_id))];
+
+  const results = await Promise.allSettled(
+    uniqueFileIds.map(async (fileId) => {
+      const url = await getTgUrl(fileId);
+      if (url) urlMap.set(fileId, url);
+    })
+  );
+
+  const failed = results.filter(r => r.status === 'rejected').length;
+  if (failed > 0) console.error(`public: ${failed}/${uniqueFileIds.length} CDN URL pre-fetches failed`);
+
+  return urlMap;
 }
 
-// ── Cache-first chunk fetch ──────────────────────────────────────────────────
-async function fetchChunkFromCacheOrOrigin(fileId: string): Promise<{ body: ReadableStream<Uint8Array>; fromCache: boolean }> {
+// ── Cache-first chunk fetch using pre-resolved URL ──────────────────────────
+async function fetchChunkWithUrl(fileId: string, cdnUrl: string): Promise<ReadableStream<Uint8Array>> {
   try {
     const cache = await caches.open('tg-chunks-v1');
     const cacheReq = new Request(`https://tg-cache/${fileId}`);
     const hit = await cache.match(cacheReq);
-    if (hit?.body) return { body: hit.body, fromCache: true };
+    if (hit?.body) return hit.body;
   } catch {}
 
-  const cdnUrl = await getTgUrl(fileId);
-  if (!cdnUrl) throw new Error('No CDN URL for chunk');
   const upstream = await fetch(cdnUrl);
   if (!upstream.ok) throw new Error(`Upstream failed: ${upstream.status}`);
+  if (!upstream.body) throw new Error('Upstream body is null');
 
   try {
     const cache = await caches.open('tg-chunks-v1');
@@ -64,7 +67,21 @@ async function fetchChunkFromCacheOrOrigin(fileId: string): Promise<{ body: Read
     await cache.put(cacheReq, upstream.clone());
   } catch {}
 
-  return { body: upstream.body!, fromCache: false };
+  return upstream.body;
+}
+
+async function fetchChunkWithRetry(fileId: string, cdnUrl: string, chunkIndex: number): Promise<ReadableStream<Uint8Array>> {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      return await fetchChunkWithUrl(fileId, cdnUrl);
+    } catch (e) {
+      lastError = e as Error;
+      console.error(`public chunk ${chunkIndex} fetch failed (attempt ${attempt + 1}/${MAX_RETRIES}):`, lastError.message);
+      if (attempt < MAX_RETRIES - 1) await delay(RETRY_DELAYS[attempt]);
+    }
+  }
+  throw new Error(`Chunk ${chunkIndex} failed after ${MAX_RETRIES} attempts: ${lastError?.message}`);
 }
 
 function mimeFromName(name: string): string {
@@ -184,6 +201,11 @@ export const GET: RequestHandler = async ({ params, url, request }) => {
 
     const chunks = [...(meta?.chunks ?? [])].sort((a: any, b: any) => a.index - b.index);
 
+    // Pre-fetch all CDN URLs upfront — 1 subreq per unique chunk (parallel).
+    // This keeps total subrequests well under CF's 50-per-request limit.
+    console.log(`public: pre-fetching CDN URLs for ${chunks.length} chunks (${(size / 1048576).toFixed(1)}MB)`);
+    const urlMap = await prefetchChunkUrls(chunks);
+
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
         let bytesWritten = 0;
@@ -200,7 +222,13 @@ export const GET: RequestHandler = async ({ params, url, request }) => {
             if (range && end < range.start) continue;
             if (range && start > range.end) break;
 
-            const { body } = await fetchChunkWithRetry(chunk.file_id, i);
+            const cdnUrl = urlMap.get(chunk.file_id);
+            if (!cdnUrl) {
+              console.error(`public chunk ${i}: no CDN URL, skipping`);
+              continue;
+            }
+
+            const body = await fetchChunkWithRetry(chunk.file_id, cdnUrl, i);
 
             if (range) {
               const overlapStart = Math.max(0, range.start - start);
@@ -243,6 +271,7 @@ export const GET: RequestHandler = async ({ params, url, request }) => {
             if (i < chunks.length - 1) await delay(INTER_CHUNK_DELAY_MS);
           }
 
+          console.log(`public: stream complete — ${bytesWritten} bytes written`);
           controller.close();
         } catch (e) {
           console.error(`public stream error after ${bytesWritten} bytes (${chunks.length} chunks):`, e);

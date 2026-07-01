@@ -288,26 +288,31 @@ function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function fetchTgUrlWithRetry(fileId: string, chunkIndex: number): Promise<string> {
-  let lastError: string = '';
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    const url = await getTgUrl(fileId);
-    if (url) return url;
-    lastError = `getFile returned null for chunk ${chunkIndex}`;
-    console.error(`webdaV chunk ${chunkIndex} URL fetch failed (attempt ${attempt + 1}/${MAX_RETRIES}): ${lastError}`);
-    if (attempt < MAX_RETRIES - 1) await delay(RETRY_DELAYS[attempt]);
-  }
-  throw new Error(`Chunk ${chunkIndex} URL failed after ${MAX_RETRIES} attempts: ${lastError}`);
+// ── Pre-fetch all CDN URLs in parallel to stay under CF 50-subreq limit ────
+async function prefetchChunkUrls(chunks: { file_id: string }[]): Promise<Map<string, string>> {
+  const urlMap = new Map<string, string>();
+  const uniqueFileIds = [...new Set(chunks.map(c => c.file_id))];
+  await Promise.allSettled(
+    uniqueFileIds.map(async (fileId) => {
+      const url = await getTgUrl(fileId);
+      if (url) urlMap.set(fileId, url);
+      else console.error(`webdaV: CDN URL pre-fetch failed for ${fileId}`);
+    })
+  );
+  return urlMap;
 }
 
-async function fetchTgWithRetry(fileId: string, chunkIndex: number, headers?: Record<string, string>): Promise<Response> {
+async function fetchTgWithPrebuiltUrl(fileId: string, cdnUrl: string, rangeHeader?: string): Promise<Response> {
+  const res = await fetch(cdnUrl, rangeHeader ? { headers: { Range: rangeHeader } } : undefined);
+  if (!res.ok) throw new Error(`Telegram fetch failed: ${res.status}`);
+  return res;
+}
+
+async function fetchTgWithRetryPrebuilt(fileId: string, cdnUrl: string, chunkIndex: number, rangeHeader?: string): Promise<Response> {
   let lastError: Error | null = null;
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
-      const url = await fetchTgUrlWithRetry(fileId, chunkIndex);
-      const res = await fetch(url, headers ? { headers } : undefined);
-      if (!res.ok) throw new Error(`Telegram fetch failed: ${res.status}`);
-      return res;
+      return await fetchTgWithPrebuiltUrl(fileId, cdnUrl, rangeHeader);
     } catch (e) {
       lastError = e as Error;
       console.error(`webdaV chunk ${chunkIndex} fetch failed (attempt ${attempt + 1}/${MAX_RETRIES}):`, lastError.message);
@@ -378,12 +383,16 @@ async function streamFileRange(file: any, start: number, end: number): Promise<R
   const meta = await fetchMeta(file.metaFileId);
 
   if (!meta.chunked || !Array.isArray(meta.chunks)) {
-    const tgRes = await fetchTgWithRetry(meta.telegramFileId, 0, { Range: `bytes=${start}-${end}` });
+    const tgUrl = await getTgUrl(meta.telegramFileId);
+    if (!tgUrl) throw new Error('Could not get Telegram URL');
+    const tgRes = await fetch(tgUrl, { headers: { Range: `bytes=${start}-${end}` } });
+    if (!tgRes.ok) throw new Error(`Telegram fetch failed: ${tgRes.status}`);
     if (!tgRes.body) throw new Error('Telegram body is null');
     return tgRes.body;
   }
 
   const sorted = [...meta.chunks].sort((a: any, b: any) => a.index - b.index);
+  const urlMap = await prefetchChunkUrls(sorted);
   let pos = 0;
   const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
   const writer = writable.getWriter();
@@ -403,7 +412,10 @@ async function streamFileRange(file: any, start: number, end: number): Promise<R
         const overlapStart = Math.max(start, chunkStart) - chunkStart;
         const overlapEnd = Math.min(end, chunkEnd) - chunkStart;
 
-        const tgRes = await fetchTgWithRetry(chunk.file_id, i, { Range: `bytes=${overlapStart}-${overlapEnd}` });
+        const cdnUrl = urlMap.get(chunk.file_id);
+        if (!cdnUrl) { console.error(`webdaV chunk ${i}: no CDN URL`); continue; }
+
+        const tgRes = await fetchTgWithRetryPrebuilt(chunk.file_id, cdnUrl, i, `bytes=${overlapStart}-${overlapEnd}`);
         const reader = tgRes.body!.getReader();
         while (true) {
           const { value, done } = await reader.read();
@@ -430,12 +442,16 @@ async function streamFileAll(file: any): Promise<ReadableStream<Uint8Array>> {
   const meta = await fetchMeta(file.metaFileId);
 
   if (!meta.chunked || !Array.isArray(meta.chunks)) {
-    const tgRes = await fetchTgWithRetry(meta.telegramFileId, 0);
+    const tgUrl = await getTgUrl(meta.telegramFileId);
+    if (!tgUrl) throw new Error('Could not get Telegram URL');
+    const tgRes = await fetch(tgUrl);
+    if (!tgRes.ok) throw new Error(`Telegram fetch failed: ${tgRes.status}`);
     if (!tgRes.body) throw new Error('Telegram body is null');
     return tgRes.body;
   }
 
   const sorted = [...meta.chunks].sort((a: any, b: any) => a.index - b.index);
+  const urlMap = await prefetchChunkUrls(sorted);
   const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
   const writer = writable.getWriter();
 
@@ -444,7 +460,10 @@ async function streamFileAll(file: any): Promise<ReadableStream<Uint8Array>> {
     try {
       for (let i = 0; i < sorted.length; i++) {
         const c = sorted[i];
-        const tgRes = await fetchTgWithRetry(c.file_id, i);
+        const cdnUrl = urlMap.get(c.file_id);
+        if (!cdnUrl) { console.error(`webdaV chunk ${i}: no CDN URL`); continue; }
+
+        const tgRes = await fetchTgWithRetryPrebuilt(c.file_id, cdnUrl, i);
         const reader = tgRes.body!.getReader();
         while (true) {
           const { value, done } = await reader.read();
