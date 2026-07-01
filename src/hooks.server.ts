@@ -280,6 +280,43 @@ async function pumpToWriter(
   }
 }
 
+const MAX_RETRIES = 3;
+const RETRY_DELAYS = [500, 1000, 2000];
+const INTER_CHUNK_DELAY_MS = 100;
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function fetchTgUrlWithRetry(fileId: string, chunkIndex: number): Promise<string> {
+  let lastError: string = '';
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    const url = await getTgUrl(fileId);
+    if (url) return url;
+    lastError = `getFile returned null for chunk ${chunkIndex}`;
+    console.error(`webdaV chunk ${chunkIndex} URL fetch failed (attempt ${attempt + 1}/${MAX_RETRIES}): ${lastError}`);
+    if (attempt < MAX_RETRIES - 1) await delay(RETRY_DELAYS[attempt]);
+  }
+  throw new Error(`Chunk ${chunkIndex} URL failed after ${MAX_RETRIES} attempts: ${lastError}`);
+}
+
+async function fetchTgWithRetry(fileId: string, chunkIndex: number, headers?: Record<string, string>): Promise<Response> {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      const url = await fetchTgUrlWithRetry(fileId, chunkIndex);
+      const res = await fetch(url, headers ? { headers } : undefined);
+      if (!res.ok) throw new Error(`Telegram fetch failed: ${res.status}`);
+      return res;
+    } catch (e) {
+      lastError = e as Error;
+      console.error(`webdaV chunk ${chunkIndex} fetch failed (attempt ${attempt + 1}/${MAX_RETRIES}):`, lastError.message);
+      if (attempt < MAX_RETRIES - 1) await delay(RETRY_DELAYS[attempt]);
+    }
+  }
+  throw new Error(`Chunk ${chunkIndex} fetch failed after ${MAX_RETRIES} attempts: ${lastError?.message}`);
+}
+
 /* ----------------------------- Replaced network helpers ------------------------------ */
 
 async function fetchMeta(metaFileId: string): Promise<any> {
@@ -341,10 +378,7 @@ async function streamFileRange(file: any, start: number, end: number): Promise<R
   const meta = await fetchMeta(file.metaFileId);
 
   if (!meta.chunked || !Array.isArray(meta.chunks)) {
-    const tgUrl = await getTgUrl(meta.telegramFileId);
-    if (!tgUrl) throw new Error('Could not get Telegram URL');
-    const tgRes = await fetch(tgUrl, { headers: { Range: `bytes=${start}-${end}` } });
-    if (!tgRes.ok) throw new Error(`Telegram fetch failed: ${tgRes.status}`);
+    const tgRes = await fetchTgWithRetry(meta.telegramFileId, 0, { Range: `bytes=${start}-${end}` });
     if (!tgRes.body) throw new Error('Telegram body is null');
     return tgRes.body;
   }
@@ -355,8 +389,10 @@ async function streamFileRange(file: any, start: number, end: number): Promise<R
   const writer = writable.getWriter();
 
   (async () => {
+    let bytesWritten = 0;
     try {
-      for (const chunk of sorted) {
+      for (let i = 0; i < sorted.length; i++) {
+        const chunk = sorted[i];
         const size = Number(chunk.size ?? 0);
         const chunkStart = pos;
         const chunkEnd = pos + size - 1;
@@ -364,18 +400,24 @@ async function streamFileRange(file: any, start: number, end: number): Promise<R
 
         if (chunkEnd < start || chunkStart > end) continue;
 
-        const tgUrl = await getTgUrl(chunk.file_id);
-        if (!tgUrl) throw new Error('Could not get Telegram URL');
-
         const overlapStart = Math.max(start, chunkStart) - chunkStart;
         const overlapEnd = Math.min(end, chunkEnd) - chunkStart;
 
-        const tgRes = await fetch(tgUrl, { headers: { Range: `bytes=${overlapStart}-${overlapEnd}` } });
-        if (!tgRes.ok) throw new Error(`Telegram fetch failed: ${tgRes.status}`);
-        await pumpToWriter(tgRes.body, writer);
+        const tgRes = await fetchTgWithRetry(chunk.file_id, i, { Range: `bytes=${overlapStart}-${overlapEnd}` });
+        const reader = tgRes.body!.getReader();
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          if (value) {
+            await writer.write(value);
+            bytesWritten += value.length;
+          }
+        }
+
+        if (i < sorted.length - 1) await delay(INTER_CHUNK_DELAY_MS);
       }
-    } catch {
-      // If upstream fails mid-stream, client may see a truncated transfer.
+    } catch (err) {
+      console.error(`webdaV range stream error after ${bytesWritten} bytes:`, (err as Error)?.message || err);
     } finally {
       await writer.close().catch(() => {});
     }
@@ -388,10 +430,7 @@ async function streamFileAll(file: any): Promise<ReadableStream<Uint8Array>> {
   const meta = await fetchMeta(file.metaFileId);
 
   if (!meta.chunked || !Array.isArray(meta.chunks)) {
-    const tgUrl = await getTgUrl(meta.telegramFileId);
-    if (!tgUrl) throw new Error('Could not get Telegram URL');
-    const tgRes = await fetch(tgUrl);
-    if (!tgRes.ok) throw new Error(`Telegram fetch failed: ${tgRes.status}`);
+    const tgRes = await fetchTgWithRetry(meta.telegramFileId, 0);
     if (!tgRes.body) throw new Error('Telegram body is null');
     return tgRes.body;
   }
@@ -401,16 +440,25 @@ async function streamFileAll(file: any): Promise<ReadableStream<Uint8Array>> {
   const writer = writable.getWriter();
 
   (async () => {
+    let bytesWritten = 0;
     try {
-      for (const c of sorted) {
-        const tgUrl = await getTgUrl(c.file_id);
-        if (!tgUrl) throw new Error('Could not get Telegram URL');
-        const tgRes = await fetch(tgUrl);
-        if (!tgRes.ok) throw new Error(`Telegram fetch failed: ${tgRes.status}`);
-        await pumpToWriter(tgRes.body, writer);
+      for (let i = 0; i < sorted.length; i++) {
+        const c = sorted[i];
+        const tgRes = await fetchTgWithRetry(c.file_id, i);
+        const reader = tgRes.body!.getReader();
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          if (value) {
+            await writer.write(value);
+            bytesWritten += value.length;
+          }
+        }
+
+        if (i < sorted.length - 1) await delay(INTER_CHUNK_DELAY_MS);
       }
-    } catch {
-      // best effort
+    } catch (err) {
+      console.error(`webdaV stream error after ${bytesWritten} bytes:`, (err as Error)?.message || err);
     } finally {
       await writer.close().catch(() => {});
     }

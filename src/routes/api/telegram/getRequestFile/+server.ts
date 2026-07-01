@@ -11,6 +11,9 @@ const TELE_API  = `https://api.telegram.org/bot${BOT_TOKEN}`;
 // Meta JSON almost never changes so cache for 10min.
 const CDN_URL_TTL  = 50 * 60 * 1000;
 const META_TTL     = 10 * 60 * 1000;
+const MAX_RETRIES  = 3;
+const RETRY_DELAYS = [500, 1000, 2000];
+const INTER_CHUNK_DELAY_MS = 100;
 
 const cdnUrlCache  = new Map<string, { url: string; exp: number }>();
 const metaCache    = new Map<string, { meta: any; exp: number }>();
@@ -71,9 +74,25 @@ async function pumpToWriter(
   }
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function fetchChunkWithRetry(fileId: string, chunkIndex: number): Promise<{ body: ReadableStream<Uint8Array>; fromCache: boolean }> {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      return await fetchChunkFromCacheOrOrigin(fileId);
+    } catch (e) {
+      lastError = e as Error;
+      console.error(`getRequestFile chunk ${chunkIndex} fetch failed (attempt ${attempt + 1}/${MAX_RETRIES}):`, lastError.message);
+      if (attempt < MAX_RETRIES - 1) await delay(RETRY_DELAYS[attempt]);
+    }
+  }
+  throw new Error(`Chunk ${chunkIndex} failed after ${MAX_RETRIES} attempts: ${lastError?.message}`);
+}
+
 // ── Cache-first chunk fetch ────────────────────────────────────────────────
-// Chunks are cached during upload (0 extra subrequests). On download we hit
-// cache first (0 subrequests). Only on cache-miss do we call Telegram CDN.
 async function fetchChunkFromCacheOrOrigin(fileId: string): Promise<{ body: ReadableStream<Uint8Array>; fromCache: boolean }> {
   try {
     const cache = await caches.open('tg-chunks-v1');
@@ -149,6 +168,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
         const writer = writable.getWriter();
 
         (async () => {
+          let bytesWritten = 0;
           try {
             let pos = 0;
             for (let i = 0; i < sorted.length; i++) {
@@ -162,11 +182,9 @@ export const GET: RequestHandler = async ({ request, url }) => {
               const overlapStart = Math.max(range.start, chunkStart) - chunkStart;
               const overlapEnd   = Math.min(range.end, chunkEnd) - chunkStart;
 
-              // Cache-first: 0 subrequests on hit, falls back to Telegram CDN on miss
-              const { body, fromCache } = await fetchChunkFromCacheOrOrigin(sorted[i].file_id);
+              const { body, fromCache } = await fetchChunkWithRetry(sorted[i].file_id, i);
               if (fromCache) cacheHits++; else cacheMisses++;
 
-              // If we got the full chunk from cache, we need to slice the requested range
               const reader = body.getReader();
               let skipped = 0;
               let taken = 0;
@@ -175,27 +193,29 @@ export const GET: RequestHandler = async ({ request, url }) => {
                 const { value, done } = await reader.read();
                 if (done) break;
                 if (!value) continue;
-                // Skip bytes before overlapStart
                 if (skipped + value.length <= overlapStart) {
                   skipped += value.length;
                   continue;
                 }
-                // Trim leading bytes
                 const startInChunk = Math.max(0, overlapStart - skipped);
                 const sliced = value.slice(startInChunk);
-                // Trim trailing bytes if we've taken enough
                 if (taken + sliced.length > need) {
-                  await writer.write(sliced.slice(0, need - taken));
+                  const slice = sliced.slice(0, need - taken);
+                  await writer.write(slice);
+                  bytesWritten += slice.length;
                   taken = need;
                   break;
                 }
                 taken += sliced.length;
                 await writer.write(sliced);
+                bytesWritten += sliced.length;
                 skipped += value.length;
               }
+
+              if (i < sorted.length - 1) await delay(INTER_CHUNK_DELAY_MS);
             }
-          } catch {
-            // If upstream fails mid-stream, close. Client will see truncated transfer.
+          } catch (err) {
+            console.error(`getRequestFile range stream error after ${bytesWritten} bytes:`, (err as Error)?.message || err);
           } finally {
             await writer.close().catch(() => {});
           }
@@ -224,7 +244,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
         try {
           for (let i = 0; i < sorted.length; i++) {
             const chunk = sorted[i];
-            const { body, fromCache } = await fetchChunkFromCacheOrOrigin(chunk.file_id);
+            const { body, fromCache } = await fetchChunkWithRetry(chunk.file_id, i);
             if (fromCache) cacheHits++; else cacheMisses++;
 
             const reader = body.getReader();
@@ -236,6 +256,8 @@ export const GET: RequestHandler = async ({ request, url }) => {
                 bytesWritten += value.length;
               }
             }
+
+            if (i < sorted.length - 1) await delay(INTER_CHUNK_DELAY_MS);
           }
           if (totalBytes > 0 && bytesWritten !== totalBytes) {
             console.error(`Chunked stream mismatch: wrote ${bytesWritten} bytes but meta says ${totalBytes}`);

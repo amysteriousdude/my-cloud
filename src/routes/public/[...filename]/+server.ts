@@ -4,6 +4,10 @@ import { getPublicFileByPath, getPublicFolderByPath } from '$lib/telegramStorage
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
 const TELE_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 
+const MAX_RETRIES = 3;
+const RETRY_DELAYS = [500, 1000, 2000];
+const INTER_CHUNK_DELAY_MS = 100;
+
 // ── CDN URL cache (avoids repeated Telegram API calls) ──────────────────────
 const CDN_URL_TTL = 50 * 60 * 1000;
 const cdnUrlCache = new Map<string, { url: string; exp: number }>();
@@ -22,7 +26,25 @@ async function getTgUrl(fileId: string): Promise<string | null> {
   } catch { return null; }
 }
 
-// ── Cache-first chunk fetch (same pattern as getRequestFile) ────────────────
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function fetchChunkWithRetry(fileId: string, chunkIndex: number): Promise<{ body: ReadableStream<Uint8Array>; fromCache: boolean }> {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      return await fetchChunkFromCacheOrOrigin(fileId);
+    } catch (e) {
+      lastError = e as Error;
+      console.error(`public chunk ${chunkIndex} fetch failed (attempt ${attempt + 1}/${MAX_RETRIES}):`, lastError.message);
+      if (attempt < MAX_RETRIES - 1) await delay(RETRY_DELAYS[attempt]);
+    }
+  }
+  throw new Error(`Chunk ${chunkIndex} failed after ${MAX_RETRIES} attempts: ${lastError?.message}`);
+}
+
+// ── Cache-first chunk fetch ──────────────────────────────────────────────────
 async function fetchChunkFromCacheOrOrigin(fileId: string): Promise<{ body: ReadableStream<Uint8Array>; fromCache: boolean }> {
   try {
     const cache = await caches.open('tg-chunks-v1');
@@ -76,14 +98,6 @@ function normalizePath(input: string): string {
     .replace(/\/{2,}/g, '/');
 }
 
-function splitPublicPrefix(path: string): { raw: boolean; path: string } {
-  const clean = normalizePath(path);
-  if (clean.startsWith('raw/')) {
-    return { raw: true, path: clean.slice(4) };
-  }
-  return { raw: false, path: clean };
-}
-
 function parseRange(range: string | null, size: number) {
   if (!range?.startsWith('bytes=')) return null;
 
@@ -118,8 +132,7 @@ function contentDisposition(fileName: string, download: boolean) {
 }
 
 export const GET: RequestHandler = async ({ params, url, request }) => {
-  const wanted = splitPublicPrefix(params.filename ?? '');
-  const publicPath = wanted.path;
+  const publicPath = normalizePath(params.filename ?? '');
 
   if (!publicPath) return new Response('Not found', { status: 404 });
 
@@ -173,10 +186,12 @@ export const GET: RequestHandler = async ({ params, url, request }) => {
 
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
+        let bytesWritten = 0;
         try {
           let offset = 0;
 
-          for (const chunk of chunks) {
+          for (let i = 0; i < chunks.length; i++) {
+            const chunk = chunks[i];
             const chunkSize = Number(chunk.size ?? 0);
             const start = offset;
             const end = offset + chunkSize - 1;
@@ -185,7 +200,7 @@ export const GET: RequestHandler = async ({ params, url, request }) => {
             if (range && end < range.start) continue;
             if (range && start > range.end) break;
 
-            const { body } = await fetchChunkFromCacheOrOrigin(chunk.file_id);
+            const { body } = await fetchChunkWithRetry(chunk.file_id, i);
 
             if (range) {
               const overlapStart = Math.max(0, range.start - start);
@@ -202,12 +217,15 @@ export const GET: RequestHandler = async ({ params, url, request }) => {
                 const startInChunk = Math.max(0, overlapStart - skipped);
                 const sliced = value.slice(startInChunk);
                 if (taken + sliced.length > need) {
-                  controller.enqueue(sliced.slice(0, need - taken));
+                  const slice = sliced.slice(0, need - taken);
+                  controller.enqueue(slice);
+                  bytesWritten += slice.length;
                   taken = need;
                   break;
                 }
                 taken += sliced.length;
                 controller.enqueue(sliced);
+                bytesWritten += sliced.length;
                 skipped += value.length;
               }
             } else {
@@ -215,14 +233,19 @@ export const GET: RequestHandler = async ({ params, url, request }) => {
               while (true) {
                 const { value, done } = await reader.read();
                 if (done) break;
-                if (value) controller.enqueue(value);
+                if (value) {
+                  controller.enqueue(value);
+                  bytesWritten += value.length;
+                }
               }
             }
+
+            if (i < chunks.length - 1) await delay(INTER_CHUNK_DELAY_MS);
           }
 
           controller.close();
         } catch (e) {
-          console.error('public stream error:', e);
+          console.error(`public stream error after ${bytesWritten} bytes (${chunks.length} chunks):`, e);
           controller.error(e);
         }
       }
@@ -239,7 +262,7 @@ export const GET: RequestHandler = async ({ params, url, request }) => {
   }
 
   const folder = await getPublicFolderByPath(publicPath);
-  if (folder && !wanted.raw) {
+  if (folder) {
     return new Response(null, {
       status: 302,
       headers: { Location: `/public/folder/${publicPath}` }

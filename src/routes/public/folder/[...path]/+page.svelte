@@ -85,30 +85,16 @@
     });
   }
 
-  function isTextLikeFile(file: FileRecord): boolean {
-    const ext = file.fileName.split('.').pop()?.toLowerCase() ?? '';
-    return file.type.startsWith('text/') || file.type.includes('json') ||
-      ['txt','md','markdown','js','ts','jsx','tsx','py','rs','go','java','c','cpp',
-       'css','scss','html','xml','json','yaml','yml','sh','lua','rb','php',
-       'svelte','vue','toml','sql','log','env','ini','cfg','conf','csv'].includes(ext);
-  }
-
   function isPreviewable(file: FileRecord): boolean {
     return file.type.startsWith('image/') ||
       file.type.startsWith('video/') ||
       file.type.startsWith('audio/') ||
-      file.type === 'application/pdf' ||
-      isTextLikeFile(file);
+      file.type === 'application/pdf';
   }
 
   function fileUrl(f: FileRecord, download = false): string {
     const path = joinPath(folderPath, f.fileName);
     return `/public/${path}${download ? '?download=true' : ''}`;
-  }
-
-  function rawUrl(f: FileRecord): string {
-    const path = joinPath(folderPath, f.fileName);
-    return `/public/raw/${path}`;
   }
 
   let previewFile = $state<FileRecord | null>(null);
@@ -197,9 +183,6 @@
                   <IconEye size={14} />
                 </button>
               {/if}
-              {#if isTextLikeFile(file)}
-                <a class="act-btn" title="Raw" href={rawUrl(file)} target="_blank" rel="noopener noreferrer">RAW</a>
-              {/if}
               <a class="act-btn" title="Download" href={fileUrl(file, true)} download={file.fileName}>
                 <IconDownload size={14} />
               </a>
@@ -232,8 +215,6 @@
         <audio src={fileUrl(previewFile)} controls class="preview-audio"></audio>
       {:else if previewFile.type === 'application/pdf'}
         <iframe src={fileUrl(previewFile)} title={previewFile.fileName} class="preview-pdf"></iframe>
-      {:else if isTextLikeFile(previewFile)}
-        <iframe src={rawUrl(previewFile)} title={previewFile.fileName} class="preview-raw"></iframe>
       {/if}
 
       <div class="preview-info">
@@ -504,13 +485,6 @@
   .preview-video { max-width: 80vw; max-height: 70vh; display: block; }
   .preview-audio { width: 340px; padding: 20px; display: block; }
   .preview-pdf { width: 80vw; height: 75vh; border: none; }
-  .preview-raw {
-    width: min(980px, 86vw);
-    height: min(78vh, 880px);
-    border: none;
-    background: #fff;
-    display: block;
-  }
   .preview-info {
     display: flex;
     align-items: center;

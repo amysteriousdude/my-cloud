@@ -1838,11 +1838,6 @@
                       ontouchmove={onQrTouchEnd}>
                       <IconLink size={14}/>
                     </button>
-                    {#if isTextLikeFile(file)}
-                      <a class="act-btn" title="Raw text" href={`/raw/${getFullFilePath(file)}`} target="_blank" onclick={(e) => e.stopPropagation()} style="font-size:10px;font-family:monospace;font-weight:700;padding:0 5px;">
-                        RAW
-                      </a>
-                    {/if}
                   {/if}
                   <button
                     class="act-btn"
