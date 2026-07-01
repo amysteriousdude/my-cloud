@@ -301,19 +301,8 @@ async function getTgUrlCached(fileId: string): Promise<string | null> {
 }
 
 async function fetchChunkBytes(fileId: string, expectedSize: number, chunkIndex: number): Promise<Buffer> {
-  // Try edge cache first — 0 subrequests on hit
-  try {
-    const cache = await caches.open('tg-chunks-v1');
-    const hit = await cache.match(new Request(`https://tg-cache/${fileId}`));
-    if (hit?.body) {
-      const buf = Buffer.from(await hit.arrayBuffer());
-      if (expectedSize <= 0 || buf.length === expectedSize) return buf;
-      console.error(`webdaV chunk ${chunkIndex}: cache size mismatch (${buf.length} vs ${expectedSize}), refetching`);
-    }
-  } catch {}
-
-  // Cache miss or size mismatch
   let lastError: Error | null = null;
+
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
       const cdnUrl = await getTgUrlCached(fileId);
@@ -327,12 +316,6 @@ async function fetchChunkBytes(fileId: string, expectedSize: number, chunkIndex:
       if (expectedSize > 0 && buf.length !== expectedSize) {
         throw new Error(`Size mismatch: got ${buf.length}, expected ${expectedSize}`);
       }
-
-      try {
-        const cache = await caches.open('tg-chunks-v1');
-        const headers = new Headers({ 'Content-Type': 'application/octet-stream', 'Content-Length': String(buf.length) });
-        await cache.put(new Request(`https://tg-cache/${fileId}`), new Response(buf, { headers }));
-      } catch {}
 
       return buf;
     } catch (e) {
@@ -416,39 +399,39 @@ async function streamFileRange(file: any, start: number, end: number): Promise<R
 
   const sorted = [...meta.chunks].sort((a: any, b: any) => a.index - b.index);
   let pos = 0;
-  const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
-  const writer = writable.getWriter();
+  let bytesWritten = 0;
 
-  (async () => {
-    let bytesWritten = 0;
-    try {
-      for (let i = 0; i < sorted.length; i++) {
-        const chunk = sorted[i];
-        const size = Number(chunk.size ?? 0);
-        const chunkStart = pos;
-        const chunkEnd = pos + size - 1;
-        pos += size;
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      try {
+        for (let i = 0; i < sorted.length; i++) {
+          const chunk = sorted[i];
+          const size = Number(chunk.size ?? 0);
+          const chunkStart = pos;
+          const chunkEnd = pos + size - 1;
+          pos += size;
 
-        if (chunkEnd < start || chunkStart > end) continue;
+          if (chunkEnd < start || chunkStart > end) continue;
 
-        const overlapStart = Math.max(start, chunkStart) - chunkStart;
-        const overlapEnd = Math.min(end, chunkEnd) - chunkStart;
+          const overlapStart = Math.max(start, chunkStart) - chunkStart;
+          const overlapEnd = Math.min(end, chunkEnd) - chunkStart;
 
-        const buf = await fetchChunkBytes(chunk.file_id, size, i);
-        const sliced = buf.slice(overlapStart, overlapEnd + 1);
-        await writer.write(sliced);
-        bytesWritten += sliced.length;
+          const buf = await fetchChunkBytes(chunk.file_id, size, i);
+          const sliced = buf.slice(overlapStart, overlapEnd + 1);
+          controller.enqueue(sliced);
+          bytesWritten += sliced.length;
 
-        if (i < sorted.length - 1) await delay(INTER_CHUNK_DELAY_MS);
+          if (i < sorted.length - 1) await delay(INTER_CHUNK_DELAY_MS);
+        }
+        controller.close();
+      } catch (err) {
+        console.error(`webdaV range stream error after ${bytesWritten} bytes:`, (err as Error)?.message || err);
+        controller.error(err);
       }
-    } catch (err) {
-      console.error(`webdaV range stream error after ${bytesWritten} bytes:`, (err as Error)?.message || err);
-    } finally {
-      await writer.close().catch(() => {});
     }
-  })();
+  });
 
-  return readable;
+  return stream;
 }
 
 async function streamFileAll(file: any): Promise<ReadableStream<Uint8Array>> {
@@ -464,29 +447,29 @@ async function streamFileAll(file: any): Promise<ReadableStream<Uint8Array>> {
   }
 
   const sorted = [...meta.chunks].sort((a: any, b: any) => a.index - b.index);
-  const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
-  const writer = writable.getWriter();
+  let bytesWritten = 0;
 
-  (async () => {
-    let bytesWritten = 0;
-    try {
-      for (let i = 0; i < sorted.length; i++) {
-        const c = sorted[i];
-        const size = Number(c.size ?? 0);
-        const buf = await fetchChunkBytes(c.file_id, size, i);
-        await writer.write(buf);
-        bytesWritten += buf.length;
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      try {
+        for (let i = 0; i < sorted.length; i++) {
+          const c = sorted[i];
+          const size = Number(c.size ?? 0);
+          const buf = await fetchChunkBytes(c.file_id, size, i);
+          controller.enqueue(buf);
+          bytesWritten += buf.length;
 
-        if (i < sorted.length - 1) await delay(INTER_CHUNK_DELAY_MS);
+          if (i < sorted.length - 1) await delay(INTER_CHUNK_DELAY_MS);
+        }
+        controller.close();
+      } catch (err) {
+        console.error(`webdaV stream error after ${bytesWritten} bytes:`, (err as Error)?.message || err);
+        controller.error(err);
       }
-    } catch (err) {
-      console.error(`webdaV stream error after ${bytesWritten} bytes:`, (err as Error)?.message || err);
-    } finally {
-      await writer.close().catch(() => {});
     }
-  })();
+  });
 
-  return readable;
+  return stream;
 }
 
 // ── WebDAV handlers ───────────────────────────────────────────────────────────

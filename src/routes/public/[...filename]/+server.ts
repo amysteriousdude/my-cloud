@@ -31,28 +31,8 @@ function delay(ms: number): Promise<void> {
 }
 
 async function fetchChunkBytes(fileId: string, expectedSize: number, chunkIndex: number): Promise<Uint8Array> {
-  // Try edge cache first — 0 subrequests on hit
-  try {
-    const cache = await caches.open('tg-chunks-v1');
-    const hit = await cache.match(new Request(`https://tg-cache/${fileId}`));
-    if (hit?.body) {
-      const reader = hit.body.getReader();
-      const chunks: Uint8Array[] = [];
-      let totalBytes = 0;
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        if (value) { chunks.push(value); totalBytes += value.length; }
-      }
-      if (expectedSize <= 0 || totalBytes === expectedSize) {
-        return chunks.length === 1 ? chunks[0] : Buffer.concat(chunks);
-      }
-      console.error(`public chunk ${chunkIndex}: cache size mismatch (${totalBytes} vs ${expectedSize}), refetching`);
-    }
-  } catch {}
-
-  // Cache miss or size mismatch — fetch from Telegram CDN
   let lastError: Error | null = null;
+
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
       const cdnUrl = await getTgUrl(fileId);
@@ -75,16 +55,8 @@ async function fetchChunkBytes(fileId: string, expectedSize: number, chunkIndex:
         throw new Error(`Size mismatch: got ${totalBytes}, expected ${expectedSize}`);
       }
 
-      const data = chunks.length === 1 ? chunks[0] : Buffer.concat(chunks);
-
-      // Cache for next time
-      try {
-        const cache = await caches.open('tg-chunks-v1');
-        const headers = new Headers({ 'Content-Type': 'application/octet-stream', 'Content-Length': String(totalBytes) });
-        await cache.put(new Request(`https://tg-cache/${fileId}`), new Response(data, { headers }));
-      } catch {}
-
-      return data;
+      if (chunks.length === 1) return chunks[0];
+      return Buffer.concat(chunks);
     } catch (e) {
       lastError = e as Error;
       console.error(`public chunk ${chunkIndex} failed (attempt ${attempt + 1}/${MAX_RETRIES}): ${lastError.message}`);

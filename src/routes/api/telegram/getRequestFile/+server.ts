@@ -57,28 +57,8 @@ function delay(ms: number): Promise<void> {
 }
 
 async function fetchChunkBytes(fileId: string, expectedSize: number, chunkIndex: number): Promise<Uint8Array> {
-  // Try edge cache first — 0 subrequests on hit
-  try {
-    const cache = await caches.open('tg-chunks-v1');
-    const hit = await cache.match(new Request(`https://tg-cache/${fileId}`));
-    if (hit?.body) {
-      const reader = hit.body.getReader();
-      const bufs: Uint8Array[] = [];
-      let totalBytes = 0;
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        if (value) { bufs.push(value); totalBytes += value.length; }
-      }
-      if (expectedSize <= 0 || totalBytes === expectedSize) {
-        return bufs.length === 1 ? bufs[0] : Buffer.concat(bufs);
-      }
-      console.error(`getRequestFile chunk ${chunkIndex}: cache size mismatch (${totalBytes} vs ${expectedSize}), refetching`);
-    }
-  } catch {}
-
-  // Cache miss or size mismatch
   let lastError: Error | null = null;
+
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
       const cdnUrl = await getTelegramUrl(fileId);
@@ -99,15 +79,8 @@ async function fetchChunkBytes(fileId: string, expectedSize: number, chunkIndex:
         throw new Error(`Size mismatch: got ${totalBytes}, expected ${expectedSize}`);
       }
 
-      const data = bufs.length === 1 ? bufs[0] : Buffer.concat(bufs);
-
-      try {
-        const cache = await caches.open('tg-chunks-v1');
-        const headers = new Headers({ 'Content-Type': 'application/octet-stream', 'Content-Length': String(totalBytes) });
-        await cache.put(new Request(`https://tg-cache/${fileId}`), new Response(data, { headers }));
-      } catch {}
-
-      return data;
+      if (bufs.length === 1) return bufs[0];
+      return Buffer.concat(bufs);
     } catch (e) {
       lastError = e as Error;
       console.error(`getRequestFile chunk ${chunkIndex} failed (attempt ${attempt + 1}/${MAX_RETRIES}): ${lastError.message}`);
@@ -200,21 +173,38 @@ export const GET: RequestHandler = async ({ request, url }) => {
         if (!range || range.start > range.end || range.start >= totalBytes)
           return new Response('Range Not Satisfiable', { status: 416, headers: { 'Content-Range': `bytes */${totalBytes}` } });
 
-        const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
-        const writer = writable.getWriter();
+        let bytesWritten = 0;
+        const stream = new ReadableStream<Uint8Array>({
+          async start(controller) {
+            try {
+              let pos = 0;
+              for (let i = 0; i < sorted.length; i++) {
+                const chunkSize = Number(sorted[i].size ?? 0);
+                const chunkStart = pos;
+                const chunkEnd = pos + chunkSize - 1;
+                pos += chunkSize;
 
-        (async () => {
-          try {
-            const written = await pumpFromChunks(sorted, writer, range);
-            console.log(`getRequestFile range stream done — ${written} bytes`);
-          } catch (err) {
-            console.error(`getRequestFile range stream error:`, (err as Error)?.message || err);
-          } finally {
-            await writer.close().catch(() => {});
+                if (chunkEnd < range.start || chunkStart > range.end) continue;
+
+                const data = await fetchChunkBytes(sorted[i].file_id, chunkSize, i);
+                const overlapStart = Math.max(0, range.start - chunkStart);
+                const overlapEnd = Math.min(chunkSize - 1, range.end - chunkStart);
+                const sliced = data.slice(overlapStart, overlapEnd + 1);
+                controller.enqueue(sliced);
+                bytesWritten += sliced.length;
+
+                if (i < sorted.length - 1) await delay(INTER_CHUNK_DELAY_MS);
+              }
+              console.log(`getRequestFile range stream done — ${bytesWritten} bytes`);
+              controller.close();
+            } catch (err) {
+              console.error(`getRequestFile range stream error after ${bytesWritten} bytes:`, (err as Error)?.message || err);
+              controller.error(err);
+            }
           }
-        })();
+        });
 
-        return new Response(readable, {
+        return new Response(stream, {
           status: 206,
           headers: {
             'Content-Type': meta.type,
@@ -227,26 +217,33 @@ export const GET: RequestHandler = async ({ request, url }) => {
         });
       }
 
-      // Full chunked file
-      const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
-      const writer = writable.getWriter();
+      // Full chunked file — ReadableStream keeps worker alive while browser consumes
+      let bytesWritten = 0;
+      const stream = new ReadableStream<Uint8Array>({
+        async start(controller) {
+          try {
+            for (let i = 0; i < sorted.length; i++) {
+              const chunk = sorted[i];
+              const chunkSize = Number(chunk.size ?? 0);
+              const data = await fetchChunkBytes(chunk.file_id, chunkSize, i);
+              controller.enqueue(data);
+              bytesWritten += data.length;
 
-      (async () => {
-        try {
-          const written = await pumpFromChunks(sorted, writer);
-          if (totalBytes > 0 && written !== totalBytes) {
-            console.error(`Chunked stream mismatch: wrote ${written} but expected ${totalBytes}`);
+              if (i < sorted.length - 1) await delay(INTER_CHUNK_DELAY_MS);
+            }
+            if (totalBytes > 0 && bytesWritten !== totalBytes) {
+              console.error(`Chunked stream mismatch: wrote ${bytesWritten} but expected ${totalBytes}`);
+            }
+            console.log(`getRequestFile stream done — ${bytesWritten} bytes`);
+            controller.close();
+          } catch (err) {
+            console.error(`getRequestFile stream error after ${bytesWritten} bytes:`, (err as Error)?.message || err);
+            controller.error(err);
           }
-          console.log(`getRequestFile stream done — ${written} bytes`);
-        } catch (err) {
-          console.error(`getRequestFile stream error:`, (err as Error)?.message || err);
-          try { await writer.abort(err as Error); } catch {}
-          return;
         }
-        await writer.close();
-      })();
+      });
 
-      return new Response(readable, {
+      return new Response(stream, {
         status: 200,
         headers: {
           'Content-Type': meta.type,
