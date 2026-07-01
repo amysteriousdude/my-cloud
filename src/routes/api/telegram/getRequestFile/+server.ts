@@ -4,17 +4,16 @@ import { getRecordByApiKey } from '$lib/telegramStorage';
 import { env } from '$env/dynamic/private';
 
 const BOT_TOKEN = env.TELEGRAM_BOT_TOKEN!;
-const TELE_API  = `https://api.telegram.org/bot${BOT_TOKEN}`;
+const TELE_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 
-// ── Cache ──────────────────────────────────────────────────────────────────
-const CDN_URL_TTL  = 50 * 60 * 1000;
-const META_TTL     = 10 * 60 * 1000;
-const MAX_RETRIES  = 3;
+const CDN_URL_TTL = 50 * 60 * 1000;
+const META_TTL = 10 * 60 * 1000;
+const MAX_RETRIES = 3;
 const RETRY_DELAYS = [500, 1000, 2000];
-const INTER_CHUNK_DELAY_MS = 100;
+const INTER_CHUNK_DELAY_MS = 50;
 
-const cdnUrlCache  = new Map<string, { url: string; exp: number }>();
-const metaCache    = new Map<string, { meta: any; exp: number }>();
+const cdnUrlCache = new Map<string, { url: string; exp: number }>();
+const metaCache = new Map<string, { meta: any; exp: number }>();
 
 async function getTelegramUrl(file_id: string): Promise<string> {
   const cached = cdnUrlCache.get(file_id);
@@ -33,8 +32,8 @@ async function fetchMeta(metaFileId: string): Promise<any | null> {
   if (cached && Date.now() < cached.exp) return cached.meta;
 
   try {
-    const url  = await getTelegramUrl(metaFileId);
-    const r    = await fetch(url);
+    const url = await getTelegramUrl(metaFileId);
+    const r = await fetch(url);
     const meta = JSON.parse(await r.text());
     metaCache.set(metaFileId, { meta, exp: Date.now() + META_TTL });
     return meta;
@@ -49,7 +48,7 @@ function parseRange(header: string, total: number) {
   const m = header.match(/bytes=(\d*)-(\d*)/);
   if (!m) return null;
   const start = m[1] ? parseInt(m[1]) : total - parseInt(m[2]);
-  const end   = m[2] ? Math.min(parseInt(m[2]), total - 1) : total - 1;
+  const end = m[2] ? Math.min(parseInt(m[2]), total - 1) : total - 1;
   return { start, end };
 }
 
@@ -57,66 +56,109 @@ function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// ── Pre-fetch all CDN URLs in parallel to stay under CF 50-subreq limit ────
-async function prefetchChunkUrls(chunks: { file_id: string }[]): Promise<Map<string, string>> {
-  const urlMap = new Map<string, string>();
-  const uniqueFileIds = [...new Set(chunks.map(c => c.file_id))];
-
-  await Promise.allSettled(
-    uniqueFileIds.map(async (fileId) => {
-      try {
-        const url = await getTelegramUrl(fileId);
-        urlMap.set(fileId, url);
-      } catch (e) {
-        console.error(`getRequestFile: CDN URL pre-fetch failed for ${fileId}:`, (e as Error)?.message);
+async function fetchChunkBytes(fileId: string, expectedSize: number, chunkIndex: number): Promise<Uint8Array> {
+  // Try edge cache first — 0 subrequests on hit
+  try {
+    const cache = await caches.open('tg-chunks-v1');
+    const hit = await cache.match(new Request(`https://tg-cache/${fileId}`));
+    if (hit?.body) {
+      const reader = hit.body.getReader();
+      const bufs: Uint8Array[] = [];
+      let totalBytes = 0;
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        if (value) { bufs.push(value); totalBytes += value.length; }
       }
-    })
-  );
-
-  return urlMap;
-}
-
-// ── Cache-first chunk fetch using pre-resolved URL ──────────────────────────
-async function fetchChunkWithUrl(fileId: string, cdnUrl: string): Promise<{ body: ReadableStream<Uint8Array>; fromCache: boolean }> {
-  try {
-    const cache = await caches.open('tg-chunks-v1');
-    const cacheReq = new Request(`https://tg-cache/${fileId}`);
-    const hit = await cache.match(cacheReq);
-    if (hit?.body) return { body: hit.body, fromCache: true };
+      if (expectedSize <= 0 || totalBytes === expectedSize) {
+        return bufs.length === 1 ? bufs[0] : Buffer.concat(bufs);
+      }
+      console.error(`getRequestFile chunk ${chunkIndex}: cache size mismatch (${totalBytes} vs ${expectedSize}), refetching`);
+    }
   } catch {}
 
-  const upstream = await fetch(cdnUrl);
-  if (!upstream.ok) throw new Error(`Upstream failed: ${upstream.status}`);
-  if (!upstream.body) throw new Error('Upstream body is null');
-
-  try {
-    const cache = await caches.open('tg-chunks-v1');
-    const cacheReq = new Request(`https://tg-cache/${fileId}`);
-    await cache.put(cacheReq, upstream.clone());
-  } catch {}
-
-  return { body: upstream.body, fromCache: false };
-}
-
-async function fetchChunkWithRetry(fileId: string, cdnUrl: string, chunkIndex: number): Promise<{ body: ReadableStream<Uint8Array>; fromCache: boolean }> {
+  // Cache miss or size mismatch
   let lastError: Error | null = null;
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
-      return await fetchChunkWithUrl(fileId, cdnUrl);
+      const cdnUrl = await getTelegramUrl(fileId);
+      const res = await fetch(cdnUrl);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.body) throw new Error('Empty body');
+
+      const reader = res.body.getReader();
+      const bufs: Uint8Array[] = [];
+      let totalBytes = 0;
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        if (value) { bufs.push(value); totalBytes += value.length; }
+      }
+
+      if (expectedSize > 0 && totalBytes !== expectedSize) {
+        throw new Error(`Size mismatch: got ${totalBytes}, expected ${expectedSize}`);
+      }
+
+      const data = bufs.length === 1 ? bufs[0] : Buffer.concat(bufs);
+
+      try {
+        const cache = await caches.open('tg-chunks-v1');
+        const headers = new Headers({ 'Content-Type': 'application/octet-stream', 'Content-Length': String(totalBytes) });
+        await cache.put(new Request(`https://tg-cache/${fileId}`), new Response(data, { headers }));
+      } catch {}
+
+      return data;
     } catch (e) {
       lastError = e as Error;
-      console.error(`getRequestFile chunk ${chunkIndex} fetch failed (attempt ${attempt + 1}/${MAX_RETRIES}):`, lastError.message);
+      console.error(`getRequestFile chunk ${chunkIndex} failed (attempt ${attempt + 1}/${MAX_RETRIES}): ${lastError.message}`);
       if (attempt < MAX_RETRIES - 1) await delay(RETRY_DELAYS[attempt]);
     }
   }
+
   throw new Error(`Chunk ${chunkIndex} failed after ${MAX_RETRIES} attempts: ${lastError?.message}`);
 }
 
+async function pumpFromChunks(
+  sorted: any[],
+  writer: WritableStreamDefaultWriter<Uint8Array>,
+  range?: { start: number; end: number }
+): Promise<number> {
+  let bytesWritten = 0;
+  let pos = 0;
+
+  for (let i = 0; i < sorted.length; i++) {
+    const chunkSize = Number(sorted[i].size ?? 0);
+    const chunkStart = pos;
+    const chunkEnd = pos + chunkSize - 1;
+    pos += chunkSize;
+
+    if (range && chunkEnd < range.start) continue;
+    if (range && chunkStart > range.end) break;
+
+    const data = await fetchChunkBytes(sorted[i].file_id, chunkSize, i);
+
+    if (range) {
+      const overlapStart = Math.max(0, range.start - chunkStart);
+      const overlapEnd = Math.min(chunkSize - 1, range.end - chunkStart);
+      const sliced = data.slice(overlapStart, overlapEnd + 1);
+      await writer.write(sliced);
+      bytesWritten += sliced.length;
+    } else {
+      await writer.write(data);
+      bytesWritten += data.length;
+    }
+
+    if (i < sorted.length - 1) await delay(INTER_CHUNK_DELAY_MS);
+  }
+
+  return bytesWritten;
+}
+
 export const GET: RequestHandler = async ({ request, url }) => {
-  const apiKey     = (request.headers.get('x-api-key')      ?? url.searchParams.get('api_key')      ?? '').trim();
+  const apiKey = (request.headers.get('x-api-key') ?? url.searchParams.get('api_key') ?? '').trim();
   const metaFileId = (request.headers.get('x-meta-file-id') ?? url.searchParams.get('meta_file_id') ?? '').trim();
-  const returnJson = (request.headers.get('x-json')         ?? url.searchParams.get('json')         ?? 'false') === 'true';
-  const forceDown  = (request.headers.get('x-download')     ?? url.searchParams.get('download')     ?? 'false') === 'true';
+  const returnJson = (request.headers.get('x-json') ?? url.searchParams.get('json') ?? 'false') === 'true';
+  const forceDown = (request.headers.get('x-download') ?? url.searchParams.get('download') ?? 'false') === 'true';
 
   if (!apiKey)
     return new Response(JSON.stringify({ error: 'Missing api key' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
@@ -135,16 +177,16 @@ export const GET: RequestHandler = async ({ request, url }) => {
 
     if (returnJson) {
       return new Response(JSON.stringify({
-        fileName:    meta.fileName,
-        mimeType:    meta.type,
-        totalBytes:  meta.totalBytes,
-        time:        meta.time,
-        chunked:     meta.chunked ?? false,
+        fileName: meta.fileName,
+        mimeType: meta.type,
+        totalBytes: meta.totalBytes,
+        time: meta.time,
+        chunked: meta.chunked ?? false,
         previewable: isPreviewable(meta.type),
       }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
-    const canPreview  = isPreviewable(meta.type) && !forceDown;
+    const canPreview = isPreviewable(meta.type) && !forceDown;
     const disposition = `${canPreview ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(meta.fileName)}`;
     const totalBytes: number = meta.totalBytes ?? 0;
     const rangeHeader = request.headers.get('range');
@@ -152,9 +194,6 @@ export const GET: RequestHandler = async ({ request, url }) => {
     // ── CHUNKED FILE ────────────────────────────────────────────────────────
     if (meta.chunked && Array.isArray(meta.chunks)) {
       const sorted = [...meta.chunks].sort((a: any, b: any) => a.index - b.index);
-
-      // Pre-fetch all CDN URLs upfront to stay under CF 50-subreq limit
-      const urlMap = await prefetchChunkUrls(sorted);
 
       if (rangeHeader && totalBytes > 0) {
         const range = parseRange(rangeHeader, totalBytes);
@@ -165,56 +204,11 @@ export const GET: RequestHandler = async ({ request, url }) => {
         const writer = writable.getWriter();
 
         (async () => {
-          let bytesWritten = 0;
           try {
-            let pos = 0;
-            for (let i = 0; i < sorted.length; i++) {
-              const chunkSize  = Number(sorted[i].size ?? 0);
-              const chunkStart = pos;
-              const chunkEnd   = pos + chunkSize - 1;
-              pos += chunkSize;
-
-              if (chunkEnd < range.start || chunkStart > range.end) continue;
-
-              const overlapStart = Math.max(range.start, chunkStart) - chunkStart;
-              const overlapEnd   = Math.min(range.end, chunkEnd) - chunkStart;
-
-              const cdnUrl = urlMap.get(sorted[i].file_id);
-              if (!cdnUrl) { console.error(`getRequestFile chunk ${i}: no CDN URL`); continue; }
-
-              const { body } = await fetchChunkWithRetry(sorted[i].file_id, cdnUrl, i);
-
-              const reader = body.getReader();
-              let skipped = 0;
-              let taken = 0;
-              const need = overlapEnd - overlapStart + 1;
-              while (true) {
-                const { value, done } = await reader.read();
-                if (done) break;
-                if (!value) continue;
-                if (skipped + value.length <= overlapStart) {
-                  skipped += value.length;
-                  continue;
-                }
-                const startInChunk = Math.max(0, overlapStart - skipped);
-                const sliced = value.slice(startInChunk);
-                if (taken + sliced.length > need) {
-                  const slice = sliced.slice(0, need - taken);
-                  await writer.write(slice);
-                  bytesWritten += slice.length;
-                  taken = need;
-                  break;
-                }
-                taken += sliced.length;
-                await writer.write(sliced);
-                bytesWritten += sliced.length;
-                skipped += value.length;
-              }
-
-              if (i < sorted.length - 1) await delay(INTER_CHUNK_DELAY_MS);
-            }
+            const written = await pumpFromChunks(sorted, writer, range);
+            console.log(`getRequestFile range stream done — ${written} bytes`);
           } catch (err) {
-            console.error(`getRequestFile range stream error after ${bytesWritten} bytes:`, (err as Error)?.message || err);
+            console.error(`getRequestFile range stream error:`, (err as Error)?.message || err);
           } finally {
             await writer.close().catch(() => {});
           }
@@ -223,12 +217,12 @@ export const GET: RequestHandler = async ({ request, url }) => {
         return new Response(readable, {
           status: 206,
           headers: {
-            'Content-Type':        meta.type,
+            'Content-Type': meta.type,
             'Content-Disposition': disposition,
-            'Content-Range':       `bytes ${range.start}-${range.end}/${totalBytes}`,
-            'Content-Length':      String(range.end - range.start + 1),
-            'Accept-Ranges':       'bytes',
-            'Cache-Control':       'private, max-age=3600',
+            'Content-Range': `bytes ${range.start}-${range.end}/${totalBytes}`,
+            'Content-Length': String(range.end - range.start + 1),
+            'Accept-Ranges': 'bytes',
+            'Cache-Control': 'private, max-age=3600',
           },
         });
       }
@@ -238,33 +232,14 @@ export const GET: RequestHandler = async ({ request, url }) => {
       const writer = writable.getWriter();
 
       (async () => {
-        let bytesWritten = 0;
         try {
-          for (let i = 0; i < sorted.length; i++) {
-            const chunk = sorted[i];
-            const cdnUrl = urlMap.get(chunk.file_id);
-            if (!cdnUrl) { console.error(`getRequestFile chunk ${i}: no CDN URL`); continue; }
-
-            const { body } = await fetchChunkWithRetry(chunk.file_id, cdnUrl, i);
-
-            const reader = body.getReader();
-            while (true) {
-              const { value, done } = await reader.read();
-              if (done) break;
-              if (value) {
-                await writer.write(value);
-                bytesWritten += value.length;
-              }
-            }
-
-            if (i < sorted.length - 1) await delay(INTER_CHUNK_DELAY_MS);
+          const written = await pumpFromChunks(sorted, writer);
+          if (totalBytes > 0 && written !== totalBytes) {
+            console.error(`Chunked stream mismatch: wrote ${written} but expected ${totalBytes}`);
           }
-          if (totalBytes > 0 && bytesWritten !== totalBytes) {
-            console.error(`Chunked stream mismatch: wrote ${bytesWritten} bytes but meta says ${totalBytes}`);
-          }
-          console.log(`getRequestFile: stream complete — ${bytesWritten} bytes written`);
+          console.log(`getRequestFile stream done — ${written} bytes`);
         } catch (err) {
-          console.error(`Chunked stream error after ${bytesWritten} bytes:`, (err as Error)?.message || err);
+          console.error(`getRequestFile stream error:`, (err as Error)?.message || err);
           try { await writer.abort(err as Error); } catch {}
           return;
         }
@@ -274,11 +249,11 @@ export const GET: RequestHandler = async ({ request, url }) => {
       return new Response(readable, {
         status: 200,
         headers: {
-          'Content-Type':        meta.type,
+          'Content-Type': meta.type,
           'Content-Disposition': disposition,
           ...(totalBytes > 0 ? { 'Content-Length': String(totalBytes) } : {}),
-          'Accept-Ranges':       'bytes',
-          'Cache-Control':       'private, max-age=3600',
+          'Accept-Ranges': 'bytes',
+          'Cache-Control': 'private, max-age=3600',
         },
       });
     }
@@ -297,12 +272,12 @@ export const GET: RequestHandler = async ({ request, url }) => {
       return new Response(upstream.body, {
         status: 206,
         headers: {
-          'Content-Type':        meta.type,
+          'Content-Type': meta.type,
           'Content-Disposition': disposition,
-          'Content-Range':       `bytes ${range.start}-${range.end}/${totalBytes}`,
-          'Content-Length':      String(range.end - range.start + 1),
-          'Accept-Ranges':       'bytes',
-          'Cache-Control':       'private, max-age=3600',
+          'Content-Range': `bytes ${range.start}-${range.end}/${totalBytes}`,
+          'Content-Length': String(range.end - range.start + 1),
+          'Accept-Ranges': 'bytes',
+          'Cache-Control': 'private, max-age=3600',
         },
       });
     }
@@ -314,11 +289,11 @@ export const GET: RequestHandler = async ({ request, url }) => {
     return new Response(upstream.body, {
       status: 200,
       headers: {
-        'Content-Type':        meta.type,
+        'Content-Type': meta.type,
         'Content-Disposition': disposition,
         ...(totalBytes > 0 ? { 'Content-Length': String(totalBytes) } : {}),
-        'Accept-Ranges':       'bytes',
-        'Cache-Control':       'private, max-age=3600',
+        'Accept-Ranges': 'bytes',
+        'Cache-Control': 'private, max-age=3600',
       },
     });
 

@@ -282,44 +282,67 @@ async function pumpToWriter(
 
 const MAX_RETRIES = 3;
 const RETRY_DELAYS = [500, 1000, 2000];
-const INTER_CHUNK_DELAY_MS = 100;
+const INTER_CHUNK_DELAY_MS = 50;
 
 function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// ── Pre-fetch all CDN URLs in parallel to stay under CF 50-subreq limit ────
-async function prefetchChunkUrls(chunks: { file_id: string }[]): Promise<Map<string, string>> {
-  const urlMap = new Map<string, string>();
-  const uniqueFileIds = [...new Set(chunks.map(c => c.file_id))];
-  await Promise.allSettled(
-    uniqueFileIds.map(async (fileId) => {
-      const url = await getTgUrl(fileId);
-      if (url) urlMap.set(fileId, url);
-      else console.error(`webdaV: CDN URL pre-fetch failed for ${fileId}`);
-    })
-  );
-  return urlMap;
+// ── In-memory CDN URL cache ────────────────────────────────────────────────
+const CDN_URL_TTL = 50 * 60 * 1000;
+const cdnUrlCache = new Map<string, { url: string; exp: number }>();
+
+async function getTgUrlCached(fileId: string): Promise<string | null> {
+  const cached = cdnUrlCache.get(fileId);
+  if (cached && Date.now() < cached.exp) return cached.url;
+  const url = await getTgUrl(fileId);
+  if (url) cdnUrlCache.set(fileId, { url, exp: Date.now() + CDN_URL_TTL });
+  return url;
 }
 
-async function fetchTgWithPrebuiltUrl(fileId: string, cdnUrl: string, rangeHeader?: string): Promise<Response> {
-  const res = await fetch(cdnUrl, rangeHeader ? { headers: { Range: rangeHeader } } : undefined);
-  if (!res.ok) throw new Error(`Telegram fetch failed: ${res.status}`);
-  return res;
-}
+async function fetchChunkBytes(fileId: string, expectedSize: number, chunkIndex: number): Promise<Buffer> {
+  // Try edge cache first — 0 subrequests on hit
+  try {
+    const cache = await caches.open('tg-chunks-v1');
+    const hit = await cache.match(new Request(`https://tg-cache/${fileId}`));
+    if (hit?.body) {
+      const buf = Buffer.from(await hit.arrayBuffer());
+      if (expectedSize <= 0 || buf.length === expectedSize) return buf;
+      console.error(`webdaV chunk ${chunkIndex}: cache size mismatch (${buf.length} vs ${expectedSize}), refetching`);
+    }
+  } catch {}
 
-async function fetchTgWithRetryPrebuilt(fileId: string, cdnUrl: string, chunkIndex: number, rangeHeader?: string): Promise<Response> {
+  // Cache miss or size mismatch
   let lastError: Error | null = null;
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
-      return await fetchTgWithPrebuiltUrl(fileId, cdnUrl, rangeHeader);
+      const cdnUrl = await getTgUrlCached(fileId);
+      if (!cdnUrl) throw new Error('No CDN URL');
+
+      const res = await fetch(cdnUrl);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const buf = Buffer.from(await res.arrayBuffer());
+
+      if (expectedSize > 0 && buf.length !== expectedSize) {
+        throw new Error(`Size mismatch: got ${buf.length}, expected ${expectedSize}`);
+      }
+
+      try {
+        const cache = await caches.open('tg-chunks-v1');
+        const headers = new Headers({ 'Content-Type': 'application/octet-stream', 'Content-Length': String(buf.length) });
+        await cache.put(new Request(`https://tg-cache/${fileId}`), new Response(buf, { headers }));
+      } catch {}
+
+      return buf;
     } catch (e) {
       lastError = e as Error;
-      console.error(`webdaV chunk ${chunkIndex} fetch failed (attempt ${attempt + 1}/${MAX_RETRIES}):`, lastError.message);
+      console.error(`webdaV chunk ${chunkIndex} failed (attempt ${attempt + 1}/${MAX_RETRIES}): ${lastError.message}`);
       if (attempt < MAX_RETRIES - 1) await delay(RETRY_DELAYS[attempt]);
     }
   }
-  throw new Error(`Chunk ${chunkIndex} fetch failed after ${MAX_RETRIES} attempts: ${lastError?.message}`);
+
+  throw new Error(`Chunk ${chunkIndex} failed after ${MAX_RETRIES} attempts: ${lastError?.message}`);
 }
 
 /* ----------------------------- Replaced network helpers ------------------------------ */
@@ -392,7 +415,6 @@ async function streamFileRange(file: any, start: number, end: number): Promise<R
   }
 
   const sorted = [...meta.chunks].sort((a: any, b: any) => a.index - b.index);
-  const urlMap = await prefetchChunkUrls(sorted);
   let pos = 0;
   const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
   const writer = writable.getWriter();
@@ -412,19 +434,10 @@ async function streamFileRange(file: any, start: number, end: number): Promise<R
         const overlapStart = Math.max(start, chunkStart) - chunkStart;
         const overlapEnd = Math.min(end, chunkEnd) - chunkStart;
 
-        const cdnUrl = urlMap.get(chunk.file_id);
-        if (!cdnUrl) { console.error(`webdaV chunk ${i}: no CDN URL`); continue; }
-
-        const tgRes = await fetchTgWithRetryPrebuilt(chunk.file_id, cdnUrl, i, `bytes=${overlapStart}-${overlapEnd}`);
-        const reader = tgRes.body!.getReader();
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          if (value) {
-            await writer.write(value);
-            bytesWritten += value.length;
-          }
-        }
+        const buf = await fetchChunkBytes(chunk.file_id, size, i);
+        const sliced = buf.slice(overlapStart, overlapEnd + 1);
+        await writer.write(sliced);
+        bytesWritten += sliced.length;
 
         if (i < sorted.length - 1) await delay(INTER_CHUNK_DELAY_MS);
       }
@@ -451,7 +464,6 @@ async function streamFileAll(file: any): Promise<ReadableStream<Uint8Array>> {
   }
 
   const sorted = [...meta.chunks].sort((a: any, b: any) => a.index - b.index);
-  const urlMap = await prefetchChunkUrls(sorted);
   const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
   const writer = writable.getWriter();
 
@@ -460,19 +472,10 @@ async function streamFileAll(file: any): Promise<ReadableStream<Uint8Array>> {
     try {
       for (let i = 0; i < sorted.length; i++) {
         const c = sorted[i];
-        const cdnUrl = urlMap.get(c.file_id);
-        if (!cdnUrl) { console.error(`webdaV chunk ${i}: no CDN URL`); continue; }
-
-        const tgRes = await fetchTgWithRetryPrebuilt(c.file_id, cdnUrl, i);
-        const reader = tgRes.body!.getReader();
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          if (value) {
-            await writer.write(value);
-            bytesWritten += value.length;
-          }
-        }
+        const size = Number(c.size ?? 0);
+        const buf = await fetchChunkBytes(c.file_id, size, i);
+        await writer.write(buf);
+        bytesWritten += buf.length;
 
         if (i < sorted.length - 1) await delay(INTER_CHUNK_DELAY_MS);
       }
