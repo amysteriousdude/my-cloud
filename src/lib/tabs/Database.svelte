@@ -8,13 +8,14 @@
   } from '@tabler/icons-svelte';
   import { openDatabase, getSchema, query as sqlQuery, exportDatabase, closeDatabase, type Database as SqlDb } from '$lib/sql';
   import { TG_SAFE_CHUNK_BYTES } from '$lib/telegramLimits';
+  import { gzipSync, gunzipSync } from 'fflate';
 
   let { apiKey }: { apiKey: string } = $props();
 
   type DbFile = {
     metaFileId: string; metaMessageId: number; fileName: string; type: string;
     totalBytes: number; time: string; telegramFileId: string; telegramMessageId: number;
-    favorite?: boolean; folderId?: string; id: string;
+    favorite?: boolean; folderId?: string; id: string; compressed?: boolean;
   };
   type TableInfo = { name: string; columns: { name: string; type: string; notnull: boolean; pk: boolean }[]; indexes: { name: string; columns: string[] }[] };
 
@@ -46,6 +47,7 @@
   let openingDbName = $state('');
 
   let creatingTable = $state(false);
+  const GZIP_THRESHOLD = 90 * 1024 * 1024;
   let newTableName = $state('');
   let newColumns = $state<{ name: string; type: string; pk: boolean }[]>([
     { name: 'id', type: 'INTEGER', pk: true }
@@ -89,11 +91,11 @@
     try {
       const res = await fetch(`/api/telegram/ls?folderId=${encodeURIComponent(databasesFolderId || '')}`, { headers: { 'X-Api-Key': apiKey } });
       const data = await res.json();
-      databases = (data.files || []).filter((f: any) => f.fileName?.match(/\.(sqlite|db|sqlite3)$/i));
+      databases = (data.files || []).filter((f: any) => f.fileName?.match(/\.(sqlite|db|sqlite3)(\.gz)?$/i));
     } finally { loading = false; }
   }
 
-  async function uploadSqliteBytes(bytes: Uint8Array, fileName: string): Promise<{ metaFileId: string; metaMessageId: number } | null> {
+  async function uploadSqliteBytes(bytes: Uint8Array, fileName: string, compressed?: boolean): Promise<{ metaFileId: string; metaMessageId: number } | null> {
     const CHUNK = TG_SAFE_CHUNK_BYTES;
     const numChunks = Math.max(1, Math.ceil(bytes.length / CHUNK));
     const chunks: { index: number; file_id: string; message_id: number; size: number }[] = [];
@@ -120,7 +122,7 @@
     const finRes = await fetch('/api/telegram/finalizeUpload', {
       method: 'POST',
       headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fileName, type: 'application/x-sqlite3', totalBytes: bytes.length, chunks, folderId: databasesFolderId })
+      body: JSON.stringify({ fileName, type: 'application/x-sqlite3', totalBytes: bytes.length, chunks, folderId: databasesFolderId, compressed })
     });
     if (!finRes.ok) return null;
     const fin = await finRes.json();
@@ -140,7 +142,11 @@
     const emptyDb = await openDatabase();
     const data = emptyDb.export();
     emptyDb.close();
-    const result = await uploadSqliteBytes(new Uint8Array(data), `${name}.sqlite`);
+    const raw = new Uint8Array(data);
+    const isCompressed = raw.length > GZIP_THRESHOLD;
+    const bytes = isCompressed ? gzipSync(raw) : raw;
+    const fileName = isCompressed ? `${name}.sqlite.gz` : `${name}.sqlite`;
+    const result = await uploadSqliteBytes(bytes, fileName, isCompressed);
     if (result) {
       await loadDatabases();
     }
@@ -154,7 +160,11 @@
       const file = input.files?.[0];
       if (!file) return;
       const buf = await file.arrayBuffer();
-      const result = await uploadSqliteBytes(new Uint8Array(buf), file.name);
+      const raw = new Uint8Array(buf);
+      const isCompressed = raw.length > GZIP_THRESHOLD;
+      const bytes = isCompressed ? gzipSync(raw) : raw;
+      const fileName = isCompressed ? file.name.replace(/\.(sqlite|db|sqlite3)$/i, '') + '.sqlite.gz' : file.name;
+      const result = await uploadSqliteBytes(bytes, fileName, isCompressed);
       if (result) {
         await loadDatabases();
       }
@@ -181,21 +191,29 @@
     const name = renameValue.trim();
     if (!name) return;
     renamingDb = null;
+    const ext = db.compressed ? '.sqlite.gz' : '.sqlite';
+    const newName = name + ext;
     await fetch('/api/telegram/renameFile', {
       method: 'PATCH',
-      headers: { 'X-Api-Key': apiKey, 'X-Meta-File-Id': db.metaFileId, 'X-New-Name': encodeURIComponent(name + '.sqlite') }
+      headers: { 'X-Api-Key': apiKey, 'X-Meta-File-Id': db.metaFileId, 'X-New-Name': encodeURIComponent(newName) }
     });
-    const newName = name + '.sqlite';
     databases = databases.map(d => d.metaFileId === db.metaFileId ? { ...d, fileName: newName } : d);
     if (openedDb?.metaFileId === db.metaFileId) openedDb = { ...openedDb, fileName: newName };
   }
 
   async function downloadDb(db: DbFile) {
     const res = await fetch(`/api/telegram/getRequestFile?api_key=${encodeURIComponent(apiKey)}&meta_file_id=${encodeURIComponent(db.metaFileId)}&download=true`);
-    const blob = await res.blob();
+    let blob = await res.blob();
+    if (db.compressed) {
+      const buf = await blob.arrayBuffer();
+      const decompressed = gunzipSync(new Uint8Array(buf));
+      blob = new Blob([decompressed], { type: 'application/x-sqlite3' });
+    }
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = db.fileName; a.click();
+    a.href = url;
+    a.download = db.fileName.replace(/\.gz$/i, '');
+    a.click();
     URL.revokeObjectURL(url);
   }
 
@@ -220,11 +238,19 @@
       }
       const buf = await res.arrayBuffer();
       if (buf.byteLength < 100) throw new Error(`Download too small (${buf.byteLength} bytes) — file may be corrupt`);
-      const header = new Uint8Array(buf.slice(0, 16));
+      let dbBytes = new Uint8Array(buf);
+      if (db.compressed) {
+        try {
+          dbBytes = gunzipSync(dbBytes);
+        } catch {
+          throw new Error('Failed to decompress gzipped database');
+        }
+      }
+      const header = dbBytes.slice(0, 16);
       const sig = String.fromCharCode(...header.slice(0, 6));
       if (!sig.startsWith('SQLite')) throw new Error(`Not a valid SQLite file (header: ${sig})`);
-      console.log(`Downloaded ${buf.byteLength} bytes for ${db.fileName}`);
-      sqlDb = await openDatabase(new Uint8Array(buf));
+      console.log(`Downloaded ${buf.byteLength} bytes for ${db.fileName}${db.compressed ? ' (decompressed)' : ''}`);
+      sqlDb = await openDatabase(dbBytes);
       schema = (await getSchema(sqlDb)).tables;
       console.log(`Schema loaded: ${schema.length} tables`);
     } catch (e: any) {
@@ -295,10 +321,13 @@
 
   async function saveDb() {
     if (!sqlDb || !openedDb) return;
-    const bytes = await exportDatabase(sqlDb);
+    const raw = await exportDatabase(sqlDb);
+    const isCompressed = raw.length > GZIP_THRESHOLD;
+    const bytes = isCompressed ? gzipSync(raw) : raw;
+    const fileName = isCompressed ? openedDb.fileName.replace(/\.gz$/i, '') + '.gz' : openedDb.fileName.replace(/\.gz$/i, '');
 
     await deleteFileByMetaId(openedDb.metaFileId);
-    const result = await uploadSqliteBytes(bytes, openedDb.fileName);
+    const result = await uploadSqliteBytes(bytes, fileName, isCompressed);
     if (result) {
       await loadDatabases();
       const updated = databases.find(d => d.metaFileId === result.metaFileId);
@@ -447,7 +476,7 @@
   }
 
   function dbDisplayName(db: DbFile) {
-    return db.fileName.replace(/\.(sqlite|db|sqlite3)$/i, '');
+    return db.fileName.replace(/\.(sqlite|db|sqlite3)(\.gz)?$/i, '');
   }
 
   let paginatedValues = $derived((() => {

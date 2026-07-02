@@ -19,9 +19,10 @@ export const POST: RequestHandler = async ({ request, url }) => {
       totalBytes: number;
       chunks: { index: number; file_id: string; message_id: number; size: number }[];
       folderId?: string;
+      compressed?: boolean;
     };
 
-    const { fileName, type, totalBytes, chunks, folderId } = body;
+    const { fileName, type, totalBytes, chunks, folderId, compressed } = body;
     const time = new Date().toISOString();
     const chunked = chunks.length > 1;
 
@@ -37,12 +38,13 @@ export const POST: RequestHandler = async ({ request, url }) => {
       }), { status: 400, headers: { 'Content-Type': 'application/json' } });
     }
 
-    const meta = {
+    const meta: Record<string, any> = {
       fileName,
       type,
       time,
       totalBytes,
       chunked,
+      ...(compressed ? { compressed: true } : {}),
       ...(chunked ? {
         chunks: chunks.sort((a, b) => a.index - b.index)
       } : {
@@ -65,7 +67,8 @@ export const POST: RequestHandler = async ({ request, url }) => {
       metaMessageId,
       chunked: chunked || undefined,
       chunkMessageIds: chunked ? sorted.map(c => c.message_id) : undefined,
-      folderId: folderId || undefined
+      folderId: folderId || undefined,
+      compressed: compressed || undefined
     });
 
     return new Response(JSON.stringify({ success: true, metaFileId, metaMessageId, fileName }), {

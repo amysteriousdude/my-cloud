@@ -28,6 +28,7 @@ export type FileRecord = {
   favorite?: boolean;
   sortOrder?: number;
   folderId?: string;
+  compressed?: boolean;
   _type?: 'folder';
   name?: string;
   parentId?: string;

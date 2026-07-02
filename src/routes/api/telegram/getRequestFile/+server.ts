@@ -155,6 +155,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
         totalBytes: meta.totalBytes,
         time: meta.time,
         chunked: meta.chunked ?? false,
+        compressed: meta.compressed ?? false,
         previewable: isPreviewable(meta.type),
       }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
