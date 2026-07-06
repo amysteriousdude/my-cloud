@@ -342,8 +342,11 @@ Assistant: ${firstAssistantMsg}`;
     }
   }
 
+  let ensureFolderPromise: Promise<string | null> | null = null;
   async function ensureHistoryFolder(): Promise<string | null> {
     if (historyFolderId) return historyFolderId;
+    if (ensureFolderPromise) return ensureFolderPromise;
+    ensureFolderPromise = (async () => {
     try {
       const res1 = await fetch('/api/telegram/folderOps', {
         method: 'POST',
@@ -366,6 +369,8 @@ Assistant: ${firstAssistantMsg}`;
       console.error('Failed to ensure history folder:', e);
       return null;
     }
+    })();
+    return ensureFolderPromise;
   }
 
   async function uploadChatJson(chat: ChatHistory): Promise<boolean> {
@@ -552,9 +557,13 @@ Assistant: ${firstAssistantMsg}`;
     wasStreaming = streaming;
   });
 
-  // Load history on mount
+  // Load history on mount — only once
+  let historyLoaded = false;
   $effect(() => {
-    if (apiKey) loadHistory();
+    if (apiKey && !historyLoaded) {
+      historyLoaded = true;
+      loadHistory();
+    }
   });
 </script>
 
