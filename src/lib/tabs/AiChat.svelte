@@ -174,14 +174,6 @@
 
     const selects = [
       {
-        value: selectedProvider.id,
-        options: PROVIDERS.map(p => ({ value: p.id, label: p.label })),
-        onchange: (v: string) => {
-          const p = PROVIDERS.find(x => x.id === v);
-          if (p) selectedProvider = p;
-        },
-      },
-      {
         value: selectedModel,
         options: models.map(m => ({ value: m.id, label: getDisplayName(m) })),
         onchange: (v: string) => { selectedModel = v; },
@@ -217,14 +209,6 @@
     btns.push({ icon: IconSend, label: 'Send', onClick: sendMessage, primary: true, disabled: !input.trim() || isStreaming || !selectedModel });
 
     const selects = [
-      {
-        value: selectedProvider.id,
-        options: PROVIDERS.map(p => ({ value: p.id, label: p.label })),
-        onchange: (v: string) => {
-          const p = PROVIDERS.find(x => x.id === v);
-          if (p) selectedProvider = p;
-        },
-      },
       {
         value: selectedModel,
         options: models.map(m => ({ value: m.id, label: getDisplayName(m) })),
@@ -391,7 +375,7 @@ Assistant: ${firstAssistantMsg}`;
         body: JSON.stringify({ action: 'create', name: 'ai', parentId: null }),
       });
       const data1 = await res1.json();
-      const aiFolderId = data1.folder?.id ?? data1.id;
+      const aiFolderId = data1.folder?.folderId ?? data1.folder?.id;
       if (!aiFolderId) return null;
 
       // Create 'history' folder inside 'ai'
@@ -401,7 +385,7 @@ Assistant: ${firstAssistantMsg}`;
         body: JSON.stringify({ action: 'create', name: 'history', parentId: aiFolderId }),
       });
       const data2 = await res2.json();
-      historyFolderId = data2.folder?.id ?? data2.id ?? null;
+      historyFolderId = data2.folder?.folderId ?? data2.folder?.id ?? null;
       return historyFolderId;
     } catch (e) {
       console.error('Failed to ensure history folder:', e);
@@ -614,9 +598,9 @@ Assistant: ${firstAssistantMsg}`;
     </div>
   {/if}
 
-  <!-- Header: history/new chat buttons + system toggle -->
+  <!-- Header: history/new chat + provider pills + system -->
   <div class="ai-header">
-    <div class="ai-providers">
+    <div class="ai-header-row">
       <button class="ai-history-btn" onclick={() => { showHistory = !showHistory; if (showHistory) loadHistory(); }} title="Chat history">
         <IconHistory size={14} />
       </button>
@@ -624,10 +608,27 @@ Assistant: ${firstAssistantMsg}`;
         <IconPlus size={14} />
       </button>
 
+      <div class="ai-sep"></div>
+
+      {#each PROVIDERS as p}
+        <button
+          class="ai-provider-pill"
+          class:active={selectedProvider.id === p.id}
+          style="--pill-color: {p.color}"
+          onclick={() => { selectedProvider = p; }}
+        >
+          <BrandIcon brand={p.id} size={14} />
+          <span>{p.label}</span>
+        </button>
+      {/each}
+
       <div class="ai-header-spacer"></div>
 
       {#if currentChatId}
         <span class="ai-current-title">{chatHistory.find(c => c.id === currentChatId)?.title ?? 'Chat'}</span>
+      {/if}
+      {#if titleGenerating}
+        <span class="ai-current-title">Generating title...</span>
       {/if}
 
       <div class="ai-header-spacer"></div>
@@ -719,8 +720,26 @@ Assistant: ${firstAssistantMsg}`;
     flex-shrink: 0;
   }
 
-  .ai-providers {
-    display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+  .ai-header-row {
+    display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+  }
+
+  .ai-sep {
+    width: 1px; height: 20px; background: var(--border); margin: 0 2px; flex-shrink: 0;
+  }
+
+  .ai-provider-pill {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 5px 10px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--bg-3);
+    color: var(--text-2); font-size: 11px; font-weight: 600;
+    font-family: 'Geist', sans-serif; cursor: pointer;
+    transition: all .15s;
+  }
+  .ai-provider-pill:hover { border-color: var(--border-hover); color: var(--text-1); }
+  .ai-provider-pill.active {
+    border-color: var(--pill-color); color: var(--pill-color);
+    background: color-mix(in srgb, var(--pill-color) 10%, var(--bg-3));
   }
 
   .ai-header-spacer { flex: 1; }
