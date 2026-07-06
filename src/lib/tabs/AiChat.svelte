@@ -168,7 +168,7 @@
   $effect(() => {
     const btns: BarButton[] = [];
     if (isStreaming) {
-      btns.push({ icon: IconPlayerStop, label: 'Stop', onClick: stopStream, danger: true });
+      btns.push({ icon: IconPlayerStop, label: 'Stop', onClick: () => abortController?.abort(), danger: true });
     }
     btns.push({ icon: IconSend, label: 'Send', onClick: sendMessage, primary: true, disabled: !input.trim() || isStreaming || !selectedModel });
 
@@ -194,17 +194,10 @@
     };
   });
 
-  function stopStream() {
-    abortController?.abort();
-    abortController = null;
-    isStreaming = false;
-    updateBarConfig();
-  }
-
   function updateBarConfig() {
     const btns: BarButton[] = [];
     if (isStreaming) {
-      btns.push({ icon: IconPlayerStop, label: 'Stop', onClick: stopStream, danger: true });
+      btns.push({ icon: IconPlayerStop, label: 'Stop', onClick: () => abortController?.abort(), danger: true });
     }
     btns.push({ icon: IconSend, label: 'Send', onClick: sendMessage, primary: true, disabled: !input.trim() || isStreaming || !selectedModel });
 
@@ -247,58 +240,42 @@
 
     try {
       abortController = new AbortController();
-      const res = await fetch(`${selectedProvider.apiBase}/v1/chat/completions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: selectedModel,
-          messages: apiMessages,
-          stream: true,
-        }),
-        signal: abortController.signal,
-      });
 
-      if (!res.ok) throw new Error(`API error: ${res.status}`);
+      // Non-streaming request (like PowerShell) — avoids 402/429 rate limits
+      let res: Response | null = null;
+      const MAX_RETRIES = 3;
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        res = await fetch(`${selectedProvider.apiBase}/v1/chat/completions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: selectedModel,
+            messages: apiMessages,
+            stream: false,
+          }),
+          signal: abortController.signal,
+        });
 
-      const reader = res.body!.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let capturedCitations: string[] = [];
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed || !trimmed.startsWith('data: ')) continue;
-          const data = trimmed.slice(6);
-          if (data === '[DONE]') continue;
-          try {
-            const parsed = JSON.parse(data);
-            // Capture citations from the response
-            if (parsed.citations && Array.isArray(parsed.citations)) {
-              capturedCitations = parsed.citations;
-            }
-            const delta = parsed.choices?.[0]?.delta?.content;
-            if (delta) {
-              messages = messages.map((m, i) =>
-                i === messages.length - 1 ? { ...m, content: m.content + delta } : m
-              );
-            }
-          } catch {}
+        if (res.ok) break;
+        if (res.status === 402 || res.status === 429) {
+          if (attempt < MAX_RETRIES) {
+            const delay = Math.min(2000 * (attempt + 1), 10000);
+            await new Promise(r => setTimeout(r, delay));
+            continue;
+          }
         }
+        throw new Error(`API error: ${res.status}`);
       }
 
-      // Apply citations to the last message after streaming completes
-      if (capturedCitations.length > 0) {
-        messages = messages.map((m, i) =>
-          i === messages.length - 1 ? { ...m, citations: capturedCitations } : m
-        );
-      }
+      if (!res || !res.ok) throw new Error(`API error: ${res?.status}`);
+
+      const data = await res.json();
+      const content = data.choices?.[0]?.message?.content ?? '';
+      const citations = data.citations ?? [];
+
+      messages = messages.map((m, i) =>
+        i === messages.length - 1 ? { ...m, content, citations } : m
+      );
     } catch (e: any) {
       if (e.name !== 'AbortError') {
         messages = messages.map((m, i) =>
@@ -368,7 +345,6 @@ Assistant: ${firstAssistantMsg}`;
   async function ensureHistoryFolder(): Promise<string | null> {
     if (historyFolderId) return historyFolderId;
     try {
-      // Create 'ai' folder first
       const res1 = await fetch('/api/telegram/folderOps', {
         method: 'POST',
         headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
@@ -378,7 +354,6 @@ Assistant: ${firstAssistantMsg}`;
       const aiFolderId = data1.folder?.folderId ?? data1.folder?.id;
       if (!aiFolderId) return null;
 
-      // Create 'history' folder inside 'ai'
       const res2 = await fetch('/api/telegram/folderOps', {
         method: 'POST',
         headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
@@ -437,14 +412,43 @@ Assistant: ${firstAssistantMsg}`;
     if (loadingHistory) return;
     loadingHistory = true;
     try {
-      // First ensure folder exists and get its ID
       const folderId = await ensureHistoryFolder();
 
-      // List files in the folder
-      const res = await fetch(`/api/telegram/ls?api_key=${apiKey}${folderId ? `&folderId=${folderId}` : ''}&_t=${Date.now()}`);
-      const data = await res.json();
-      const files = (data.files ?? []).filter((f: any) => f.fileName?.endsWith('.json'));
+      // Try folder listing first, fallback to root listing
+      let files: any[] = [];
+      if (folderId) {
+        const res = await fetch(`/api/telegram/ls?api_key=${apiKey}&folderId=${folderId}&_t=${Date.now()}`);
+        const data = await res.json();
+        files = data.files ?? [];
+      }
+
+      // If no files in folder, try root listing for legacy files
+      if (files.length === 0) {
+        const res = await fetch(`/api/telegram/ls?api_key=${apiKey}&_t=${Date.now()}`);
+        const data = await res.json();
+        files = (data.files ?? []).filter((f: any) =>
+          f.fileName?.endsWith('.json') && (f.fileName?.includes('history') || f.fileName?.startsWith('chat_'))
+        );
+      }
+
       const loaded: ChatHistory[] = [];
+      for (const file of files) {
+        try {
+          const resp = await fetch(`/api/telegram/getRequestFile?api_key=${apiKey}&meta_file_id=${file.metaFileId}&download=true`);
+          const text = await resp.text();
+          const chat = JSON.parse(text) as ChatHistory;
+          if (chat.id && chat.messages?.length > 0) loaded.push(chat);
+        } catch {}
+      }
+
+      loaded.sort((a, b) => b.updatedAt - a.updatedAt);
+      chatHistory = loaded;
+    } catch (e) {
+      console.error('Failed to load history:', e);
+    } finally {
+      loadingHistory = false;
+    }
+  }
 
       for (const file of files) {
         try {
