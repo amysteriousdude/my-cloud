@@ -853,7 +853,6 @@
   .db-btn-sm { display: flex; align-items: center; gap: 3px; padding: 4px 8px; border-radius: 6px; border: none;
     background: var(--bg-2); color: var(--text-3); font-size: 11px; cursor: pointer; }
   .db-btn-sm:hover { background: var(--bg-3); color: var(--text-1); }
-  .db-btn-sm.active { background: var(--accent); color: #fff; }
   .db-btn-sm.danger:hover { background: #ff4444; color: #fff; }
   .db-btn-sm:disabled { opacity: 0.4; cursor: default; }
   .spinning { animation: spin 1s linear infinite; }

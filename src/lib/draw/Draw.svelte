@@ -2074,10 +2074,6 @@
   .ob-check { display: flex; align-items: center; gap: 3px; font-size: 10px; color: #555570; cursor: pointer; white-space: nowrap; }
   .ob-check input { accent-color: #5050c0; width: 12px; height: 12px; }
   .ob-spacer { flex: 1; }
-  .ob-presets { display: flex; gap: 2px; }
-  .ob-preset { width: 22px; height: 22px; border-radius: 3px; border: 1px solid #3a3a4a; background: #1e1e2a; color: #8888a0; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: .1s; }
-  .ob-preset:hover { border-color: #5050c0; color: #e0e0f0; }
-  .ob-preset.active { border-color: #5050c0; background: #2a2a3e; color: #e0e0f0; }
   .ob-btn { display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 3px; border: 1px solid #3a3a4a; background: #1e1e2a; color: #8888a0; font-size: 11px; font-weight: 600; cursor: pointer; transition: .1s; flex-shrink: 0; }
   .ob-btn:hover { border-color: #5050c0; color: #e0e0f0; }
   .ob-btn.active { border-color: #5050c0; background: #5050c0; color: #fff; }
@@ -2128,8 +2124,6 @@
   .right-panel { width: 220px; flex-shrink: 0; background: #16161e; border-left: 1px solid #2a2a35; display: flex; flex-direction: column; overflow: hidden; }
   .rp-divider { height: 1px; background: #2a2a35; flex-shrink: 0; }
   .rp-section { display: flex; flex-direction: column; flex-shrink: 0; }
-  .rp-color-section .rp-section-body { max-height: 200px; overflow-y: auto; }
-  .rp-layers-section { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
   .rp-section-header {
     display: flex; align-items: center; justify-content: space-between;
     padding: 5px 8px; background: #1a1a26; cursor: pointer;
@@ -2137,8 +2131,6 @@
   }
   .rp-section-header:hover { background: #1e1e2c; }
   .rp-section-title { font-size: 10px; font-weight: 700; color: #8888a0; text-transform: uppercase; letter-spacing: .06em; }
-  .rp-section-chevron { font-size: 9px; color: #444460; transition: transform .15s; }
-  .rp-section-chevron.open { transform: rotate(0deg); }
   .rp-section-body { flex: 1; overflow-y: auto; padding: 6px; display: flex; flex-direction: column; gap: 3px; min-height: 0; }
   .rp-layers-body { flex: 1; overflow-y: auto; }
 
@@ -2163,7 +2155,6 @@
   .rp-slider input[type="range"] { flex: 1; accent-color: #5050c0; height: 3px; }
   .rp-slider span { font-size: 9px; color: #444460; font-family: 'Geist Mono', monospace; min-width: 28px; text-align: right; }
 
-  .rp-layer-actions { display: flex; gap: 2px; }
   .rp-layer-btn { width: 20px; height: 20px; border-radius: 3px; background: #1e1e2a; border: 1px solid #2a2a35; color: #666680; font-size: 10px; cursor: pointer; transition: .1s; display: flex; align-items: center; justify-content: center; }
   .rp-layer-btn:hover { border-color: #5050c0; color: #b0b0d0; }
   .rp-layer-btn:disabled { opacity: .2; cursor: default; }
@@ -2173,7 +2164,6 @@
   .rp-lvis { background: none; border: none; font-size: 11px; cursor: pointer; padding: 0; color: inherit; width: 18px; text-align: center; }
   .rp-lname { flex: 1; }
   .rp-lcount { font-size: 9px; color: #333350; }
-  .rp-lay-opacity { padding: 2px 0; }
 
   .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.7); display: flex; align-items: center; justify-content: center; z-index: 9999; }
   .modal-box { background: #1e1e2a; border: 1px solid #3a3a4a; border-radius: 8px; padding: 16px; min-width: 300px; max-width: 400px; box-shadow: 0 12px 48px rgba(0,0,0,.6); }
@@ -2253,9 +2243,6 @@
   .rp-channel-active { background: #2a2a3e; color: #e0e0f0; }
   .rp-ch-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
   .rp-ch-shortcut { margin-left: auto; font-size: 9px; color: #333350; font-family: 'Geist Mono', monospace; }
-
-  /* ── Options bar enhancements ── */
-  .ob-right { margin-left: auto; }
 
   /* ── Transform group cursor ── */
   .transform-group { pointer-events: all; }

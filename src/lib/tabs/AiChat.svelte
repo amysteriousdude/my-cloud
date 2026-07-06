@@ -462,13 +462,13 @@ Assistant: ${firstAssistantMsg}`;
           <div class="ai-history-empty">No saved chats yet</div>
         {:else}
           {#each chatHistory as chat (chat.id)}
-            <button class="ai-history-item" class:active={currentChatId === chat.id} onclick={() => loadChat(chat)}>
+            <div class="ai-history-item" class:active={currentChatId === chat.id} onclick={() => loadChat(chat)} role="button" tabindex="0" onkeydown={(e) => { if (e.key === 'Enter') loadChat(chat); }}>
               <div class="ai-history-title">{chat.title}</div>
               <div class="ai-history-meta">{new Date(chat.updatedAt).toLocaleDateString()} · {chat.messages.length} msgs</div>
               <button class="ai-history-delete" onclick={(e) => { e.stopPropagation(); deleteChat(chat.id); }}>
                 <IconTrash size={12} />
               </button>
-            </button>
+            </div>
           {/each}
         {/if}
       </div>
