@@ -480,10 +480,15 @@ Assistant: ${firstAssistantMsg}`;
     }
   }
 
+  let saving = false;
+
   async function saveChat() {
     // Only save if there are actual user messages
     const userMsgs = messages.filter(m => m.role === 'user');
-    if (userMsgs.length === 0) return;
+    if (userMsgs.length === 0 || saving) return;
+    saving = true;
+
+    try {
 
     const needsTitle = !currentChatId || !chatHistory.find(c => c.id === currentChatId);
     let title = 'New Chat';
@@ -515,6 +520,11 @@ Assistant: ${firstAssistantMsg}`;
       } else {
         chatHistory = [chat, ...chatHistory];
       }
+    }
+    } catch (e) {
+      console.error('Failed to save chat:', e);
+    } finally {
+      saving = false;
     }
   }
 
@@ -556,12 +566,20 @@ Assistant: ${firstAssistantMsg}`;
   }
 
   // Auto-save after each assistant reply completes (only if user has sent messages)
+  let wasStreaming = false;
+  let saveTimeout: ReturnType<typeof setTimeout> | null = null;
   $effect(() => {
+    const streaming = isStreaming;
     const userMsgs = messages.filter(m => m.role === 'user');
     const lastMsg = messages[messages.length - 1];
-    if (userMsgs.length > 0 && lastMsg?.role === 'assistant' && lastMsg.content && !isStreaming) {
-      saveChat();
+
+    // Save only when streaming just finished (transition from streaming to not streaming)
+    if (wasStreaming && !streaming && userMsgs.length > 0 && lastMsg?.role === 'assistant' && lastMsg.content) {
+      // Debounce to prevent rapid saves
+      if (saveTimeout) clearTimeout(saveTimeout);
+      saveTimeout = setTimeout(() => { saveChat(); }, 300);
     }
+    wasStreaming = streaming;
   });
 
   // Load history on mount

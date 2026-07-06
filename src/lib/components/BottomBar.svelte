@@ -131,6 +131,7 @@
   }
 
   function onNavLeave() {
+    if (fullWidth) return;
     navHoverTimeout = setTimeout(() => { navExpanded = false; }, 300);
   }
 
@@ -468,7 +469,7 @@
     </div>
 
     <!-- Expandable nav tabs -->
-    <div class="bb-nav-tabs" class:expanded={navExpanded}>
+    <div class="bb-nav-tabs" class:expanded={navExpanded || fullWidth}>
       <div class="bb-sep"></div>
       {#each mainTabs as tab, i (tab.id)}
         {@const active = activeTab === tab.id}
@@ -733,6 +734,7 @@
     transition: max-width .3s cubic-bezier(.16,1,.3,1), opacity .2s ease;
   }
   .bb-nav-tabs.expanded { max-width: 500px; opacity: 1; }
+  .bb.pos-bottom.full-width .bb-nav-tabs.expanded, .bb.pos-top.full-width .bb-nav-tabs.expanded { max-width: none; }
 
   .bb-sep {
     width: 1px; height: 24px;
