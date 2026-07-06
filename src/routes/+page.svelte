@@ -17,6 +17,8 @@
   import Translator from '$lib/tabs/Translator.svelte';
   import ApiTester  from '$lib/tabs/ApiTester.svelte';
   import Database   from '$lib/tabs/Database.svelte';
+  import AiChat     from '$lib/tabs/AiChat.svelte';
+  import BottomBar  from '$lib/components/BottomBar.svelte';
   import Toast      from '$lib/components/Toast.svelte';
   import { env } from '$env/dynamic/public';
   const NAME = env.PUBLIC_NAME ?? "Omar";
@@ -27,10 +29,14 @@
   let encryptedApiKey = $derived(data.encryptedApiKey);
 
   // Tab state
-  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database';
+  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'ai';
   let activeTab = $state<Tab>('files');
   let editorFile = $state<{ metaFileId: string; fileName: string } | null>(null);
   let filesRefreshNonce = $state(0);
+
+  type BarButton = { icon: any; label: string; onClick: () => void; primary?: boolean; danger?: boolean; disabled?: boolean };
+  type BarConfig = { input?: { placeholder: string; value: string; oninput: (v: string) => void; onsubmit: () => void; shortcutHint?: string; loading?: boolean }; buttons?: BarButton[] } | null;
+  let barConfig = $state<BarConfig>(null);
 
   function bumpRefreshNonce() {
     filesRefreshNonce += 1;
@@ -168,7 +174,7 @@
         ontabchange={(t) => activeTab = t}
       />
     {:else}
-      <Dock
+      <BottomBar
         {user}
         {theme}
         {fileCount}
@@ -177,9 +183,10 @@
         {activeTab}
         autoHide={dockAutoHide}
         bind:dockHovered
+        config={barConfig}
         oncycleTheme={cycleTheme}
         onlogout={logout}
-        ontabchange={(t) => activeTab = t}
+        ontabchange={(t: Tab) => { activeTab = t; barConfig = null; }}
       />
     {/if}
 
@@ -220,6 +227,8 @@
         <ApiTester />
       {:else if activeTab === 'database'}
         <Database {apiKey} />
+      {:else if activeTab === 'ai'}
+        <AiChat {apiKey} bind:barConfig />
       {/if}
     </main>
   </div>
