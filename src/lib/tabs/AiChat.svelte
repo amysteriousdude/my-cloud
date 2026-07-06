@@ -450,24 +450,6 @@ Assistant: ${firstAssistantMsg}`;
     }
   }
 
-      for (const file of files) {
-        try {
-          const resp = await fetch(`/api/telegram/getRequestFile?api_key=${apiKey}&meta_file_id=${file.metaFileId}&download=true`);
-          const text = await resp.text();
-          const chat = JSON.parse(text) as ChatHistory;
-          if (chat.id && chat.messages?.length > 0) loaded.push(chat);
-        } catch {}
-      }
-
-      loaded.sort((a, b) => b.updatedAt - a.updatedAt);
-      chatHistory = loaded;
-    } catch (e) {
-      console.error('Failed to load history:', e);
-    } finally {
-      loadingHistory = false;
-    }
-  }
-
   let saving = false;
 
   async function saveChat() {
