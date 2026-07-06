@@ -184,6 +184,7 @@
         autoHide={dockAutoHide}
         bind:dockHovered
         config={barConfig}
+        fullWidth={activeTab === 'ai'}
         oncycleTheme={cycleTheme}
         onlogout={logout}
         ontabchange={(t: Tab) => { activeTab = t; barConfig = null; }}

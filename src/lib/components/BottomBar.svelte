@@ -20,6 +20,13 @@
     disabled?: boolean;
   };
 
+  type BarSelect = {
+    value: string;
+    options: { value: string; label: string }[];
+    onchange: (v: string) => void;
+    label?: string;
+  };
+
   type BarConfig = {
     input?: {
       placeholder: string;
@@ -30,6 +37,8 @@
       loading?: boolean;
     };
     buttons?: BarButton[];
+    selects?: BarSelect[];
+    beforeInput?: any[];
   } | null;
 
   let {
@@ -42,6 +51,7 @@
     autoHide = false,
     dockHovered = $bindable(false),
     config = null,
+    fullWidth = false,
     oncycleTheme,
     onlogout,
     ontabchange,
@@ -55,6 +65,7 @@
     autoHide?: boolean;
     dockHovered?: boolean;
     config?: BarConfig;
+    fullWidth?: boolean;
     oncycleTheme: () => void;
     onlogout: () => void;
     ontabchange: (t: Tab) => void;
@@ -92,6 +103,8 @@
 
   let hasInput = $derived(!!config?.input);
   let hasButtons = $derived(!!config?.buttons && config!.buttons!.length > 0);
+  let hasSelects = $derived(!!config?.selects && config!.selects!.length > 0);
+  let hasBeforeInput = $derived(!!config?.beforeInput && config!.beforeInput!.length > 0);
 
   // ── Hover tooltip state ────────────────────────────────────────
   let hoverTabId = $state<string | null>(null);
@@ -435,6 +448,7 @@
   class:repositioning
   class:auto-hide={autoHide}
   class:hide-dock={autoHide && !dockHovered}
+  class:full-width={fullWidth}
   onmousedown={startDockDrag}
   ontouchstart={startDockDrag}
   onmouseup={cancelDockDrag}
@@ -504,6 +518,23 @@
   </div>
 
   <div class="bb-sep"></div>
+
+  <!-- Selects (model selector, etc.) -->
+  {#if hasSelects}
+    <div class="bb-selects-section">
+      {#each config!.selects! as sel}
+        <div class="bb-select-wrap">
+          {#if sel.label}<span class="bb-select-label">{sel.label}</span>{/if}
+          <select class="bb-select" value={sel.value} onchange={(e) => sel.onchange((e.target as HTMLSelectElement).value)}>
+            {#each sel.options as opt}
+              <option value={opt.value}>{opt.label}</option>
+            {/each}
+          </select>
+        </div>
+      {/each}
+    </div>
+    <div class="bb-sep"></div>
+  {/if}
 
   <!-- Center: input area (optional) -->
   {#if hasInput}
@@ -682,6 +713,7 @@
 
   /* Position variants */
   .bb.pos-bottom { bottom: 16px; left: 50%; transform: translateX(-50%); border-radius: 999px; }
+  .bb.pos-bottom.full-width { left: 16px; right: 16px; transform: none; border-radius: 16px; max-width: none; }
   .bb.pos-top { top: 16px; left: 50%; transform: translateX(-50%); border-radius: 999px; }
   .bb.pos-left { left: 16px; top: 50%; transform: translateY(-50%); border-radius: 999px; flex-direction: column; }
   .bb.pos-right { right: 16px; top: 50%; transform: translateY(-50%); border-radius: 999px; flex-direction: column; }
@@ -748,6 +780,24 @@
   }
   .bb-textarea::placeholder { color: var(--text-3); }
   .bb-textarea:disabled { opacity: .5; }
+
+  /* ── Selects section ──────────────────────────────────────────── */
+  .bb-selects-section { display: flex; align-items: center; gap: 6px; }
+
+  .bb-select-wrap {
+    display: flex; align-items: center; gap: 4px;
+    background: var(--bg-3); border: 1px solid var(--border);
+    border-radius: 8px; padding: 4px 8px;
+  }
+
+  .bb-select-label { font-size: 11px; color: var(--text-3); white-space: nowrap; }
+
+  .bb-select {
+    background: transparent; border: none; outline: none;
+    color: var(--text-1); font-size: 12px; font-family: 'Geist', sans-serif;
+    cursor: pointer; max-width: 200px;
+  }
+  .bb-select option { background: var(--bg-2); color: var(--text-1); }
 
   /* ── Action buttons section ────────────────────────────────────── */
   .bb-actions-section { display: flex; align-items: center; gap: 4px; }

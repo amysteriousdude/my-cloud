@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { IconPlayerStop, IconSend, IconSettings, IconChevronDown, IconChevronUp, IconBrain, IconHistory, IconPlus, IconTrash } from '@tabler/icons-svelte';
+  import { IconPlayerStop, IconSend, IconSettings, IconChevronDown, IconChevronUp, IconBrain, IconHistory, IconPlus, IconTrash, IconUser, IconLink, IconChevronRight } from '@tabler/icons-svelte';
   import BrandIcon from '$lib/components/BrandIcon.svelte';
+  import { marked } from 'marked';
 
   let { apiKey = '', barConfig = $bindable(null) }: { apiKey?: string; barConfig?: any } = $props();
 
@@ -9,15 +10,17 @@
   type ChatHistory = {
     id: string;
     title: string;
-    messages: { role: 'user' | 'assistant' | 'system'; content: string }[];
+    messages: { role: 'user' | 'assistant' | 'system'; content: string; citations?: string[] }[];
     provider: string;
     model: string;
     systemPrompt: string;
     createdAt: number;
     updatedAt: number;
+    folderId?: string;
   };
 
   const HISTORY_FOLDER = 'ai/history';
+  let historyFolderId = $state<string | null>(null);
 
   const PROVIDERS = [
     { id: 'pollinations', label: 'Pollinations', color: '#a855f7', apiBase: 'https://g4f.space' },
@@ -30,7 +33,7 @@
   let selectedProvider = $state(PROVIDERS[0]);
   let models = $state<any[]>([]);
   let selectedModel = $state('');
-  let messages = $state<{ role: 'user' | 'assistant' | 'system'; content: string }[]>([]);
+  let messages = $state<{ role: 'user' | 'assistant' | 'system'; content: string; citations?: string[]; _showSources?: boolean }[]>([]);
   let input = $state('');
   let isStreaming = $state(false);
   let systemPrompt = $state('');
@@ -43,6 +46,40 @@
   let currentChatId = $state<string | null>(null);
   let showHistory = $state(false);
   let titleGenerating = $state(false);
+  let loadingHistory = $state(false);
+
+  // Markdown renderer
+  marked.setOptions({ breaks: true, gfm: true });
+
+  function renderMarkdown(text: string, citations?: string[]): string {
+    try {
+      let html = marked.parse(text) as string;
+      // Replace [1][2] style references with superscript links if citations exist
+      if (citations && citations.length > 0) {
+        html = html.replace(/\[(\d+)\]/g, (match, num) => {
+          const idx = parseInt(num) - 1;
+          if (idx >= 0 && idx < citations.length) {
+            return `<sup class="cite-ref"><a href="${citations[idx]}" target="_blank" rel="noopener" title="${citations[idx]}">${num}</a></sup>`;
+          }
+          return match;
+        });
+      }
+      return html;
+    } catch {
+      return text;
+    }
+  }
+
+  function getDomain(url: string): string {
+    try { return new URL(url).hostname.replace('www.', ''); } catch { return url; }
+  }
+
+  function getFaviconUrl(url: string): string {
+    try {
+      const domain = new URL(url).hostname;
+      return `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
+    } catch { return ''; }
+  }
 
   const OWNERS: Record<string, string> = {
     'openai-fast': 'OpenAI', 'openai': 'OpenAI', 'openai-large': 'OpenAI', 'openai-audio': 'OpenAI',
@@ -135,7 +172,25 @@
     }
     btns.push({ icon: IconSend, label: 'Send', onClick: sendMessage, primary: true, disabled: !input.trim() || isStreaming || !selectedModel });
 
+    const selects = [
+      {
+        value: selectedProvider.id,
+        options: PROVIDERS.map(p => ({ value: p.id, label: p.label })),
+        onchange: (v: string) => {
+          const p = PROVIDERS.find(x => x.id === v);
+          if (p) selectedProvider = p;
+        },
+      },
+      {
+        value: selectedModel,
+        options: models.map(m => ({ value: m.id, label: getDisplayName(m) })),
+        onchange: (v: string) => { selectedModel = v; },
+        label: loadingModels ? 'Loading...' : undefined,
+      },
+    ];
+
     barConfig = {
+      selects,
       input: {
         placeholder: 'Ask anything...',
         value: input,
@@ -160,7 +215,26 @@
       btns.push({ icon: IconPlayerStop, label: 'Stop', onClick: stopStream, danger: true });
     }
     btns.push({ icon: IconSend, label: 'Send', onClick: sendMessage, primary: true, disabled: !input.trim() || isStreaming || !selectedModel });
+
+    const selects = [
+      {
+        value: selectedProvider.id,
+        options: PROVIDERS.map(p => ({ value: p.id, label: p.label })),
+        onchange: (v: string) => {
+          const p = PROVIDERS.find(x => x.id === v);
+          if (p) selectedProvider = p;
+        },
+      },
+      {
+        value: selectedModel,
+        options: models.map(m => ({ value: m.id, label: getDisplayName(m) })),
+        onchange: (v: string) => { selectedModel = v; },
+        label: loadingModels ? 'Loading...' : undefined,
+      },
+    ];
+
     barConfig = {
+      selects,
       input: {
         placeholder: 'Ask anything...',
         value: input,
@@ -205,6 +279,7 @@
       const reader = res.body!.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
+      let capturedCitations: string[] = [];
 
       while (true) {
         const { value, done } = await reader.read();
@@ -220,6 +295,10 @@
           if (data === '[DONE]') continue;
           try {
             const parsed = JSON.parse(data);
+            // Capture citations from the response
+            if (parsed.citations && Array.isArray(parsed.citations)) {
+              capturedCitations = parsed.citations;
+            }
             const delta = parsed.choices?.[0]?.delta?.content;
             if (delta) {
               messages = messages.map((m, i) =>
@@ -228,6 +307,13 @@
             }
           } catch {}
         }
+      }
+
+      // Apply citations to the last message after streaming completes
+      if (capturedCitations.length > 0) {
+        messages = messages.map((m, i) =>
+          i === messages.length - 1 ? { ...m, citations: capturedCitations } : m
+        );
       }
     } catch (e: any) {
       if (e.name !== 'AbortError') {
@@ -295,19 +381,47 @@ Assistant: ${firstAssistantMsg}`;
     }
   }
 
+  async function ensureHistoryFolder(): Promise<string | null> {
+    if (historyFolderId) return historyFolderId;
+    try {
+      // Create 'ai' folder first
+      const res1 = await fetch('/api/telegram/folderOps', {
+        method: 'POST',
+        headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'create', name: 'ai', parentId: null }),
+      });
+      const data1 = await res1.json();
+      const aiFolderId = data1.folder?.id ?? data1.id;
+      if (!aiFolderId) return null;
+
+      // Create 'history' folder inside 'ai'
+      const res2 = await fetch('/api/telegram/folderOps', {
+        method: 'POST',
+        headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'create', name: 'history', parentId: aiFolderId }),
+      });
+      const data2 = await res2.json();
+      historyFolderId = data2.folder?.id ?? data2.id ?? null;
+      return historyFolderId;
+    } catch (e) {
+      console.error('Failed to ensure history folder:', e);
+      return null;
+    }
+  }
+
   async function uploadChatJson(chat: ChatHistory): Promise<boolean> {
     try {
+      const folderId = await ensureHistoryFolder();
       const json = JSON.stringify(chat, null, 2);
       const blob = new Blob([json], { type: 'application/json' });
       const fileName = `${chat.id}.json`;
 
-      // Upload single chunk (chat JSONs are small)
       const chunkRes = await fetch('/api/telegram/uploadChunk', {
         method: 'POST',
         headers: {
           'X-Api-Key': apiKey,
           'X-Chunk-Index': '0',
-          'X-File-Name': encodeURIComponent(`${HISTORY_FOLDER}/${fileName}`),
+          'X-File-Name': encodeURIComponent(fileName),
           'Content-Type': 'application/json',
         },
         body: blob,
@@ -319,11 +433,11 @@ Assistant: ${firstAssistantMsg}`;
         method: 'POST',
         headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          fileName: `${HISTORY_FOLDER}/${fileName}`,
+          fileName,
           type: 'application/json',
           totalBytes: blob.size,
           chunks: [chunkData],
-          folderId: null,
+          folderId: folderId ?? null,
         }),
       });
       const finalData = await finalRes.json();
@@ -336,10 +450,16 @@ Assistant: ${firstAssistantMsg}`;
   }
 
   async function loadHistory() {
+    if (loadingHistory) return;
+    loadingHistory = true;
     try {
-      const res = await fetch(`/api/telegram/ls?api_key=${apiKey}&_t=${Date.now()}`);
+      // First ensure folder exists and get its ID
+      const folderId = await ensureHistoryFolder();
+
+      // List files in the folder
+      const res = await fetch(`/api/telegram/ls?api_key=${apiKey}${folderId ? `&folderId=${folderId}` : ''}&_t=${Date.now()}`);
       const data = await res.json();
-      const files = (data.files ?? []).filter((f: any) => f.fileName?.startsWith(`${HISTORY_FOLDER}/`) && f.fileName?.endsWith('.json'));
+      const files = (data.files ?? []).filter((f: any) => f.fileName?.endsWith('.json'));
       const loaded: ChatHistory[] = [];
 
       for (const file of files) {
@@ -347,7 +467,7 @@ Assistant: ${firstAssistantMsg}`;
           const resp = await fetch(`/api/telegram/getRequestFile?api_key=${apiKey}&meta_file_id=${file.metaFileId}&download=true`);
           const text = await resp.text();
           const chat = JSON.parse(text) as ChatHistory;
-          if (chat.id && chat.messages) loaded.push(chat);
+          if (chat.id && chat.messages?.length > 0) loaded.push(chat);
         } catch {}
       }
 
@@ -355,11 +475,15 @@ Assistant: ${firstAssistantMsg}`;
       chatHistory = loaded;
     } catch (e) {
       console.error('Failed to load history:', e);
+    } finally {
+      loadingHistory = false;
     }
   }
 
   async function saveChat() {
-    if (messages.length === 0) return;
+    // Only save if there are actual user messages
+    const userMsgs = messages.filter(m => m.role === 'user');
+    if (userMsgs.length === 0) return;
 
     const needsTitle = !currentChatId || !chatHistory.find(c => c.id === currentChatId);
     let title = 'New Chat';
@@ -405,14 +529,11 @@ Assistant: ${firstAssistantMsg}`;
   }
 
   async function deleteChat(chatId: string) {
-    const chat = chatHistory.find(c => c.id === chatId);
-    if (!chat) return;
-
     try {
-      // Find the file's metaFileId from listing
-      const res = await fetch(`/api/telegram/ls?api_key=${apiKey}&_t=${Date.now()}`);
+      const folderId = await ensureHistoryFolder();
+      const res = await fetch(`/api/telegram/ls?api_key=${apiKey}${folderId ? `&folderId=${folderId}` : ''}&_t=${Date.now()}`);
       const data = await res.json();
-      const file = (data.files ?? []).find((f: any) => f.fileName === `${HISTORY_FOLDER}/${chatId}.json`);
+      const file = (data.files ?? []).find((f: any) => f.fileName === `${chatId}.json`);
       if (file) {
         await fetch('/api/telegram/deleteFile', {
           method: 'DELETE',
@@ -434,11 +555,11 @@ Assistant: ${firstAssistantMsg}`;
     systemPrompt = '';
   }
 
-  // Auto-save after each assistant reply completes
+  // Auto-save after each assistant reply completes (only if user has sent messages)
   $effect(() => {
-    const msgCount = messages.length;
+    const userMsgs = messages.filter(m => m.role === 'user');
     const lastMsg = messages[messages.length - 1];
-    if (msgCount >= 2 && lastMsg?.role === 'assistant' && lastMsg.content && !isStreaming) {
+    if (userMsgs.length > 0 && lastMsg?.role === 'assistant' && lastMsg.content && !isStreaming) {
       saveChat();
     }
   });
@@ -475,7 +596,7 @@ Assistant: ${firstAssistantMsg}`;
     </div>
   {/if}
 
-  <!-- Header: provider pills + model selector -->
+  <!-- Header: history/new chat buttons + system toggle -->
   <div class="ai-header">
     <div class="ai-providers">
       <button class="ai-history-btn" onclick={() => { showHistory = !showHistory; if (showHistory) loadHistory(); }} title="Chat history">
@@ -484,33 +605,14 @@ Assistant: ${firstAssistantMsg}`;
       <button class="ai-history-btn" onclick={newChat} title="New chat">
         <IconPlus size={14} />
       </button>
-      {#each PROVIDERS as p}
-        <button
-          class="ai-provider-pill"
-          class:active={selectedProvider.id === p.id}
-          style="--pill-color: {p.color}"
-          onclick={() => { selectedProvider = p; }}
-        >
-          <BrandIcon brand={p.id} size={14} />
-          <span>{p.label}</span>
-        </button>
-      {/each}
-    </div>
 
-    <div class="ai-model-row">
-      <div class="ai-model-select-wrap">
-        <BrandIcon brand={getOwner(selectedModel)} size={14} />
-        <span class="ai-model-dash">—</span>
-        <BrandIcon brand={getOwner(selectedModel)} size={14} />
-        <select class="ai-model-select" bind:value={selectedModel}>
-          {#if loadingModels}
-            <option disabled>Loading models...</option>
-          {/if}
-          {#each models as m (m.id)}
-            <option value={m.id}>{getDisplayName(m)} — {m.context_length ? `${Math.round(m.context_length / 1000)}k` : ''}</option>
-          {/each}
-        </select>
-      </div>
+      <div class="ai-header-spacer"></div>
+
+      {#if currentChatId}
+        <span class="ai-current-title">{chatHistory.find(c => c.id === currentChatId)?.title ?? 'Chat'}</span>
+      {/if}
+
+      <div class="ai-header-spacer"></div>
 
       <button class="ai-system-toggle" onclick={() => showSystem = !showSystem} title="System prompt">
         {#if showSystem}<IconChevronUp size={14}/>{:else}<IconChevronDown size={14}/>{/if}
@@ -543,14 +645,41 @@ Assistant: ${firstAssistantMsg}`;
         <p class="ai-empty-sub">Select a provider and model, then start chatting</p>
       </div>
     {:else}
-      {#each messages as msg}
+      {#each messages as msg, idx (idx)}
         <div class="ai-msg" class:user={msg.role === 'user'} class:assistant={msg.role === 'assistant'}>
           <div class="ai-msg-avatar">
-            {#if msg.role === 'user'}You{:else}
+            {#if msg.role === 'user'}<IconUser size={14} />{:else}
               <BrandIcon brand={getOwner(selectedModel)} size={14} />
             {/if}
           </div>
-          <div class="ai-msg-content">{msg.content}</div>
+          <div class="ai-msg-body">
+            {#if msg.role === 'assistant'}
+              <div class="ai-msg-content ai-markdown">{@html renderMarkdown(msg.content, msg.citations)}</div>
+              {#if msg.citations && msg.citations.length > 0}
+                <div class="ai-sources">
+                  <button class="ai-sources-btn" onclick={() => { msg._showSources = !msg._showSources; messages = [...messages]; }}>
+                    <IconLink size={12} />
+                    <span>Sources</span>
+                    <span class="ai-sources-count">{msg.citations.length}</span>
+                    <span class="ai-sources-chevron" class:open={msg._showSources}><IconChevronRight size={12} /></span>
+                  </button>
+                  {#if msg._showSources}
+                    <div class="ai-sources-list">
+                      {#each msg.citations as url, i}
+                        <a class="cite-link" href={url} target="_blank" rel="noopener" title={url}>
+                          <img class="cite-favicon" src={getFaviconUrl(url)} alt="" width="14" height="14" />
+                          <span class="cite-num">{i + 1}</span>
+                          <span class="cite-domain">{getDomain(url)}</span>
+                        </a>
+                      {/each}
+                    </div>
+                  {/if}
+                </div>
+              {/if}
+            {:else}
+              <div class="ai-msg-content">{msg.content}</div>
+            {/if}
+          </div>
         </div>
       {/each}
     {/if}
@@ -573,41 +702,15 @@ Assistant: ${firstAssistantMsg}`;
   }
 
   .ai-providers {
-    display: flex; gap: 6px; flex-wrap: wrap;
+    display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
   }
 
-  .ai-provider-pill {
-    display: inline-flex; align-items: center; gap: 6px;
-    padding: 6px 12px; border-radius: 999px;
-    border: 1px solid var(--border); background: var(--bg-3);
-    color: var(--text-2); font-size: 12px; font-weight: 600;
-    font-family: 'Geist', sans-serif; cursor: pointer;
-    transition: all .15s;
-  }
-  .ai-provider-pill:hover { border-color: var(--border-hover); color: var(--text-1); }
-  .ai-provider-pill.active {
-    border-color: var(--pill-color); color: var(--pill-color);
-    background: color-mix(in srgb, var(--pill-color) 10%, var(--bg-3));
-  }
+  .ai-header-spacer { flex: 1; }
 
-  .ai-model-row {
-    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  .ai-current-title {
+    font-size: 12px; color: var(--text-3); font-weight: 500;
+    max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-
-  .ai-model-select-wrap {
-    display: flex; align-items: center; gap: 4px;
-    background: var(--bg-3); border: 1px solid var(--border);
-    border-radius: 8px; padding: 4px 8px; flex: 1; min-width: 200px;
-  }
-
-  .ai-model-dash { color: var(--text-3); font-size: 12px; }
-
-  .ai-model-select {
-    background: transparent; border: none; outline: none;
-    color: var(--text-1); font-size: 13px; font-family: 'Geist', sans-serif;
-    cursor: pointer; flex: 1;
-  }
-  .ai-model-select option { background: var(--bg-2); color: var(--text-1); }
 
   .ai-system-toggle, .ai-clear-btn {
     display: inline-flex; align-items: center; gap: 4px;
@@ -676,6 +779,93 @@ Assistant: ${firstAssistantMsg}`;
     background: var(--accent); color: #fff; border-color: var(--accent);
   }
 
+  .ai-msg-body { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+
+  /* ── Markdown rendering ─────────────────────────────────── */
+  .ai-markdown { white-space: normal; }
+  .ai-markdown p { margin: 0 0 8px; }
+  .ai-markdown p:last-child { margin-bottom: 0; }
+  .ai-markdown strong { font-weight: 600; }
+  .ai-markdown em { font-style: italic; }
+  .ai-markdown code {
+    background: rgba(99,102,241,.15); padding: 1px 5px; border-radius: 4px;
+    font-family: 'Geist Mono', monospace; font-size: 12px;
+  }
+  .ai-markdown pre {
+    background: var(--bg-1); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; overflow-x: auto; margin: 8px 0;
+  }
+  .ai-markdown pre code { background: none; padding: 0; }
+  .ai-markdown ul, .ai-markdown ol { margin: 4px 0 8px; padding-left: 20px; }
+  .ai-markdown li { margin: 2px 0; }
+  .ai-markdown a { color: var(--accent); text-decoration: underline; }
+  .ai-markdown blockquote {
+    border-left: 3px solid var(--accent); margin: 8px 0; padding: 4px 12px;
+    color: var(--text-2); background: rgba(99,102,241,.05); border-radius: 0 6px 6px 0;
+  }
+  .ai-markdown h1, .ai-markdown h2, .ai-markdown h3, .ai-markdown h4 {
+    margin: 12px 0 6px; font-weight: 600;
+  }
+  .ai-markdown h1 { font-size: 16px; }
+  .ai-markdown h2 { font-size: 14px; }
+  .ai-markdown h3 { font-size: 13px; }
+  .ai-markdown table { border-collapse: collapse; margin: 8px 0; width: 100%; }
+  .ai-markdown th, .ai-markdown td { border: 1px solid var(--border); padding: 6px 10px; font-size: 12px; text-align: left; }
+  .ai-markdown th { background: var(--bg-3); font-weight: 600; }
+  .ai-markdown hr { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+
+  /* Citation superscript links */
+  .cite-ref a {
+    color: var(--accent); font-size: 10px; font-weight: 700;
+    text-decoration: none; vertical-align: super;
+  }
+  .cite-ref a:hover { text-decoration: underline; }
+
+  /* ── Sources bar ─────────────────────────────────────────── */
+  .ai-sources {
+    display: flex; flex-direction: column; gap: 4px;
+    margin-top: 4px;
+  }
+
+  .ai-sources-btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 10px; border-radius: 6px; width: fit-content;
+    border: 1px solid var(--border); background: var(--bg-3);
+    color: var(--text-3); font-size: 11px; font-family: 'Geist', sans-serif;
+    cursor: pointer; transition: all .13s;
+  }
+  .ai-sources-btn:hover { color: var(--text-2); border-color: var(--border-hover); }
+
+  .ai-sources-count {
+    background: var(--bg-1); border-radius: 999px; padding: 0 6px;
+    font-size: 10px; font-weight: 700;
+  }
+
+  .ai-sources-chevron { display: flex; transition: transform .15s; }
+  .ai-sources-chevron.open { transform: rotate(90deg); }
+
+  .ai-sources-list {
+    display: flex; flex-direction: column; gap: 2px;
+    padding: 6px; background: var(--bg-3); border: 1px solid var(--border);
+    border-radius: 8px; max-height: 200px; overflow-y: auto;
+  }
+
+  .cite-link {
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 8px; border-radius: 6px; text-decoration: none;
+    color: var(--text-2); font-size: 12px; transition: background .1s;
+  }
+  .cite-link:hover { background: var(--hover); color: var(--text-1); }
+
+  .cite-favicon { border-radius: 3px; flex-shrink: 0; }
+
+  .cite-num {
+    font-size: 10px; font-weight: 700; color: var(--accent);
+    min-width: 14px; text-align: center;
+  }
+
+  .cite-domain { color: var(--text-3); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
   /* ── History Panel ─────────────────────────────────────── */
   .ai-history-panel {
     position: absolute; top: 0; left: 0; bottom: 0;
@@ -739,6 +929,5 @@ Assistant: ${firstAssistantMsg}`;
     .ai-header { padding: 12px 14px 10px; }
     .ai-messages { padding: 14px; }
     .ai-msg { max-width: 95%; }
-    .ai-provider-pill { padding: 5px 10px; font-size: 11px; }
   }
 </style>
