@@ -49,7 +49,7 @@
   let loadingHistory = $state(false);
 
   // Markdown renderer
-  marked.setOptions({ breaks: true, gfm: true });
+  marked.setOptions({ breaks: false, gfm: true });
 
   function renderMarkdown(text: string, citations?: string[]): string {
     try {
@@ -806,9 +806,9 @@ Assistant: ${firstAssistantMsg}`;
   .ai-empty-sub { margin: 0; font-size: 12px; color: var(--text-3); }
 
   .ai-msg {
-    display: flex; gap: 10px; max-width: 85%;
+    display: flex; gap: 10px; max-width: 92%;
   }
-  .ai-msg.user { align-self: flex-end; flex-direction: row-reverse; }
+  .ai-msg.user { align-self: flex-end; flex-direction: row-reverse; max-width: 70%; }
   .ai-msg.assistant { align-self: flex-start; }
 
   .ai-msg-avatar {
@@ -822,9 +822,9 @@ Assistant: ${firstAssistantMsg}`;
 
   .ai-msg-content {
     background: var(--bg-3); border: 1px solid var(--border);
-    border-radius: 12px; padding: 10px 14px;
+    border-radius: 12px; padding: 12px 16px;
     font-size: 13px; line-height: 1.6; color: var(--text-1);
-    white-space: pre-wrap; word-break: break-word;
+    word-break: break-word; min-width: 0;
   }
   .ai-msg-user-content {
     background: var(--accent); color: #fff; border-color: var(--accent);
@@ -834,36 +834,55 @@ Assistant: ${firstAssistantMsg}`;
 
   /* ── Markdown rendering ─────────────────────────────────── */
   .ai-markdown { white-space: normal; }
-  .ai-markdown p { margin: 0 0 8px; }
+  .ai-markdown p { margin: 0 0 10px; line-height: 1.65; }
   .ai-markdown p:last-child { margin-bottom: 0; }
-  .ai-markdown strong { font-weight: 600; }
+  .ai-markdown strong { font-weight: 600; color: var(--text-1); }
   .ai-markdown em { font-style: italic; }
   .ai-markdown code {
-    background: rgba(99,102,241,.12); padding: 1px 5px; border-radius: 4px;
+    background: rgba(99,102,241,.1); padding: 2px 6px; border-radius: 4px;
     font-family: 'Geist Mono', monospace; font-size: 12px;
+    color: color-mix(in srgb, var(--accent) 90%, var(--text-1));
   }
   .ai-markdown pre {
     background: var(--bg-1); border: 1px solid var(--border); border-radius: 8px;
-    padding: 10px 12px; overflow-x: auto; margin: 8px 0;
+    padding: 12px 14px; overflow-x: auto; margin: 10px 0;
   }
-  .ai-markdown pre code { background: none; padding: 0; }
-  .ai-markdown ul, .ai-markdown ol { margin: 4px 0 8px; padding-left: 20px; }
-  .ai-markdown li { margin: 2px 0; }
-  .ai-markdown a { color: var(--accent); text-decoration: underline; }
+  .ai-markdown pre code { background: none; padding: 0; color: var(--text-1); }
+  .ai-markdown ul, .ai-markdown ol { margin: 6px 0 10px; padding-left: 22px; }
+  .ai-markdown li { margin: 4px 0; line-height: 1.6; }
+  .ai-markdown li > p { margin: 4px 0; }
+  .ai-markdown a { color: var(--accent); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; }
   .ai-markdown blockquote {
-    border-left: 3px solid var(--accent); margin: 8px 0; padding: 4px 12px;
-    color: var(--text-2); background: rgba(99,102,241,.04); border-radius: 0 6px 6px 0;
+    border-left: 3px solid var(--accent); margin: 10px 0; padding: 6px 14px;
+    color: var(--text-2); background: rgba(99,102,241,.04); border-radius: 0 8px 8px 0;
   }
   .ai-markdown h1, .ai-markdown h2, .ai-markdown h3, .ai-markdown h4 {
-    margin: 12px 0 6px; font-weight: 600;
+    margin: 16px 0 8px; font-weight: 700; line-height: 1.3;
   }
-  .ai-markdown h1 { font-size: 16px; }
-  .ai-markdown h2 { font-size: 14px; }
-  .ai-markdown h3 { font-size: 13px; }
-  .ai-markdown table { border-collapse: collapse; margin: 8px 0; width: 100%; }
-  .ai-markdown th, .ai-markdown td { border: 1px solid var(--border); padding: 6px 10px; font-size: 12px; text-align: left; }
-  .ai-markdown th { background: var(--bg-3); font-weight: 600; }
-  .ai-markdown hr { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+  .ai-markdown h1 { font-size: 17px; }
+  .ai-markdown h2 { font-size: 15px; }
+  .ai-markdown h3 { font-size: 14px; }
+  .ai-markdown h4 { font-size: 13px; }
+  .ai-markdown hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
+
+  /* Tables */
+  .ai-markdown table {
+    border-collapse: collapse; margin: 10px 0; width: 100%;
+    display: block; overflow-x: auto;
+  }
+  .ai-markdown th, .ai-markdown td {
+    border: 1px solid var(--border); padding: 8px 12px;
+    font-size: 12px; text-align: left; white-space: nowrap;
+  }
+  .ai-markdown th {
+    background: var(--bg-3); font-weight: 600; color: var(--text-1);
+    position: sticky; top: 0;
+  }
+  .ai-markdown td { color: var(--text-2); }
+  .ai-markdown tr:hover td { background: var(--hover); }
+
+  /* Definition-style bold labels (e.g. "**Pathophysiology:**") */
+  .ai-markdown p > strong:first-child { color: var(--accent); }
 
   .cite-ref a {
     color: var(--accent); font-size: 10px; font-weight: 700;

@@ -128,7 +128,7 @@
   // ── Nav expand on cloud hover ────────────────────────────────
   function onNavEnter() {
     if (navHoverTimeout) { clearTimeout(navHoverTimeout); navHoverTimeout = null; }
-    if (!hasCustomUtility) navExpanded = true;
+    navExpanded = true;
   }
 
   function onNavLeave() {
@@ -313,6 +313,14 @@
   }
 
   $effect(() => { loadState(); });
+
+  $effect(() => {
+    if (!hasCustomUtility) {
+      navExpanded = true;
+    } else {
+      navExpanded = false;
+    }
+  });
 
   function handleOutsideClick(e: MouseEvent) {
     const target = e.target as HTMLElement;
