@@ -4,7 +4,7 @@
     IconLock, IconTerminal, IconBook, IconLanguage, IconApi,
     IconSun, IconMoon, IconDeviceDesktop, IconLogout, IconCloud,
     IconDots, IconX, IconSettings,
-    IconDatabase, IconBrain, IconHistory, IconPlus, IconTrash, IconPlayerStop,
+    IconDatabase, IconBrain, IconHistory, IconPlus, IconTrash, IconPlayerStop, IconAdjustments,
   } from '@tabler/icons-svelte';
   import { env } from '$env/dynamic/public';
   const NAME = env.PUBLIC_NAME ?? "Omar";

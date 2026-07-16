@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { IconPlayerStop, IconSend, IconBrain, IconHistory, IconPlus, IconTrash, IconLink, IconChevronRight, IconCopy, IconCheck, IconArrowUp, IconDownload, IconClock, IconBook } from '@tabler/icons-svelte';
+  import { IconPlayerStop, IconSend, IconBrain, IconHistory, IconPlus, IconTrash, IconLink, IconChevronRight, IconCopy, IconCheck, IconArrowUp, IconDownload, IconClock, IconBook, IconAdjustments } from '@tabler/icons-svelte';
 
   let { apiKey = '', barConfig = $bindable(null) }: { apiKey?: string; barConfig?: any } = $props();
 
@@ -8,10 +8,11 @@
   type ChatHistory = {
     id: string;
     title: string;
-    messages: { role: 'user' | 'assistant' | 'system'; content: string; citations?: string[] }[];
+    messages: { role: 'user' | 'assistant' | 'system'; content: string; citations?: string[]; _searchInfo?: { query: string; source: string; summary: string } | null }[];
     provider: string;
     model: string;
     systemPrompt: string;
+    webSearch: boolean;
     createdAt: number;
     updatedAt: number;
     folderId?: string;
@@ -31,12 +32,20 @@
   let selectedProvider = $state(PROVIDERS[0]);
   let models = $state<any[]>([]);
   let selectedModel = $state('');
-  let messages = $state<{ role: 'user' | 'assistant' | 'system'; content: string; citations?: string[]; _showSources?: boolean; _collapsed?: boolean }[]>([]);
+  let messages = $state<{ role: 'user' | 'assistant' | 'system'; content: string; citations?: string[]; _searchInfo?: { query: string; source: string; summary: string } | null; _showSources?: boolean; _showSearchDetail?: boolean; _collapsed?: boolean }[]>([]);
   let input = $state('');
   let isStreaming = $state(false);
   let systemPrompt = $state('');
   let loadingModels = $state(false);
   let abortController: AbortController | null = null;
+
+  // Extras (secondary controls)
+  let temperature = $state(0.7);
+  let topP = $state(0.9);
+  let maxTokens = $state(4096);
+  let streaming = $state(false);
+  let webSearch = $state(false);
+  let reasoning = $state(false);
   let copiedStates = $state<Record<string, boolean>>({});
   let expandedCollapsibles = $state<Record<string, boolean>>({});
   let showBackToTop = $state(false);
@@ -46,6 +55,7 @@
   let chatHistory = $state<ChatHistory[]>([]);
   let currentChatId = $state<string | null>(null);
   let showHistory = $state(false);
+  let showExtras = $state(false);
   let titleGenerating = $state(false);
   let loadingHistory = $state(false);
 
@@ -59,13 +69,39 @@
   }
 
   function wordCount(text: string): number {
-    return text.replace(/[#*`>\[\]|_-~]/g, '').split(/\s+/).filter(Boolean).length;
+    // Strip markdown syntax, code blocks, inline code, HTML tags
+    let s = text
+      .replace(/```[\s\S]*?```/g, '')        // fenced code blocks
+      .replace(/`[^`]+`/g, '')                // inline code
+      .replace(/<[^>]+>/g, '')                // HTML tags
+      .replace(/#{1,6}\s+/g, '')             // headings
+      .replace(/\*\*|__/g, '')               // bold
+      .replace(/\*|_/g, '')                  // italic
+      .replace(/~~|~/g, '')                  // strikethrough
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1') // links → keep text
+      .replace(/!\[([^\]]*)\]\([^)]*\)/g, '')  // images → remove
+      .replace(/^[\s]*[-*+]\s+/gm, '')       // unordered list markers
+      .replace(/^[\s]*\d+\.\s+/gm, '')       // ordered list markers
+      .replace(/^[\s]*>\s?/gm, '')           // blockquotes
+      .replace(/^[\s]*[-*_]{3,}\s*$/gm, '')  // horizontal rules
+      .replace(/\|/g, ' ')                   // table pipes
+      .replace(/^[-:]+$/gm, '')              // table alignment rows
+      .replace(/\[ \]|\[x\]/gi, '')          // task checkboxes
+      .replace(/^[#*>\-|_\[\]()~`]+$/gm, '') // lines that are only syntax
+      .trim();
+    if (!s) return 0;
+    // Split on any whitespace (handles Arabic, English, mixed)
+    // Unicode \p{L} matches any letter from any script
+    const words = s.split(/\s+/).filter(w => w.length > 0 && /\p{L}/u.test(w));
+    return words.length;
   }
 
   function readingTime(text: string): string {
     const wc = wordCount(text);
-    const mins = Math.max(1, Math.ceil(wc / 200));
-    return `${mins} min read`;
+    if (wc < 30) return `${wc} words`;
+    const mins = Math.max(1, Math.ceil(wc / 250));
+    if (mins === 1) return '~1 min read';
+    return `~${mins} min read`;
   }
 
   function getDomain(url: string): string {
@@ -85,6 +121,50 @@
       copiedStates[key] = true;
       setTimeout(() => { copiedStates[key] = false; }, 2000);
     } catch {}
+  }
+
+  // ── Smart Internet Search ─────────────────────────────────
+  const SEARCH_TRIGGERS = /\b(latest|recent|current|today|now|this (?:week|month|year)|yesterday|news|weather|stock|price|score|result|live|real.?time|who (?:won|is|was|are)|what (?:is|are) (?:the|new|latest)|when (?:did|was|is)|where (?:is|are|can)|how (?:much|many|old)|update|release|version|announce)\b/i;
+  const SEARCH_DOMAINS = /\b(wikipedia|cnn|bbc|reuters|ap|nytimes|github\.com|stackoverflow|npm|pypi|hacker.?news|reddit|twitter|x\.com|youtube|arxiv)\b/i;
+
+  function needsWebSearch(prompt: string): boolean {
+    if (!webSearch) return false;
+    const lower = prompt.toLowerCase();
+    if (SEARCH_TRIGGERS.test(lower)) return true;
+    if (SEARCH_DOMAINS.test(lower)) return true;
+    if (/\b\d{4}\b/.test(prompt) && /\b(release|version|update|came out|launch)\b/i.test(prompt)) return true;
+    return false;
+  }
+
+  function extractSearchQuery(prompt: string): string {
+    let q = prompt
+      .replace(/\b(please|can you|could you|tell me|explain|what is|what are|who is|who are|where is|how do|how to|help me|I want to know|I need to know)\b/gi, '')
+      .replace(/\b(thanks|thank you|hello|hi|hey)\b/gi, '')
+      .replace(/[?.!,;:'"()]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const words = q.split(' ');
+    if (words.length > 8) q = words.slice(0, 8).join(' ');
+    return q || prompt.slice(0, 60);
+  }
+
+  async function fetchWebSearch(query: string): Promise<{ query: string; source: string; summary: string } | null> {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      const res = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&no_redirect=1&skip_disambig=1`, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (!res.ok) return null;
+      const data = await res.json();
+      const abstract = data.AbstractText || data.Abstract || '';
+      const answer = data.Answer || '';
+      const source = data.AbstractSource || data.Heading || '';
+      const text = abstract || answer;
+      if (!text || text.length < 10) return null;
+      const topics = (data.RelatedTopics || []).slice(0, 3).map((t: any) => t.Text).filter(Boolean);
+      const full = topics.length > 0 ? `${text}\n\nRelated: ${topics.join('; ')}` : text;
+      return { query, source, summary: full.slice(0, 1500) };
+    } catch { return null; }
   }
 
   // ── Pattern Detection ────────────────────────────────────────
@@ -626,6 +706,7 @@
     const chatActions: BarButton[] = [
       { icon: IconHistory, label: 'History', onClick: () => { showHistory = !showHistory; if (showHistory) loadHistory(); } },
       { icon: IconPlus, label: 'New Chat', onClick: newChat },
+      { icon: IconAdjustments, label: 'Settings', onClick: () => { showExtras = !showExtras; } },
     ];
     if (messages.length > 0) {
       chatActions.push({ icon: IconTrash, label: 'Clear', onClick: clearChat, danger: true });
@@ -666,10 +747,25 @@
     messages = [...messages, { role: 'user', content: text }];
     isStreaming = true;
     updateBarConfig();
+
+    // Intelligent web search
+    let searchInfo: { query: string; source: string; summary: string } | null = null;
+    if (needsWebSearch(text)) {
+      const query = extractSearchQuery(text);
+      searchInfo = await fetchWebSearch(query);
+    }
+
     const apiMessages: { role: string; content: string }[] = [];
     if (systemPrompt.trim()) apiMessages.push({ role: 'system', content: systemPrompt.trim() });
     for (const m of messages) apiMessages.push({ role: m.role, content: m.content });
-    messages = [...messages, { role: 'assistant', content: '' }];
+
+    // Inject search results as context
+    if (searchInfo) {
+      const searchContext = `[Web search result for "${searchInfo.query}" from ${searchInfo.source}]\n${searchInfo.summary}\n\nUse this information to enhance your response if relevant. If not relevant, respond from your own knowledge.`;
+      apiMessages.push({ role: 'system', content: searchContext });
+    }
+
+    messages = [...messages, { role: 'assistant', content: '', _searchInfo: searchInfo }];
     try {
       abortController = new AbortController();
       let res: Response | null = null;
@@ -838,7 +934,7 @@
       if (needsTitle) { titleGenerating = true; title = await generateTitle(); titleGenerating = false; }
       const now = Date.now();
       const existing = currentChatId ? chatHistory.find(c => c.id === currentChatId) : null;
-      const chat: ChatHistory = { id: currentChatId ?? generateId(), title: existing?.title ?? title, messages: [...messages], provider: selectedProvider.id, model: selectedModel, systemPrompt, createdAt: existing?.createdAt ?? now, updatedAt: now };
+      const chat: ChatHistory = { id: currentChatId ?? generateId(), title: existing?.title ?? title, messages: [...messages], provider: selectedProvider.id, model: selectedModel, systemPrompt, webSearch, createdAt: existing?.createdAt ?? now, updatedAt: now };
       if (existing) await deleteExistingFile(chat.id);
       const ok = await uploadChatJson(chat);
       if (ok) {
@@ -854,6 +950,7 @@
     currentChatId = chat.id;
     messages = [...chat.messages];
     systemPrompt = chat.systemPrompt;
+    webSearch = (chat as any).webSearch ?? false;
     systemPromptVersion++;
     const prov = PROVIDERS.find(p => p.id === chat.provider);
     if (prov) selectedProvider = prov;
@@ -873,7 +970,7 @@
     if (currentChatId === chatId) { currentChatId = null; messages = []; }
   }
 
-  function newChat() { currentChatId = null; messages = []; systemPrompt = ''; systemPromptVersion++; }
+  function newChat() { currentChatId = null; messages = []; systemPrompt = ''; webSearch = false; systemPromptVersion++; }
 
   // Auto-save
   let wasStreaming = false;
@@ -938,6 +1035,54 @@
     </div>
   {/if}
 
+  <!-- Extras panel -->
+  {#if showExtras}
+    <div class="ai-extras-overlay" onclick={() => showExtras = false}>
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div class="ai-extras-panel" onclick={(e) => e.stopPropagation()}>
+        <div class="ai-extras-header">
+          <span>Settings</span>
+          <button class="ai-extras-close" onclick={() => showExtras = false}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div class="ai-extras-body">
+          <div class="ai-extras-group">
+            <label class="ai-extras-label">Temperature <span class="ai-extras-val">{temperature.toFixed(1)}</span></label>
+            <input type="range" class="ai-extras-range" min="0" max="2" step="0.1" bind:value={temperature} />
+          </div>
+          <div class="ai-extras-group">
+            <label class="ai-extras-label">Top P <span class="ai-extras-val">{topP.toFixed(1)}</span></label>
+            <input type="range" class="ai-extras-range" min="0" max="1" step="0.05" bind:value={topP} />
+          </div>
+          <div class="ai-extras-group">
+            <label class="ai-extras-label">Max Tokens</label>
+            <input type="number" class="ai-extras-number" min="256" max="128000" step="256" bind:value={maxTokens} />
+          </div>
+          <div class="ai-extras-divider"></div>
+          <div class="ai-extras-toggle-row">
+            <span>Streaming</span>
+            <button class="ai-extras-toggle" class:active={streaming} onclick={() => streaming = !streaming}>
+              <span class="ai-extras-toggle-thumb"></span>
+            </button>
+          </div>
+          <div class="ai-extras-toggle-row">
+            <span>🌐 Internet</span>
+            <button class="ai-extras-toggle" class:active={webSearch} onclick={() => webSearch = !webSearch}>
+              <span class="ai-extras-toggle-thumb"></span>
+            </button>
+          </div>
+          <div class="ai-extras-toggle-row">
+            <span>Reasoning</span>
+            <button class="ai-extras-toggle" class:active={reasoning} onclick={() => reasoning = !reasoning}>
+              <span class="ai-extras-toggle-thumb"></span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  {/if}
+
   <!-- Messages -->
   <div class="ai-messages" bind:this={messagesContainer} onscroll={onMessagesScroll}>
     {#if messages.length === 0}
@@ -961,6 +1106,21 @@
                 <div class="md-rendered">{@html renderMarkdown(msg.content, msg.citations)}</div>
               {:else if isStreaming && idx === messages.length - 1}
                 <div class="md-rendered msg-streaming"><span class="cursor-blink"></span></div>
+              {/if}
+              {#if msg._searchInfo}
+                <div class="msg-search-indicator">
+                  <span class="msg-search-icon">🌐</span>
+                  <span class="msg-search-text">Searched the web</span>
+                  <button class="msg-search-expand" onclick={() => { msg._showSearchDetail = !msg._showSearchDetail; messages = [...messages]; }}>
+                    <span class="chevron" class:open={msg._showSearchDetail}><IconChevronRight size={10} /></span>
+                  </button>
+                  {#if msg._showSearchDetail}
+                    <div class="msg-search-detail">
+                      <span class="msg-search-query">Query: {msg._searchInfo!.query}</span>
+                      {#if msg._searchInfo!.source}<span class="msg-search-source">Source: {msg._searchInfo!.source}</span>{/if}
+                    </div>
+                  {/if}
+                </div>
               {/if}
               {#if msg.content && msg.role === 'assistant'}
                 <div class="msg-meta-bar">
@@ -1029,7 +1189,7 @@
     display: flex; flex-direction: column;
     position: fixed;
     top: 16px; left: 50%; transform: translateX(-50%);
-    width: min(960px, calc(100vw - 32px));
+    width: min(1100px, calc(100vw - 32px));
     height: calc(100vh - 100px);
     overflow: hidden;
     font-family: 'Geist', sans-serif;
@@ -1049,7 +1209,7 @@
 
   /* ── Messages Container ──────────────────────────────────── */
   .ai-messages {
-    flex: 1; overflow-y: auto; padding: 48px 36px 40px;
+    flex: 1; overflow-y: auto; padding: 40px 24px 40px;
     display: flex; flex-direction: column; gap: 24px;
     scroll-behavior: smooth;
   }
@@ -1080,7 +1240,7 @@
   }
 
   /* ── Assistant Message (Document Card) ───────────────────── */
-  .msg-assistant-wrap { display: flex; flex-direction: column; max-width: 820px; width: 100%; margin: 0 auto; }
+  .msg-assistant-wrap { display: flex; flex-direction: column; max-width: 1000px; width: 100%; margin: 0 auto; }
   .msg-assistant-card {
     background: color-mix(in srgb, var(--md-surface) 85%, transparent);
     border: 1px solid var(--md-border);
@@ -1115,6 +1275,29 @@
     color: var(--md-text-3); cursor: pointer; transition: all .12s;
   }
   .msg-action-btn:hover { color: var(--md-text); background: rgba(255,255,255,.06); }
+
+  /* ── Search Indicator ────────────────────────────────────── */
+  .msg-search-indicator {
+    display: inline-flex; align-items: center; gap: 6px;
+    margin-top: 12px; padding: 5px 10px; border-radius: 8px;
+    background: rgba(59,130,246,.06); border: 1px solid rgba(59,130,246,.12);
+    font-size: 11px; color: #93c5fd; width: fit-content;
+  }
+  .msg-search-icon { font-size: 12px; }
+  .msg-search-text { font-weight: 500; }
+  .msg-search-expand {
+    display: inline-flex; align-items: center; padding: 0; margin-left: 2px;
+    border: none; background: none; color: #93c5fd; cursor: pointer;
+  }
+  .msg-search-detail {
+    display: flex; flex-direction: column; gap: 2px;
+    margin-top: 6px; padding-top: 6px;
+    border-top: 1px solid rgba(59,130,246,.12);
+  }
+  .msg-search-query, .msg-search-source {
+    font-size: 10px; color: rgba(147,197,253,.6);
+    font-family: 'Geist Mono', monospace;
+  }
 
   /* ── Markdown Rendered ───────────────────────────────────── */
   .md-rendered {
@@ -1376,7 +1559,7 @@
 
   /* ── Back to Top ─────────────────────────────────────────── */
   .back-to-top {
-    position: absolute; bottom: 20px; right: 20px;
+    position: absolute; bottom: 20px; left: 20px;
     width: 36px; height: 36px; border-radius: 10px;
     border: 1px solid var(--md-border);
     background: var(--md-elevated); color: var(--md-text-2);
@@ -1427,6 +1610,71 @@
   }
   .ai-history-item:hover .ai-history-delete { opacity: 1; }
   .ai-history-delete:hover { color: var(--md-error); background: rgba(255,107,107,.08); }
+
+  /* ── Extras Panel ──────────────────────────────────────── */
+  .ai-extras-overlay {
+    position: absolute; inset: 0; z-index: 20;
+    background: rgba(0,0,0,.5); backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 20px;
+  }
+  .ai-extras-panel {
+    background: var(--md-surface); border: 1px solid var(--md-border);
+    border-radius: 16px; width: 340px; max-width: 90vw;
+    box-shadow: 0 20px 60px rgba(0,0,0,.5);
+    animation: extrasIn .2s cubic-bezier(.16,1,.3,1);
+  }
+  @keyframes extrasIn { from { opacity: 0; transform: scale(.96) translateY(8px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+  .ai-extras-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 16px; border-bottom: 1px solid var(--md-border);
+    font-size: 13px; font-weight: 600; color: var(--md-text);
+  }
+  .ai-extras-close {
+    background: none; border: none; color: var(--md-text-3); cursor: pointer;
+    padding: 4px; border-radius: 6px; display: flex; align-items: center; justify-content: center;
+  }
+  .ai-extras-close:hover { color: var(--md-text); background: rgba(255,255,255,.06); }
+  .ai-extras-body { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+  .ai-extras-group { display: flex; flex-direction: column; gap: 6px; }
+  .ai-extras-label {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 12px; font-weight: 500; color: var(--md-text-2);
+  }
+  .ai-extras-val { font-family: 'Geist Mono', monospace; color: var(--md-accent); font-size: 11px; }
+  .ai-extras-range {
+    width: 100%; height: 4px; -webkit-appearance: none; appearance: none;
+    background: var(--md-elevated); border-radius: 2px; outline: none;
+  }
+  .ai-extras-range::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%;
+    background: var(--md-accent); cursor: pointer; border: 2px solid var(--md-surface);
+    box-shadow: 0 1px 4px rgba(0,0,0,.3);
+  }
+  .ai-extras-number {
+    width: 100%; background: var(--md-elevated); border: 1px solid var(--md-border);
+    border-radius: 8px; padding: 6px 10px; outline: none;
+    color: var(--md-text); font-size: 12px; font-family: 'Geist Mono', monospace;
+  }
+  .ai-extras-number:focus { border-color: var(--md-accent); }
+  .ai-extras-divider { border-top: 1px solid var(--md-border); }
+  .ai-extras-toggle-row {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 12px; font-weight: 500; color: var(--md-text-2);
+  }
+  .ai-extras-toggle {
+    width: 36px; height: 20px; border-radius: 10px;
+    border: none; background: var(--md-elevated); cursor: pointer;
+    position: relative; transition: background .2s; padding: 0;
+  }
+  .ai-extras-toggle.active { background: var(--md-accent); }
+  .ai-extras-toggle-thumb {
+    position: absolute; top: 2px; left: 2px;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: #fff; transition: transform .2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,.3);
+  }
+  .ai-extras-toggle.active .ai-extras-toggle-thumb { transform: translateX(16px); }
 
   /* ── Scrollbar ───────────────────────────────────────────── */
   .ai-messages::-webkit-scrollbar { width: 6px; }
