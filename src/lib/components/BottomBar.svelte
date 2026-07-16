@@ -126,14 +126,14 @@
   function onItemLeave() { hoverTabId = null; }
 
   // ── Nav expand on cloud hover ────────────────────────────────
-  function onNavEnter() {
+  function onBarNavEnter() {
     if (navHoverTimeout) { clearTimeout(navHoverTimeout); navHoverTimeout = null; }
     navExpanded = true;
   }
 
-  function onNavLeave() {
+  function onBarNavLeave() {
     if (fullWidth) return;
-    navHoverTimeout = setTimeout(() => { navExpanded = false; }, 300);
+    navHoverTimeout = setTimeout(() => { navExpanded = false; }, 400);
   }
 
   // ── Long-press tooltip (mobile) ──────────────────────────────
@@ -464,14 +464,11 @@
   onmouseup={cancelDockDrag}
   ontouchend={cancelDockDrag}
   onmousemove={cancelDockDrag}
-  onmouseenter={() => { if (autoHide) dockHovered = true; }}
-  onmouseleave={() => { if (autoHide) dockHovered = false; }}
+  onmouseenter={() => { if (autoHide) dockHovered = true; onBarNavEnter(); }}
+  onmouseleave={() => { if (autoHide) dockHovered = false; onBarNavLeave(); }}
 >
   <!-- Nav section: cloud icon + expandable tabs -->
-  <div class="bb-nav-section"
-    onmouseenter={onNavEnter}
-    onmouseleave={onNavLeave}
-  >
+  <div class="bb-nav-section">
     <!-- Brand / cloud icon (always visible) -->
     <div class="bb-brand">
       <IconCloud size={16} stroke={1.5}/>

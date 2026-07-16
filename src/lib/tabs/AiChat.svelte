@@ -1,7 +1,6 @@
 <script lang="ts">
   import { IconPlayerStop, IconSend, IconSettings, IconChevronDown, IconChevronUp, IconBrain, IconHistory, IconPlus, IconTrash, IconUser, IconLink, IconChevronRight } from '@tabler/icons-svelte';
   import BrandIcon from '$lib/components/BrandIcon.svelte';
-  import { marked } from 'marked';
 
   let { apiKey = '', barConfig = $bindable(null) }: { apiKey?: string; barConfig?: any } = $props();
 
@@ -48,13 +47,157 @@
   let titleGenerating = $state(false);
   let loadingHistory = $state(false);
 
-  // Markdown renderer
-  marked.setOptions({ breaks: false, gfm: true });
+  // Markdown renderer — custom engine
+  function escapeHtml(s: string): string {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function inlineMarkdown(text: string): string {
+    let s = escapeHtml(text);
+    // images
+    s = s.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" />');
+    // links
+    s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    // bold+italic
+    s = s.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+    // bold
+    s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    s = s.replace(/__(.+?)__/g, '<strong>$1</strong>');
+    // italic
+    s = s.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    s = s.replace(/_(.+?)_/g, '<em>$1</em>');
+    // strikethrough
+    s = s.replace(/~~(.+?)~~/g, '<del>$1</del>');
+    // inline code
+    s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+    return s;
+  }
 
   function renderMarkdown(text: string, citations?: string[]): string {
     try {
-      let html = marked.parse(text) as string;
-      // Replace [1][2] style references with superscript links if citations exist
+      const lines = text.split('\n');
+      let html = '';
+      let i = 0;
+
+      while (i < lines.length) {
+        const line = lines[i];
+
+        // Fenced code block
+        if (line.trimStart().startsWith('```')) {
+          const lang = line.trimStart().slice(3).trim();
+          const codeLines: string[] = [];
+          i++;
+          while (i < lines.length && !lines[i].trimStart().startsWith('```')) {
+            codeLines.push(escapeHtml(lines[i]));
+            i++;
+          }
+          i++; // skip closing ```
+          const langAttr = lang ? ` data-lang="${escapeHtml(lang)}"` : '';
+          html += `<pre${langAttr}><code>${codeLines.join('\n')}</code></pre>`;
+          continue;
+        }
+
+        // Table
+        if (line.includes('|') && i + 1 < lines.length && /^\|?\s*[-:]+[-|:\s]+\s*\|?$/.test(lines[i + 1])) {
+          const parseRow = (row: string) => row.replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+          const headers = parseRow(line);
+          i += 2; // skip header + separator
+          const alignments = parseRow(lines[i - 1]).map(c => {
+            if (c.startsWith(':') && c.endsWith(':')) return 'center';
+            if (c.endsWith(':')) return 'right';
+            return 'left';
+          });
+          let table = '<div class="md-table-wrap"><table><thead><tr>';
+          headers.forEach((h, idx) => {
+            table += `<th style="text-align:${alignments[idx] || 'left'}">${inlineMarkdown(h)}</th>`;
+          });
+          table += '</tr></thead><tbody>';
+          while (i < lines.length && lines[i].includes('|') && lines[i].trim() !== '') {
+            const cells = parseRow(lines[i]);
+            table += '<tr>';
+            cells.forEach((c, idx) => {
+              table += `<td style="text-align:${alignments[idx] || 'left'}">${inlineMarkdown(c)}</td>`;
+            });
+            table += '</tr>';
+            i++;
+          }
+          table += '</tbody></table></div>';
+          html += table;
+          continue;
+        }
+
+        // Heading
+        const headingMatch = line.match(/^(#{1,6})\s+(.+)/);
+        if (headingMatch) {
+          const level = headingMatch[1].length;
+          html += `<h${level}>${inlineMarkdown(headingMatch[2])}</h${level}>`;
+          i++;
+          continue;
+        }
+
+        // Horizontal rule
+        if (/^(\*{3,}|-{3,}|_{3,})\s*$/.test(line.trim())) {
+          html += '<hr />';
+          i++;
+          continue;
+        }
+
+        // Blockquote
+        if (line.startsWith('>')) {
+          const quoteLines: string[] = [];
+          while (i < lines.length && lines[i].startsWith('>')) {
+            quoteLines.push(lines[i].replace(/^>\s?/, ''));
+            i++;
+          }
+          html += `<blockquote>${renderMarkdown(quoteLines.join('\n'))}</blockquote>`;
+          continue;
+        }
+
+        // Unordered list
+        if (/^(\s*)([-*+])\s+/.test(line)) {
+          const listLines: string[] = [];
+          while (i < lines.length && /^(\s*)([-*+])\s+/.test(lines[i])) {
+            listLines.push(lines[i]);
+            i++;
+          }
+          html += renderList(listLines, false);
+          continue;
+        }
+
+        // Ordered list
+        if (/^(\s*)\d+\.\s+/.test(line)) {
+          const listLines: string[] = [];
+          while (i < lines.length && /^(\s*)\d+\.\s+/.test(lines[i])) {
+            listLines.push(lines[i]);
+            i++;
+          }
+          html += renderList(listLines, true);
+          continue;
+        }
+
+        // Paragraph — collect consecutive non-empty, non-special lines
+        if (line.trim() !== '') {
+          const paraLines: string[] = [];
+          while (i < lines.length && lines[i].trim() !== '' &&
+            !lines[i].trimStart().startsWith('```') &&
+            !lines[i].startsWith('#') &&
+            !lines[i].startsWith('>') &&
+            !lines[i].match(/^(\s*)([-*+])\s+/) &&
+            !lines[i].match(/^(\s*)\d+\.\s+/) &&
+            !lines[i].match(/^(\*{3,}|-{3,}|_{3,})\s*$/) &&
+            !(lines[i].includes('|') && i + 1 < lines.length && /^\|?\s*[-:]+[-|:\s]+\s*\|?$/.test(lines[i + 1]))
+          ) {
+            paraLines.push(lines[i]);
+            i++;
+          }
+          html += `<p>${inlineMarkdown(paraLines.join('\n'))}</p>`;
+          continue;
+        }
+
+        i++;
+      }
+
+      // Citation references
       if (citations && citations.length > 0) {
         html = html.replace(/\[(\d+)\]/g, (match, num) => {
           const idx = parseInt(num) - 1;
@@ -64,10 +207,50 @@
           return match;
         });
       }
+
       return html;
     } catch {
-      return text;
+      return `<p>${escapeHtml(text)}</p>`;
     }
+  }
+
+  function renderList(lines: string[], ordered: boolean): string {
+    const tag = ordered ? 'ol' : 'ul';
+    let html = `<${tag}>`;
+    for (const line of lines) {
+      const content = line.replace(/^(\s*)([-*+]|\d+\.)\s+/, '');
+      const indent = line.match(/^(\s*)/)?.[1]?.length ?? 0;
+      const isNested = indent >= 2;
+      if (isNested) {
+        // Wrap nested content in a nested list
+        const inner = content.replace(/^(\s*)([-*+]|\d+\.)\s+/, '');
+        html += `<li>${inlineMarkdown(content)}</li>`;
+      } else {
+        // Check if next line is indented (nested list)
+        const idx = lines.indexOf(line);
+        const nextLine = lines[idx + 1];
+        const nextIndent = nextLine?.match(/^(\s*)/)?.[1]?.length ?? 0;
+        if (nextIndent > indent && nextLine) {
+          // This item has nested content - collect nested lines
+          html += `<li>${inlineMarkdown(content)}`;
+          const nestedLines: string[] = [];
+          let j = idx + 1;
+          while (j < lines.length && (lines[j].match(/^(\s*)/)?.[1]?.length ?? 0) > indent) {
+            nestedLines.push(lines[j]);
+            j++;
+          }
+          const isNestedOrdered = /^\s*\d+\./.test(nestedLines[0] ?? '');
+          html += renderList(nestedLines, isNestedOrdered);
+          html += `</li>`;
+          // Skip the nested lines we already processed
+          // We handle this by just not re-processing them
+        } else {
+          html += `<li>${inlineMarkdown(content)}</li>`;
+        }
+      }
+    }
+    html += `</${tag}>`;
+    return html;
   }
 
   function getDomain(url: string): string {
@@ -833,56 +1016,61 @@ Assistant: ${firstAssistantMsg}`;
   .ai-msg-body { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 
   /* ── Markdown rendering ─────────────────────────────────── */
-  .ai-markdown { white-space: normal; }
-  .ai-markdown p { margin: 0 0 10px; line-height: 1.65; }
+  .ai-markdown { white-space: normal; line-height: 1.65; }
+  .ai-markdown p { margin: 0 0 10px; }
   .ai-markdown p:last-child { margin-bottom: 0; }
   .ai-markdown strong { font-weight: 600; color: var(--text-1); }
   .ai-markdown em { font-style: italic; }
+  .ai-markdown del { text-decoration: line-through; opacity: .6; }
   .ai-markdown code {
     background: rgba(99,102,241,.1); padding: 2px 6px; border-radius: 4px;
     font-family: 'Geist Mono', monospace; font-size: 12px;
     color: color-mix(in srgb, var(--accent) 90%, var(--text-1));
   }
   .ai-markdown pre {
-    background: var(--bg-1); border: 1px solid var(--border); border-radius: 8px;
-    padding: 12px 14px; overflow-x: auto; margin: 10px 0;
+    background: var(--bg-1); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px; overflow-x: auto; margin: 12px 0;
+    position: relative;
   }
-  .ai-markdown pre code { background: none; padding: 0; color: var(--text-1); }
-  .ai-markdown ul, .ai-markdown ol { margin: 6px 0 10px; padding-left: 22px; }
+  .ai-markdown pre code { background: none; padding: 0; color: var(--text-1); font-size: 12px; line-height: 1.5; }
+  .ai-markdown pre[data-lang]::before {
+    content: attr(data-lang);
+    position: absolute; top: 8px; right: 12px;
+    font-size: 10px; font-weight: 600; color: var(--text-3);
+    text-transform: uppercase; letter-spacing: .5px;
+  }
+  .ai-markdown ul, .ai-markdown ol { margin: 6px 0 10px; padding-left: 24px; }
   .ai-markdown li { margin: 4px 0; line-height: 1.6; }
   .ai-markdown li > p { margin: 4px 0; }
   .ai-markdown a { color: var(--accent); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; }
   .ai-markdown blockquote {
-    border-left: 3px solid var(--accent); margin: 10px 0; padding: 6px 14px;
-    color: var(--text-2); background: rgba(99,102,241,.04); border-radius: 0 8px 8px 0;
+    border-left: 3px solid var(--accent); margin: 10px 0; padding: 8px 14px;
+    color: var(--text-2); background: rgba(99,102,241,.04); border-radius: 0 10px 10px 0;
   }
-  .ai-markdown h1, .ai-markdown h2, .ai-markdown h3, .ai-markdown h4 {
-    margin: 16px 0 8px; font-weight: 700; line-height: 1.3;
+  .ai-markdown blockquote p { margin: 4px 0; }
+  .ai-markdown h1, .ai-markdown h2, .ai-markdown h3, .ai-markdown h4, .ai-markdown h5, .ai-markdown h6 {
+    margin: 18px 0 8px; font-weight: 700; line-height: 1.3; color: var(--text-1);
   }
-  .ai-markdown h1 { font-size: 17px; }
-  .ai-markdown h2 { font-size: 15px; }
+  .ai-markdown h1 { font-size: 18px; }
+  .ai-markdown h2 { font-size: 16px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
   .ai-markdown h3 { font-size: 14px; }
   .ai-markdown h4 { font-size: 13px; }
-  .ai-markdown hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
+  .ai-markdown hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
 
   /* Tables */
-  .ai-markdown table {
-    border-collapse: collapse; margin: 10px 0; width: 100%;
-    display: block; overflow-x: auto;
-  }
+  .md-table-wrap { overflow-x: auto; margin: 10px 0; border-radius: 8px; border: 1px solid var(--border); }
+  .ai-markdown table { border-collapse: collapse; width: 100%; }
   .ai-markdown th, .ai-markdown td {
-    border: 1px solid var(--border); padding: 8px 12px;
-    font-size: 12px; text-align: left; white-space: nowrap;
+    padding: 8px 12px; font-size: 12px; text-align: left;
+    border-bottom: 1px solid var(--border); border-right: 1px solid var(--border);
   }
   .ai-markdown th {
     background: var(--bg-3); font-weight: 600; color: var(--text-1);
-    position: sticky; top: 0;
+    position: sticky; top: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .3px;
   }
   .ai-markdown td { color: var(--text-2); }
+  .ai-markdown tr:last-child td { border-bottom: none; }
   .ai-markdown tr:hover td { background: var(--hover); }
-
-  /* Definition-style bold labels (e.g. "**Pathophysiology:**") */
-  .ai-markdown p > strong:first-child { color: var(--accent); }
 
   .cite-ref a {
     color: var(--accent); font-size: 10px; font-weight: 700;
