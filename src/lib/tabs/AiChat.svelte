@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { IconPlayerStop, IconSend, IconSettings, IconChevronDown, IconChevronUp, IconBrain, IconHistory, IconPlus, IconTrash, IconUser, IconLink, IconChevronRight } from '@tabler/icons-svelte';
+  import { IconPlayerStop, IconSend, IconSettings, IconBrain, IconHistory, IconPlus, IconTrash, IconLink, IconChevronRight, IconCopy, IconCheck, IconArrowUp, IconDownload, IconClock, IconBookOpen } from '@tabler/icons-svelte';
   import BrandIcon from '$lib/components/BrandIcon.svelte';
 
   let { apiKey = '', barConfig = $bindable(null) }: { apiKey?: string; barConfig?: any } = $props();
@@ -32,13 +32,18 @@
   let selectedProvider = $state(PROVIDERS[0]);
   let models = $state<any[]>([]);
   let selectedModel = $state('');
-  let messages = $state<{ role: 'user' | 'assistant' | 'system'; content: string; citations?: string[]; _showSources?: boolean }[]>([]);
+  let messages = $state<{ role: 'user' | 'assistant' | 'system'; content: string; citations?: string[]; _showSources?: boolean; _collapsed?: boolean }[]>([]);
   let input = $state('');
   let isStreaming = $state(false);
   let systemPrompt = $state('');
   let showSystem = $state(false);
   let loadingModels = $state(false);
   let abortController: AbortController | null = null;
+  let copiedStates = $state<Record<string, boolean>>({});
+  let expandedCallouts = $state<Record<string, boolean>>({});
+  let expandedCollapsibles = $state<Record<string, boolean>>({});
+  let showBackToTop = $state(false);
+  let messagesContainer: HTMLDivElement;
 
   // Chat history
   let chatHistory = $state<ChatHistory[]>([]);
@@ -47,17 +52,123 @@
   let titleGenerating = $state(false);
   let loadingHistory = $state(false);
 
-  // Markdown renderer — custom engine
+  // ── Utility helpers ──────────────────────────────────────────
   function escapeHtml(s: string): string {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
-  function inlineMarkdown(text: string): string {
+  function slugify(text: string): string {
+    return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+  }
+
+  function wordCount(text: string): number {
+    return text.replace(/[#*`>\[\]|_-~]/g, '').split(/\s+/).filter(Boolean).length;
+  }
+
+  function readingTime(text: string): string {
+    const wc = wordCount(text);
+    const mins = Math.max(1, Math.ceil(wc / 200));
+    return `${mins} min read`;
+  }
+
+  function getDomain(url: string): string {
+    try { return new URL(url).hostname.replace('www.', ''); } catch { return url; }
+  }
+
+  function getFaviconUrl(url: string): string {
+    try {
+      const domain = new URL(url).hostname;
+      return `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
+    } catch { return ''; }
+  }
+
+  async function copyToClipboard(text: string, key: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      copiedStates[key] = true;
+      setTimeout(() => { copiedStates[key] = false; }, 2000);
+    } catch {}
+  }
+
+  // ── Pattern Detection ────────────────────────────────────────
+  type PatternType =
+    | 'callout-warning' | 'callout-tip' | 'callout-note' | 'callout-error' | 'callout-info'
+    | 'definition' | 'faq' | 'comparison' | 'proscons'
+    | 'steps' | 'collapsible-list' | 'code-block' | 'table'
+    | 'heading' | 'paragraph' | 'list' | 'blockquote' | 'hr';
+
+  interface DetectedPattern {
+    type: PatternType;
+    content: string;
+    meta?: any;
+  }
+
+  function detectCalloutType(text: string): PatternType | null {
+    const lower = text.toLowerCase().trim();
+    if (/^(warning|caution|danger|important):/i.test(lower)) return 'callout-warning';
+    if (/^(tip|hint|suggestion|pro tip):/i.test(lower)) return 'callout-tip';
+    if (/^(note|info|information|fyi):/i.test(lower)) return 'callout-note';
+    if (/^(error|mistake|wrong|bad):/i.test(lower)) return 'callout-error';
+    if (/^(remember|keep in mind|note that):/i.test(lower)) return 'callout-info';
+    return null;
+  }
+
+  function detectDefinition(lines: string[]): boolean {
+    if (lines.length < 2 || lines.length > 6) return false;
+    const first = lines[0].trim();
+    return /^\*\*[^*]+\*\*:?\s*$/.test(first) || /^[A-Z][^.]+:\s*$/.test(first);
+  }
+
+  function detectFAQ(lines: string[]): boolean {
+    if (lines.length < 4) return false;
+    let qCount = 0;
+    for (const l of lines) {
+      if (/^(Q[:.]|##?\s*Q|FAQ|\?\s*$)/i.test(l.trim()) || l.trim().endsWith('?')) qCount++;
+    }
+    return qCount >= 2;
+  }
+
+  function detectComparison(lines: string[]): boolean {
+    if (lines.length < 3) return false;
+    const hasTable = lines.some(l => l.includes('|')) && lines.some(l => /^\|?\s*[-:]+/.test(l.trim()));
+    if (hasTable) {
+      const headerLine = lines.find(l => l.includes('|'));
+      if (headerLine) {
+        const cells = headerLine.replace(/^\||\|$/g, '').split('|').map(c => c.trim().toLowerCase());
+        const compWords = ['vs', 'versus', 'comparison', 'compare', 'pros', 'cons', 'advantage', 'disadvantage'];
+        if (cells.some(c => compWords.some(w => c.includes(w)))) return true;
+      }
+    }
+    return false;
+  }
+
+  function detectProsCons(lines: string[]): boolean {
+    const text = lines.join('\n').toLowerCase();
+    return (text.includes('pros') && text.includes('cons')) ||
+           (text.includes('advantages') && text.includes('disadvantages')) ||
+           (text.includes('好处') && text.includes('坏处'));
+  }
+
+  function detectSteps(lines: string[]): boolean {
+    if (lines.length < 3) return false;
+    let stepCount = 0;
+    for (const l of lines) {
+      if (/^\d+[\.\)]\s+/.test(l.trim()) || /^step\s+\d+/i.test(l.trim())) stepCount++;
+    }
+    return stepCount >= 3;
+  }
+
+  function detectLongList(lines: string[]): boolean {
+    return lines.length > 8;
+  }
+
+  // ── Enhanced Inline Markdown ─────────────────────────────────
+  function inlineMd(text: string): string {
     let s = escapeHtml(text);
     // images
-    s = s.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" />');
+    s = s.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" class="md-img" />');
     // links
-    s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" class="md-link">$1<svg class="md-ext-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>');
     // bold+italic
     s = s.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
     // bold
@@ -69,10 +180,25 @@
     // strikethrough
     s = s.replace(/~~(.+?)~~/g, '<del>$1</del>');
     // inline code
-    s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+    s = s.replace(/`([^`]+)`/g, '<code class="md-inline-code">$1</code>');
     return s;
   }
 
+  // ── TOC Generator ────────────────────────────────────────────
+  function generateToc(html: string): { id: string; text: string; level: number }[] {
+    const toc: { id: string; text: string; level: number }[] = [];
+    const regex = /<h([1-6])[^>]*id="([^"]*)"[^>]*>(.*?)<\/h\1>/gi;
+    let match;
+    while ((match = regex.exec(html)) !== null) {
+      const level = parseInt(match[1]);
+      const id = match[2];
+      const text = match[3].replace(/<[^>]+>/g, '');
+      toc.push({ id, text, level });
+    }
+    return toc;
+  }
+
+  // ── Smart Markdown Renderer ──────────────────────────────────
   function renderMarkdown(text: string, citations?: string[]): string {
     try {
       const lines = text.split('\n');
@@ -82,7 +208,7 @@
       while (i < lines.length) {
         const line = lines[i];
 
-        // Fenced code block
+        // ── Fenced code block ────────────────────────────
         if (line.trimStart().startsWith('```')) {
           const lang = line.trimStart().slice(3).trim();
           const codeLines: string[] = [];
@@ -91,91 +217,188 @@
             codeLines.push(escapeHtml(lines[i]));
             i++;
           }
-          i++; // skip closing ```
-          const langAttr = lang ? ` data-lang="${escapeHtml(lang)}"` : '';
-          html += `<pre${langAttr}><code>${codeLines.join('\n')}</code></pre>`;
+          i++;
+          const codeId = `code-${Math.random().toString(36).slice(2, 8)}`;
+          const codeContent = codeLines.join('\n');
+          const langLabel = lang ? `<span class="code-lang">${escapeHtml(lang)}</span>` : '';
+          html += `<div class="code-block" id="${codeId}">
+            <div class="code-header">${langLabel}
+              <button class="code-copy-btn" onclick="window.__aiCopy?.('${codeId}', this)" title="Copy code">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                <span>Copy</span>
+              </button>
+            </div>
+            <pre class="code-pre"><code>${codeContent}</code></pre>
+          </div>`;
           continue;
         }
 
-        // Table
+        // ── Table ────────────────────────────────────────
         if (line.includes('|') && i + 1 < lines.length && /^\|?\s*[-:]+[-|:\s]+\s*\|?$/.test(lines[i + 1])) {
           const parseRow = (row: string) => row.replace(/^\||\|$/g, '').split('|').map(c => c.trim());
           const headers = parseRow(line);
-          i += 2; // skip header + separator
+          i += 2;
           const alignments = parseRow(lines[i - 1]).map(c => {
             if (c.startsWith(':') && c.endsWith(':')) return 'center';
             if (c.endsWith(':')) return 'right';
             return 'left';
           });
-          let table = '<div class="md-table-wrap"><table><thead><tr>';
-          headers.forEach((h, idx) => {
-            table += `<th style="text-align:${alignments[idx] || 'left'}">${inlineMarkdown(h)}</th>`;
-          });
-          table += '</tr></thead><tbody>';
+          const rows: string[][] = [];
           while (i < lines.length && lines[i].includes('|') && lines[i].trim() !== '') {
-            const cells = parseRow(lines[i]);
-            table += '<tr>';
-            cells.forEach((c, idx) => {
-              table += `<td style="text-align:${alignments[idx] || 'left'}">${inlineMarkdown(c)}</td>`;
-            });
-            table += '</tr>';
+            rows.push(parseRow(lines[i]));
             i++;
           }
+          const tableId = `tbl-${Math.random().toString(36).slice(2, 8)}`;
+          let table = `<div class="md-table-wrap" id="${tableId}"><table><thead><tr>`;
+          headers.forEach((h, idx) => {
+            table += `<th style="text-align:${alignments[idx] || 'left'}">${inlineMd(h)}</th>`;
+          });
+          table += '</tr></thead><tbody>';
+          rows.forEach((cells, rowIdx) => {
+            table += `<tr class="${rowIdx % 2 === 0 ? 'even' : 'odd'}">`;
+            cells.forEach((c, idx) => {
+              table += `<td style="text-align:${alignments[idx] || 'left'}">${inlineMd(c)}</td>`;
+            });
+            table += '</tr>';
+          });
           table += '</tbody></table></div>';
           html += table;
           continue;
         }
 
-        // Heading
+        // ── Heading ──────────────────────────────────────
         const headingMatch = line.match(/^(#{1,6})\s+(.+)/);
         if (headingMatch) {
           const level = headingMatch[1].length;
-          html += `<h${level}>${inlineMarkdown(headingMatch[2])}</h${level}>`;
+          const text = headingMatch[2];
+          const id = slugify(text.replace(/[*_`]/g, ''));
+          html += `<h${level} id="${id}"><a class="heading-anchor" href="#${id}" aria-hidden="true">#</a>${inlineMd(text)}</h${level}>`;
           i++;
           continue;
         }
 
-        // Horizontal rule
+        // ── Horizontal rule ──────────────────────────────
         if (/^(\*{3,}|-{3,}|_{3,})\s*$/.test(line.trim())) {
-          html += '<hr />';
+          html += '<hr class="md-hr" />';
           i++;
           continue;
         }
 
-        // Blockquote
+        // ── Blockquote / Callout detection ───────────────
         if (line.startsWith('>')) {
           const quoteLines: string[] = [];
           while (i < lines.length && lines[i].startsWith('>')) {
             quoteLines.push(lines[i].replace(/^>\s?/, ''));
             i++;
           }
-          html += `<blockquote>${renderMarkdown(quoteLines.join('\n'))}</blockquote>`;
+          const quoteText = quoteLines.join('\n');
+          const calloutType = detectCalloutType(quoteText);
+          if (calloutType) {
+            const calloutId = `callout-${Math.random().toString(36).slice(2, 8)}`;
+            const icons: Record<string, string> = {
+              'callout-warning': '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+              'callout-tip': '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>',
+              'callout-note': '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
+              'callout-error': '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
+              'callout-info': '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>',
+            };
+            const labels: Record<string, string> = {
+              'callout-warning': 'Warning',
+              'callout-tip': 'Tip',
+              'callout-note': 'Note',
+              'callout-error': 'Error',
+              'callout-info': 'Important',
+            };
+            const colorMap: Record<string, string> = {
+              'callout-warning': 'var(--md-warn)',
+              'callout-tip': 'var(--md-success)',
+              'callout-note': 'var(--md-accent)',
+              'callout-error': 'var(--md-error)',
+              'callout-info': 'var(--md-accent)',
+            };
+            const cleanText = quoteText.replace(/^(warning|caution|danger|tip|hint|note|info|error|remember|keep in mind|note that|important|suggestion|pro tip|information|fyi|mistake|wrong|bad|caution)[:\s]*/i, '').trim();
+            html += `<div class="callout callout-${calloutType.split('-')[1]}" style="--callout-accent:${colorMap[calloutType]}" id="${calloutId}">
+              <div class="callout-header">${icons[calloutType]}<span>${labels[calloutType]}</span></div>
+              <div class="callout-body">${renderMarkdown(cleanText)}</div>
+            </div>`;
+          } else {
+            html += `<blockquote class="md-blockquote">${renderMarkdown(quoteText)}</blockquote>`;
+          }
           continue;
         }
 
-        // Unordered list
+        // ── Task list ────────────────────────────────────
+        if (/^- \[[ x]\]\s+/.test(line.trim())) {
+          const taskLines: string[] = [];
+          while (i < lines.length && /^- \[[ x]\]\s+/.test(lines[i].trim())) {
+            taskLines.push(lines[i]);
+            i++;
+          }
+          const taskId = `tasks-${Math.random().toString(36).slice(2, 8)}`;
+          html += `<div class="task-list">`;
+          for (const tl of taskLines) {
+            const checked = tl.includes('[x]');
+            const content = tl.replace(/^-\s*\[[ x]\]\s+/, '');
+            html += `<label class="task-item">
+              <input type="checkbox" ${checked ? 'checked' : ''} disabled />
+              <span class="task-check"></span>
+              <span class="task-text${checked ? ' done' : ''}">${inlineMd(content)}</span>
+            </label>`;
+          }
+          html += `</div>`;
+          continue;
+        }
+
+        // ── Unordered list ───────────────────────────────
         if (/^(\s*)([-*+])\s+/.test(line)) {
           const listLines: string[] = [];
           while (i < lines.length && /^(\s*)([-*+])\s+/.test(lines[i])) {
             listLines.push(lines[i]);
             i++;
           }
-          html += renderList(listLines, false);
+          if (detectLongList(listLines)) {
+            const listId = `list-${Math.random().toString(36).slice(2, 8)}`;
+            expandedCollapsibles[listId] = expandedCollapsibles[listId] ?? false;
+            html += `<div class="collapsible-list" id="${listId}">
+              <button class="collapsible-toggle" onclick="window.__aiToggleList?.('${listId}')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                <span>Show ${listLines.length} items</span>
+              </button>
+              <div class="collapsible-content">${renderList(listLines, false)}</div>
+            </div>`;
+          } else {
+            html += renderList(listLines, false);
+          }
           continue;
         }
 
-        // Ordered list
+        // ── Ordered list ─────────────────────────────────
         if (/^(\s*)\d+\.\s+/.test(line)) {
           const listLines: string[] = [];
           while (i < lines.length && /^(\s*)\d+\.\s+/.test(lines[i])) {
             listLines.push(lines[i]);
             i++;
           }
-          html += renderList(listLines, true);
+          if (detectSteps(listLines)) {
+            const stepId = `steps-${Math.random().toString(36).slice(2, 8)}`;
+            html += renderSteps(listLines, stepId);
+          } else if (detectLongList(listLines)) {
+            const listId = `list-${Math.random().toString(36).slice(2, 8)}`;
+            expandedCollapsibles[listId] = expandedCollapsibles[listId] ?? false;
+            html += `<div class="collapsible-list" id="${listId}">
+              <button class="collapsible-toggle" onclick="window.__aiToggleList?.('${listId}')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                <span>Show ${listLines.length} steps</span>
+              </button>
+              <div class="collapsible-content">${renderList(listLines, true)}</div>
+            </div>`;
+          } else {
+            html += renderList(listLines, true);
+          }
           continue;
         }
 
-        // Paragraph — collect consecutive non-empty, non-special lines
+        // ── Paragraph ────────────────────────────────────
         if (line.trim() !== '') {
           const paraLines: string[] = [];
           while (i < lines.length && lines[i].trim() !== '' &&
@@ -185,12 +408,13 @@
             !lines[i].match(/^(\s*)([-*+])\s+/) &&
             !lines[i].match(/^(\s*)\d+\.\s+/) &&
             !lines[i].match(/^(\*{3,}|-{3,}|_{3,})\s*$/) &&
+            !lines[i].match(/^- \[[ x]\]/) &&
             !(lines[i].includes('|') && i + 1 < lines.length && /^\|?\s*[-:]+[-|:\s]+\s*\|?$/.test(lines[i + 1]))
           ) {
             paraLines.push(lines[i]);
             i++;
           }
-          html += `<p>${inlineMarkdown(paraLines.join('\n'))}</p>`;
+          html += `<p class="md-paragraph">${inlineMd(paraLines.join('\n'))}</p>`;
           continue;
         }
 
@@ -210,60 +434,91 @@
 
       return html;
     } catch {
-      return `<p>${escapeHtml(text)}</p>`;
+      return `<p class="md-paragraph">${escapeHtml(text)}</p>`;
     }
   }
 
   function renderList(lines: string[], ordered: boolean): string {
     const tag = ordered ? 'ol' : 'ul';
-    let html = `<${tag}>`;
+    let html = `<${tag} class="md-${tag}">`;
     for (const line of lines) {
       const content = line.replace(/^(\s*)([-*+]|\d+\.)\s+/, '');
-      const indent = line.match(/^(\s*)/)?.[1]?.length ?? 0;
-      const isNested = indent >= 2;
-      if (isNested) {
-        // Wrap nested content in a nested list
-        const inner = content.replace(/^(\s*)([-*+]|\d+\.)\s+/, '');
-        html += `<li>${inlineMarkdown(content)}</li>`;
-      } else {
-        // Check if next line is indented (nested list)
-        const idx = lines.indexOf(line);
-        const nextLine = lines[idx + 1];
-        const nextIndent = nextLine?.match(/^(\s*)/)?.[1]?.length ?? 0;
-        if (nextIndent > indent && nextLine) {
-          // This item has nested content - collect nested lines
-          html += `<li>${inlineMarkdown(content)}`;
-          const nestedLines: string[] = [];
-          let j = idx + 1;
-          while (j < lines.length && (lines[j].match(/^(\s*)/)?.[1]?.length ?? 0) > indent) {
-            nestedLines.push(lines[j]);
-            j++;
-          }
-          const isNestedOrdered = /^\s*\d+\./.test(nestedLines[0] ?? '');
-          html += renderList(nestedLines, isNestedOrdered);
-          html += `</li>`;
-          // Skip the nested lines we already processed
-          // We handle this by just not re-processing them
-        } else {
-          html += `<li>${inlineMarkdown(content)}</li>`;
-        }
-      }
+      html += `<li>${inlineMd(content)}</li>`;
     }
     html += `</${tag}>`;
     return html;
   }
 
-  function getDomain(url: string): string {
-    try { return new URL(url).hostname.replace('www.', ''); } catch { return url; }
+  function renderSteps(lines: string[], id: string): string {
+    let html = `<div class="step-timeline" id="${id}">`;
+    for (let idx = 0; idx < lines.length; idx++) {
+      const content = lines[idx].replace(/^(\s*)\d+[\.\)]\s+/, '');
+      const stepNum = idx + 1;
+      html += `<div class="step-item">
+        <div class="step-marker">${stepNum}</div>
+        <div class="step-content">${inlineMd(content)}</div>
+      </div>`;
+    }
+    html += `</div>`;
+    return html;
   }
 
-  function getFaviconUrl(url: string): string {
-    try {
-      const domain = new URL(url).hostname;
-      return `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
-    } catch { return ''; }
+  // ── Global copy handler ──────────────────────────────────────
+  if (typeof window !== 'undefined') {
+    (window as any).__aiCopy = (id: string, btn: HTMLElement) => {
+      const block = document.getElementById(id);
+      if (!block) return;
+      const code = block.querySelector('code');
+      if (code) {
+        navigator.clipboard.writeText(code.textContent ?? '');
+        const span = btn.querySelector('span');
+        if (span) span.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(() => {
+          if (span) span.textContent = 'Copy';
+          btn.classList.remove('copied');
+        }, 2000);
+      }
+    };
+    (window as any).__aiToggleList = (id: string) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.classList.toggle('open');
+      const span = el.querySelector('.collapsible-toggle span');
+      if (span) {
+        const isOpen = el.classList.contains('open');
+        const count = el.querySelectorAll('li').length;
+        span.textContent = isOpen ? 'Collapse' : `Show ${count} items`;
+      }
+    };
   }
 
+  // ── Message actions ──────────────────────────────────────────
+  function getWordCount(msgIdx: number): number {
+    const msg = messages[msgIdx];
+    if (!msg || msg.role !== 'assistant') return 0;
+    return wordCount(msg.content);
+  }
+
+  function getReadingTime(msgIdx: number): string {
+    const msg = messages[msgIdx];
+    if (!msg || msg.role !== 'assistant') return '';
+    return readingTime(msg.content);
+  }
+
+  function exportAsMarkdown(msgIdx: number): void {
+    const msg = messages[msgIdx];
+    if (!msg) return;
+    const blob = new Blob([msg.content], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `response-${Date.now()}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // ── Owners map ───────────────────────────────────────────────
   const OWNERS: Record<string, string> = {
     'openai-fast': 'OpenAI', 'openai': 'OpenAI', 'openai-large': 'OpenAI', 'openai-audio': 'OpenAI',
     'deepseek': 'DeepSeek', 'minimax': 'MiniMax', 'mistral': 'Mistral', 'qwen-coder': 'Alibaba',
@@ -354,16 +609,12 @@
       btns.push({ icon: IconPlayerStop, label: 'Stop', onClick: () => abortController?.abort(), danger: true });
     }
     btns.push({ icon: IconSend, label: 'Send', onClick: sendMessage, primary: true, disabled: !input.trim() || isStreaming || !selectedModel });
-
-    const selects = [
-      {
-        value: selectedModel,
-        options: models.map(m => ({ value: m.id, label: getDisplayName(m) })),
-        onchange: (v: string) => { selectedModel = v; },
-        label: loadingModels ? 'Loading...' : undefined,
-      },
-    ];
-
+    const selects = [{
+      value: selectedModel,
+      options: models.map(m => ({ value: m.id, label: getDisplayName(m) })),
+      onchange: (v: string) => { selectedModel = v; },
+      label: loadingModels ? 'Loading...' : undefined,
+    }];
     barConfig = {
       selects,
       input: {
@@ -383,16 +634,12 @@
       btns.push({ icon: IconPlayerStop, label: 'Stop', onClick: () => abortController?.abort(), danger: true });
     }
     btns.push({ icon: IconSend, label: 'Send', onClick: sendMessage, primary: true, disabled: !input.trim() || isStreaming || !selectedModel });
-
-    const selects = [
-      {
-        value: selectedModel,
-        options: models.map(m => ({ value: m.id, label: getDisplayName(m) })),
-        onchange: (v: string) => { selectedModel = v; },
-        label: loadingModels ? 'Loading...' : undefined,
-      },
-    ];
-
+    const selects = [{
+      value: selectedModel,
+      options: models.map(m => ({ value: m.id, label: getDisplayName(m) })),
+      onchange: (v: string) => { selectedModel = v; },
+      label: loadingModels ? 'Loading...' : undefined,
+    }];
     barConfig = {
       selects,
       input: {
@@ -409,61 +656,42 @@
   async function sendMessage() {
     const text = input.trim();
     if (!text || isStreaming || !selectedModel) return;
-
     input = '';
     messages = [...messages, { role: 'user', content: text }];
     isStreaming = true;
     updateBarConfig();
-
     const apiMessages: { role: string; content: string }[] = [];
     if (systemPrompt.trim()) apiMessages.push({ role: 'system', content: systemPrompt.trim() });
     for (const m of messages) apiMessages.push({ role: m.role, content: m.content });
-
     messages = [...messages, { role: 'assistant', content: '' }];
-
     try {
       abortController = new AbortController();
-
-      // Non-streaming request (like PowerShell) — avoids 402/429 rate limits
       let res: Response | null = null;
       const MAX_RETRIES = 3;
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
         res = await fetch(`${selectedProvider.apiBase}/v1/chat/completions`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: selectedModel,
-            messages: apiMessages,
-            stream: false,
-          }),
+          body: JSON.stringify({ model: selectedModel, messages: apiMessages, stream: false }),
           signal: abortController.signal,
         });
-
         if (res.ok) break;
         if (res.status === 402 || res.status === 429) {
           if (attempt < MAX_RETRIES) {
-            const delay = Math.min(2000 * (attempt + 1), 10000);
-            await new Promise(r => setTimeout(r, delay));
+            await new Promise(r => setTimeout(r, Math.min(2000 * (attempt + 1), 10000)));
             continue;
           }
         }
         throw new Error(`API error: ${res.status}`);
       }
-
       if (!res || !res.ok) throw new Error(`API error: ${res?.status}`);
-
       const data = await res.json();
       const content = data.choices?.[0]?.message?.content ?? '';
       const citations = data.citations ?? [];
-
-      messages = messages.map((m, i) =>
-        i === messages.length - 1 ? { ...m, content, citations } : m
-      );
+      messages = messages.map((m, i) => i === messages.length - 1 ? { ...m, content, citations } : m);
     } catch (e: any) {
       if (e.name !== 'AbortError') {
-        messages = messages.map((m, i) =>
-          i === messages.length - 1 ? { ...m, content: m.content || `Error: ${e.message}` } : m
-        );
+        messages = messages.map((m, i) => i === messages.length - 1 ? { ...m, content: m.content || `Error: ${e.message}` } : m);
       }
     } finally {
       isStreaming = false;
@@ -477,8 +705,7 @@
     currentChatId = null;
   }
 
-  // ── Chat History ──────────────────────────────────────────
-
+  // ── Chat History ──────────────────────────────────────────────
   function generateId(): string {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   }
@@ -487,42 +714,20 @@
     if (messages.length === 0) return 'New Chat';
     const userMsgs = messages.filter(m => m.role === 'user');
     if (userMsgs.length === 0) return 'New Chat';
-
     const firstUserMsg = userMsgs[0].content.slice(0, 500);
     const firstAssistantMsg = messages.find(m => m.role === 'assistant')?.content.slice(0, 500) ?? '';
-
-    const titlePrompt = `You are a conversation title generator.
-
-Generate a concise title (2-6 words) that summarizes the conversation.
-
-Requirements:
-- Plain text only.
-- No markdown.
-- No quotes.
-- No punctuation at the end.
-- No explanations.
-- Return only the title.
-
-User: ${firstUserMsg}
-Assistant: ${firstAssistantMsg}`;
-
+    const titlePrompt = `Generate a concise title (2-6 words) summarizing this conversation. Plain text only, no markdown, no quotes, no punctuation at the end.\n\nUser: ${firstUserMsg}\nAssistant: ${firstAssistantMsg}`;
     try {
       const res = await fetch(`${selectedProvider.apiBase}/v1/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: selectedModel,
-          messages: [{ role: 'user', content: titlePrompt }],
-          stream: false,
-        }),
+        body: JSON.stringify({ model: selectedModel, messages: [{ role: 'user', content: titlePrompt }], stream: false }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       const title = data.choices?.[0]?.message?.content?.trim();
       return title && title.length > 0 && title.length < 100 ? title : 'New Chat';
-    } catch {
-      return 'New Chat';
-    }
+    } catch { return 'New Chat'; }
   }
 
   let ensureFolderPromise: Promise<string | null> | null = null;
@@ -530,28 +735,24 @@ Assistant: ${firstAssistantMsg}`;
     if (historyFolderId) return historyFolderId;
     if (ensureFolderPromise) return ensureFolderPromise;
     ensureFolderPromise = (async () => {
-    try {
-      const res1 = await fetch('/api/telegram/folderOps', {
-        method: 'POST',
-        headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'create', name: 'ai', parentId: null }),
-      });
-      const data1 = await res1.json();
-      const aiFolderId = data1.folder?.folderId ?? data1.folder?.id;
-      if (!aiFolderId) return null;
-
-      const res2 = await fetch('/api/telegram/folderOps', {
-        method: 'POST',
-        headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'create', name: 'history', parentId: aiFolderId }),
-      });
-      const data2 = await res2.json();
-      historyFolderId = data2.folder?.folderId ?? data2.folder?.id ?? null;
-      return historyFolderId;
-    } catch (e) {
-      console.error('Failed to ensure history folder:', e);
-      return null;
-    }
+      try {
+        const res1 = await fetch('/api/telegram/folderOps', {
+          method: 'POST',
+          headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'create', name: 'ai', parentId: null }),
+        });
+        const data1 = await res1.json();
+        const aiFolderId = data1.folder?.folderId ?? data1.folder?.id;
+        if (!aiFolderId) return null;
+        const res2 = await fetch('/api/telegram/folderOps', {
+          method: 'POST',
+          headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'create', name: 'history', parentId: aiFolderId }),
+        });
+        const data2 = await res2.json();
+        historyFolderId = data2.folder?.folderId ?? data2.folder?.id ?? null;
+        return historyFolderId;
+      } catch { return null; }
     })();
     return ensureFolderPromise;
   }
@@ -562,38 +763,22 @@ Assistant: ${firstAssistantMsg}`;
       const json = JSON.stringify(chat, null, 2);
       const blob = new Blob([json], { type: 'application/json' });
       const fileName = `${chat.id}.json`;
-
       const chunkRes = await fetch('/api/telegram/uploadChunk', {
         method: 'POST',
-        headers: {
-          'X-Api-Key': apiKey,
-          'X-Chunk-Index': '0',
-          'X-File-Name': encodeURIComponent(fileName),
-          'Content-Type': 'application/json',
-        },
+        headers: { 'X-Api-Key': apiKey, 'X-Chunk-Index': '0', 'X-File-Name': encodeURIComponent(fileName), 'Content-Type': 'application/json' },
         body: blob,
       });
       if (!chunkRes.ok) throw new Error(`Chunk upload failed: ${chunkRes.status}`);
       const chunkData = await chunkRes.json();
-
       const finalRes = await fetch('/api/telegram/finalizeUpload', {
         method: 'POST',
         headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fileName,
-          type: 'application/json',
-          totalBytes: blob.size,
-          chunks: [chunkData],
-          folderId: folderId ?? null,
-        }),
+        body: JSON.stringify({ fileName, type: 'application/json', totalBytes: blob.size, chunks: [chunkData], folderId: folderId ?? null }),
       });
       const finalData = await finalRes.json();
       if (finalData.error) throw new Error(finalData.error);
       return true;
-    } catch (e) {
-      console.error('Failed to save chat:', e);
-      return false;
-    }
+    } catch (e) { console.error('Failed to save chat:', e); return false; }
   }
 
   async function loadHistory() {
@@ -601,59 +786,39 @@ Assistant: ${firstAssistantMsg}`;
     loadingHistory = true;
     try {
       const folderId = await ensureHistoryFolder();
-
       let files: any[] = [];
       if (folderId) {
         const res = await fetch(`/api/telegram/ls?api_key=${apiKey}&folderId=${folderId}&_t=${Date.now()}`);
         const data = await res.json();
         files = data.files ?? [];
       }
-
       if (files.length === 0) {
         const res = await fetch(`/api/telegram/ls?api_key=${apiKey}&_t=${Date.now()}`);
         const data = await res.json();
-        files = (data.files ?? []).filter((f: any) =>
-          f.fileName?.endsWith('.json') && (f.fileName?.includes('history') || f.fileName?.startsWith('chat_'))
-        );
+        files = (data.files ?? []).filter((f: any) => f.fileName?.endsWith('.json') && (f.fileName?.includes('history') || f.fileName?.startsWith('chat_')));
       }
-
       const loaded = new Map<string, ChatHistory>();
-      const fetches = files.map(async (file: any) => {
+      await Promise.allSettled(files.map(async (file: any) => {
         try {
           const resp = await fetch(`/api/telegram/getRequestFile?api_key=${apiKey}&meta_file_id=${file.metaFileId}&download=true`);
           const text = await resp.text();
           const chat = JSON.parse(text) as ChatHistory;
-          if (chat.id && chat.messages?.length > 0 && !loaded.has(chat.id)) {
-            loaded.set(chat.id, chat);
-          }
+          if (chat.id && chat.messages?.length > 0 && !loaded.has(chat.id)) loaded.set(chat.id, chat);
         } catch {}
-      });
-
-      await Promise.allSettled(fetches);
-
-      const sorted = [...loaded.values()].sort((a, b) => b.updatedAt - a.updatedAt);
-      chatHistory = sorted;
-    } catch (e) {
-      console.error('Failed to load history:', e);
-    } finally {
-      loadingHistory = false;
-    }
+      }));
+      chatHistory = [...loaded.values()].sort((a, b) => b.updatedAt - a.updatedAt);
+    } catch (e) { console.error('Failed to load history:', e); }
+    finally { loadingHistory = false; }
   }
 
   let saving = false;
-
   async function deleteExistingFile(chatId: string) {
     try {
       const folderId = await ensureHistoryFolder();
       const res = await fetch(`/api/telegram/ls?api_key=${apiKey}${folderId ? `&folderId=${folderId}` : ''}&_t=${Date.now()}`);
       const data = await res.json();
       const file = (data.files ?? []).find((f: any) => f.fileName === `${chatId}.json`);
-      if (file) {
-        await fetch('/api/telegram/deleteFile', {
-          method: 'DELETE',
-          headers: { 'X-Api-Key': apiKey, 'X-Meta-File-Id': file.metaFileId },
-        });
-      }
+      if (file) await fetch('/api/telegram/deleteFile', { method: 'DELETE', headers: { 'X-Api-Key': apiKey, 'X-Meta-File-Id': file.metaFileId } });
     } catch {}
   }
 
@@ -661,48 +826,22 @@ Assistant: ${firstAssistantMsg}`;
     const userMsgs = messages.filter(m => m.role === 'user');
     if (userMsgs.length === 0 || saving) return;
     saving = true;
-
     try {
       const needsTitle = !currentChatId || !chatHistory.find(c => c.id === currentChatId);
       let title = 'New Chat';
-      if (needsTitle) {
-        titleGenerating = true;
-        title = await generateTitle();
-        titleGenerating = false;
-      }
-
+      if (needsTitle) { titleGenerating = true; title = await generateTitle(); titleGenerating = false; }
       const now = Date.now();
       const existing = currentChatId ? chatHistory.find(c => c.id === currentChatId) : null;
-
-      const chat: ChatHistory = {
-        id: currentChatId ?? generateId(),
-        title: existing?.title ?? title,
-        messages: [...messages],
-        provider: selectedProvider.id,
-        model: selectedModel,
-        systemPrompt,
-        createdAt: existing?.createdAt ?? now,
-        updatedAt: now,
-      };
-
-      if (existing) {
-        await deleteExistingFile(chat.id);
-      }
-
+      const chat: ChatHistory = { id: currentChatId ?? generateId(), title: existing?.title ?? title, messages: [...messages], provider: selectedProvider.id, model: selectedModel, systemPrompt, createdAt: existing?.createdAt ?? now, updatedAt: now };
+      if (existing) await deleteExistingFile(chat.id);
       const ok = await uploadChatJson(chat);
       if (ok) {
         currentChatId = chat.id;
-        if (existing) {
-          chatHistory = chatHistory.map(c => c.id === chat.id ? chat : c);
-        } else {
-          chatHistory = [chat, ...chatHistory];
-        }
+        if (existing) chatHistory = chatHistory.map(c => c.id === chat.id ? chat : c);
+        else chatHistory = [chat, ...chatHistory];
       }
-    } catch (e) {
-      console.error('Failed to save chat:', e);
-    } finally {
-      saving = false;
-    }
+    } catch (e) { console.error('Failed to save chat:', e); }
+    finally { saving = false; }
   }
 
   function loadChat(chat: ChatHistory) {
@@ -721,52 +860,44 @@ Assistant: ${firstAssistantMsg}`;
       const res = await fetch(`/api/telegram/ls?api_key=${apiKey}${folderId ? `&folderId=${folderId}` : ''}&_t=${Date.now()}`);
       const data = await res.json();
       const file = (data.files ?? []).find((f: any) => f.fileName === `${chatId}.json`);
-      if (file) {
-        await fetch('/api/telegram/deleteFile', {
-          method: 'DELETE',
-          headers: { 'X-Api-Key': apiKey, 'X-Meta-File-Id': file.metaFileId },
-        });
-      }
+      if (file) await fetch('/api/telegram/deleteFile', { method: 'DELETE', headers: { 'X-Api-Key': apiKey, 'X-Meta-File-Id': file.metaFileId } });
     } catch {}
-
     chatHistory = chatHistory.filter(c => c.id !== chatId);
-    if (currentChatId === chatId) {
-      currentChatId = null;
-      messages = [];
-    }
+    if (currentChatId === chatId) { currentChatId = null; messages = []; }
   }
 
-  function newChat() {
-    currentChatId = null;
-    messages = [];
-    systemPrompt = '';
-  }
+  function newChat() { currentChatId = null; messages = []; systemPrompt = ''; }
 
-  // Auto-save after each assistant reply completes (only if user has sent messages)
+  // Auto-save
   let wasStreaming = false;
   let saveTimeout: ReturnType<typeof setTimeout> | null = null;
   $effect(() => {
     const streaming = isStreaming;
     const userMsgs = messages.filter(m => m.role === 'user');
     const lastMsg = messages[messages.length - 1];
-
-    // Save only when streaming just finished (transition from streaming to not streaming)
     if (wasStreaming && !streaming && userMsgs.length > 0 && lastMsg?.role === 'assistant' && lastMsg.content) {
-      // Debounce to prevent rapid saves
       if (saveTimeout) clearTimeout(saveTimeout);
       saveTimeout = setTimeout(() => { saveChat(); }, 300);
     }
     wasStreaming = streaming;
   });
 
-  // Load history on mount — only once
+  // Load history on mount
   let historyLoaded = false;
   $effect(() => {
-    if (apiKey && !historyLoaded) {
-      historyLoaded = true;
-      loadHistory();
-    }
+    if (apiKey && !historyLoaded) { historyLoaded = true; loadHistory(); }
   });
+
+  // Back to top visibility
+  function onMessagesScroll() {
+    if (!messagesContainer) return;
+    const { scrollTop, scrollHeight, clientHeight } = messagesContainer;
+    showBackToTop = scrollTop > 400;
+  }
+
+  function scrollToTop() {
+    messagesContainer?.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 </script>
 
 <div class="ai-root">
@@ -775,7 +906,9 @@ Assistant: ${firstAssistantMsg}`;
     <div class="ai-history-panel">
       <div class="ai-history-header">
         <span>History</span>
-        <button class="ai-history-close" onclick={() => showHistory = false}>✕</button>
+        <button class="ai-history-close" onclick={() => showHistory = false}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
       </div>
       <div class="ai-history-list">
         {#if loadingHistory}
@@ -784,404 +917,585 @@ Assistant: ${firstAssistantMsg}`;
           <div class="ai-history-empty">No saved chats yet</div>
         {:else}
           {#each chatHistory as chat, idx (chat.id + '-' + idx)}
-            <div class="ai-history-item" class:active={currentChatId === chat.id} onclick={() => loadChat(chat)} role="button" tabindex="0" onkeydown={(e) => { if (e.key === 'Enter') loadChat(chat); }}>
+            <button class="ai-history-item" class:active={currentChatId === chat.id} onclick={() => loadChat(chat)}>
               <div class="ai-history-title">{chat.title}</div>
-              <div class="ai-history-meta">{new Date(chat.updatedAt).toLocaleDateString()} · {chat.messages.length} msgs</div>
+              <div class="ai-history-meta">{new Date(chat.updatedAt).toLocaleDateString()} &middot; {chat.messages.length} msgs</div>
               <button class="ai-history-delete" onclick={(e) => { e.stopPropagation(); deleteChat(chat.id); }}>
                 <IconTrash size={12} />
               </button>
-            </div>
+            </button>
           {/each}
         {/if}
       </div>
     </div>
   {/if}
 
-  <!-- Header: provider pills + controls -->
+  <!-- Header -->
   <div class="ai-header">
     <div class="ai-header-row">
-      <button class="ai-icon-btn" onclick={() => { showHistory = !showHistory; if (showHistory) loadHistory(); }} title="Chat history" class:active={showHistory}>
+      <button class="ai-icon-btn" onclick={() => { showHistory = !showHistory; if (showHistory) loadHistory(); }} title="History" class:active={showHistory}>
         <IconHistory size={15} />
       </button>
       <button class="ai-icon-btn" onclick={newChat} title="New chat">
         <IconPlus size={15} />
       </button>
-
       <div class="ai-sep"></div>
-
       {#each PROVIDERS as p}
-        <button
-          class="ai-provider-pill"
-          class:active={selectedProvider.id === p.id}
-          style="--pill-color: {p.color}"
-          onclick={() => { selectedProvider = p; }}
-        >
+        <button class="ai-provider-pill" class:active={selectedProvider.id === p.id} style="--pill-color: {p.color}" onclick={() => { selectedProvider = p; }}>
           <BrandIcon brand={p.id} size={13} />
           <span>{p.label}</span>
         </button>
       {/each}
-
       <div class="ai-header-spacer"></div>
-
       {#if currentChatId}
         <span class="ai-current-title">{chatHistory.find(c => c.id === currentChatId)?.title ?? 'Chat'}</span>
       {/if}
       {#if titleGenerating}
         <span class="ai-current-title ai-generating">Generating title...</span>
       {/if}
-
       <button class="ai-icon-btn" onclick={() => showSystem = !showSystem} title="System prompt" class:active={showSystem}>
         <IconSettings size={15} />
       </button>
-
       {#if messages.length > 0}
-        <button class="ai-icon-btn ai-danger-btn" onclick={clearChat} title="Clear chat">
+        <button class="ai-icon-btn ai-danger-btn" onclick={clearChat} title="Clear">
           <IconTrash size={15} />
         </button>
       {/if}
     </div>
-
     {#if showSystem}
       <div class="ai-system-row">
-        <input
-          class="ai-system-input"
-          type="text"
-          placeholder="System prompt (optional)..."
-          bind:value={systemPrompt}
-        />
+        <input class="ai-system-input" type="text" placeholder="System prompt (optional)..." bind:value={systemPrompt} />
       </div>
     {/if}
   </div>
 
-  <!-- Chat messages -->
-  <div class="ai-messages">
+  <!-- Messages -->
+  <div class="ai-messages" bind:this={messagesContainer} onscroll={onMessagesScroll}>
     {#if messages.length === 0}
       <div class="ai-empty">
         <div class="ai-empty-icon">
           <IconBrain size={40} stroke={1.2} />
         </div>
         <p class="ai-empty-title">Start a conversation</p>
-        <p class="ai-empty-sub">Choose a provider and model below, then type your message</p>
+        <p class="ai-empty-sub">Choose a provider and model, then type your message</p>
       </div>
     {:else}
       {#each messages as msg, idx (idx)}
-        <div class="ai-msg" class:user={msg.role === 'user'} class:assistant={msg.role === 'assistant'}>
-          <div class="ai-msg-avatar">
-            {#if msg.role === 'user'}<IconUser size={14} />{:else}
-              <BrandIcon brand={getOwner(selectedModel)} size={14} />
-            {/if}
+        {#if msg.role === 'user'}
+          <div class="msg-user-wrap">
+            <div class="msg-user-bubble">{msg.content}</div>
           </div>
-          <div class="ai-msg-body">
-            {#if msg.role === 'assistant'}
-              <div class="ai-msg-content ai-markdown">{@html renderMarkdown(msg.content, msg.citations)}</div>
-              {#if msg.citations && msg.citations.length > 0}
-                <div class="ai-sources">
-                  <button class="ai-sources-btn" onclick={() => { msg._showSources = !msg._showSources; messages = [...messages]; }}>
-                    <IconLink size={12} />
-                    <span>{msg.citations.length} sources</span>
-                    <span class="ai-sources-chevron" class:open={msg._showSources}><IconChevronRight size={12} /></span>
+        {:else}
+          <div class="msg-assistant-wrap">
+            <div class="msg-assistant-card">
+              {#if msg.content}
+                <div class="md-rendered">{@html renderMarkdown(msg.content, msg.citations)}</div>
+              {:else if isStreaming && idx === messages.length - 1}
+                <div class="md-rendered msg-streaming"><span class="cursor-blink"></span></div>
+              {/if}
+              {#if msg.content && msg.role === 'assistant'}
+                <div class="msg-meta-bar">
+                  <span class="msg-stat"><IconClock size={12} />{getReadingTime(idx)}</span>
+                  <span class="msg-stat"><IconBookOpen size={12} />{getWordCount(idx)} words</span>
+                  <div class="msg-meta-spacer"></div>
+                  <button class="msg-action-btn" onclick={() => copyToClipboard(msg.content, `msg-${idx}`)} title="Copy">
+                    {#if copiedStates[`msg-${idx}`]}<IconCheck size={13} />{:else}<IconCopy size={13} />{/if}
                   </button>
-                  {#if msg._showSources}
-                    <div class="ai-sources-list">
-                      {#each msg.citations as url, i}
-                        <a class="cite-link" href={url} target="_blank" rel="noopener" title={url}>
-                          <img class="cite-favicon" src={getFaviconUrl(url)} alt="" width="14" height="14" />
-                          <span class="cite-num">{i + 1}</span>
-                          <span class="cite-domain">{getDomain(url)}</span>
-                        </a>
-                      {/each}
-                    </div>
-                  {/if}
+                  <button class="msg-action-btn" onclick={() => exportAsMarkdown(idx)} title="Export markdown">
+                    <IconDownload size={13} />
+                  </button>
                 </div>
               {/if}
-            {:else}
-              <div class="ai-msg-content ai-msg-user-content">{msg.content}</div>
+            </div>
+            {#if msg.citations && msg.citations.length > 0}
+              <div class="msg-sources">
+                <button class="msg-sources-toggle" onclick={() => { msg._showSources = !msg._showSources; messages = [...messages]; }}>
+                  <IconLink size={12} />
+                  <span>{msg.citations.length} sources</span>
+                  <span class="chevron" class:open={msg._showSources}><IconChevronRight size={12} /></span>
+                </button>
+                {#if msg._showSources}
+                  <div class="msg-sources-list">
+                    {#each msg.citations as url, i}
+                      <a class="source-link" href={url} target="_blank" rel="noopener" title={url}>
+                        <img class="source-favicon" src={getFaviconUrl(url)} alt="" width="14" height="14" />
+                        <span class="source-num">{i + 1}</span>
+                        <span class="source-domain">{getDomain(url)}</span>
+                      </a>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
             {/if}
           </div>
-        </div>
+        {/if}
       {/each}
     {/if}
   </div>
+
+  <!-- Back to top -->
+  {#if showBackToTop}
+    <button class="back-to-top" onclick={scrollToTop} title="Back to top">
+      <IconArrowUp size={18} />
+    </button>
+  {/if}
 </div>
 
 <style>
+  :root {
+    --md-bg: #0B0B0D;
+    --md-surface: #111215;
+    --md-elevated: #17181D;
+    --md-border: rgba(255,255,255,.08);
+    --md-accent: #7C6CFF;
+    --md-success: #41D37D;
+    --md-warn: #F7C65C;
+    --md-error: #FF6B6B;
+    --md-text: #E8E8EC;
+    --md-text-2: #8A8A9A;
+    --md-text-3: #555566;
+  }
+
   .ai-root {
     display: flex; flex-direction: column;
     height: 100%; overflow: hidden; position: relative;
     font-family: 'Geist', sans-serif;
+    background: var(--md-bg);
+    color: var(--md-text);
   }
 
   /* ── Header ──────────────────────────────────────────────── */
   .ai-header {
-    padding: 10px 16px;
-    border-bottom: 1px solid var(--border);
+    padding: 10px 20px;
+    border-bottom: 1px solid var(--md-border);
     display: flex; flex-direction: column; gap: 8px;
     flex-shrink: 0;
+    background: var(--md-surface);
   }
-
-  .ai-header-row {
-    display: flex; gap: 4px; align-items: center; flex-wrap: wrap;
-  }
-
-  .ai-sep {
-    width: 1px; height: 18px; background: var(--border); margin: 0 2px; flex-shrink: 0;
-  }
+  .ai-header-row { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+  .ai-sep { width: 1px; height: 18px; background: var(--md-border); margin: 0 4px; flex-shrink: 0; }
 
   .ai-icon-btn {
     display: inline-flex; align-items: center; justify-content: center;
     width: 30px; height: 30px; border-radius: 8px;
     border: none; background: transparent;
-    color: var(--text-3); cursor: pointer; transition: all .12s;
+    color: var(--md-text-3); cursor: pointer; transition: all .12s;
   }
-  .ai-icon-btn:hover { color: var(--text-1); background: var(--hover); }
-  .ai-icon-btn.active { color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
-  .ai-danger-btn:hover { color: var(--red); background: rgba(248,113,113,.08); }
+  .ai-icon-btn:hover { color: var(--md-text); background: rgba(255,255,255,.06); }
+  .ai-icon-btn.active { color: var(--md-accent); background: rgba(124,108,255,.1); }
+  .ai-danger-btn:hover { color: var(--md-error); background: rgba(255,107,107,.08); }
 
   .ai-provider-pill {
     display: inline-flex; align-items: center; gap: 4px;
-    padding: 4px 9px; border-radius: 8px;
+    padding: 4px 10px; border-radius: 8px;
     border: none; background: transparent;
-    color: var(--text-3); font-size: 11px; font-weight: 600;
-    font-family: 'Geist', sans-serif; cursor: pointer;
-    transition: all .12s;
+    color: var(--md-text-3); font-size: 11px; font-weight: 600;
+    font-family: 'Geist', sans-serif; cursor: pointer; transition: all .12s;
   }
-  .ai-provider-pill:hover { color: var(--text-2); background: var(--hover); }
-  .ai-provider-pill.active {
-    color: var(--pill-color);
-    background: color-mix(in srgb, var(--pill-color) 10%, transparent);
-  }
+  .ai-provider-pill:hover { color: var(--md-text-2); background: rgba(255,255,255,.04); }
+  .ai-provider-pill.active { color: var(--pill-color); background: color-mix(in srgb, var(--pill-color) 10%, transparent); }
 
   .ai-header-spacer { flex: 1; }
-
-  .ai-current-title {
-    font-size: 11px; color: var(--text-3); font-weight: 500;
-    max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  }
+  .ai-current-title { font-size: 11px; color: var(--md-text-3); font-weight: 500; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ai-generating { opacity: .6; }
-
   .ai-system-row { margin-top: 2px; }
-
   .ai-system-input {
-    width: 100%; background: var(--bg-3); border: 1px solid var(--border);
+    width: 100%; background: var(--md-elevated); border: 1px solid var(--md-border);
     border-radius: 8px; padding: 7px 12px; outline: none;
-    color: var(--text-1); font-size: 12px; font-family: 'Geist', sans-serif;
+    color: var(--md-text); font-size: 12px; font-family: 'Geist', sans-serif;
   }
-  .ai-system-input::placeholder { color: var(--text-3); }
-  .ai-system-input:focus { border-color: var(--accent); }
+  .ai-system-input::placeholder { color: var(--md-text-3); }
+  .ai-system-input:focus { border-color: var(--md-accent); }
 
-  /* ── Messages ──────────────────────────────────────────── */
+  /* ── Messages Container ──────────────────────────────────── */
   .ai-messages {
-    flex: 1; overflow-y: auto; padding: 20px 24px;
-    display: flex; flex-direction: column; gap: 14px;
+    flex: 1; overflow-y: auto; padding: 32px 24px 120px;
+    display: flex; flex-direction: column; gap: 24px;
+    scroll-behavior: smooth;
   }
 
   .ai-empty {
     display: flex; flex-direction: column; align-items: center;
-    justify-content: center; flex: 1; gap: 12px;
+    justify-content: center; flex: 1; gap: 16px;
   }
   .ai-empty-icon {
-    width: 72px; height: 72px; border-radius: 20px;
-    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    width: 80px; height: 80px; border-radius: 24px;
+    background: linear-gradient(135deg, rgba(124,108,255,.12), rgba(124,108,255,.04));
     display: flex; align-items: center; justify-content: center;
-    color: var(--accent);
+    color: var(--md-accent);
+    border: 1px solid rgba(124,108,255,.15);
   }
-  .ai-empty-title { margin: 0; font-size: 16px; font-weight: 600; color: var(--text-1); }
-  .ai-empty-sub { margin: 0; font-size: 12px; color: var(--text-3); }
+  .ai-empty-title { margin: 0; font-size: 18px; font-weight: 600; color: var(--md-text); letter-spacing: -.02em; }
+  .ai-empty-sub { margin: 0; font-size: 13px; color: var(--md-text-3); }
 
-  .ai-msg {
-    display: flex; gap: 10px; max-width: 92%;
+  /* ── User Message ────────────────────────────────────────── */
+  .msg-user-wrap { display: flex; justify-content: flex-end; padding: 0 40px; }
+  .msg-user-bubble {
+    max-width: 480px; padding: 10px 16px;
+    background: var(--md-accent); color: #fff;
+    border-radius: 16px 16px 4px 16px;
+    font-size: 14px; line-height: 1.55;
+    word-break: break-word;
   }
-  .ai-msg.user { align-self: flex-end; flex-direction: row-reverse; max-width: 70%; }
-  .ai-msg.assistant { align-self: flex-start; }
 
-  .ai-msg-avatar {
+  /* ── Assistant Message (Document Card) ───────────────────── */
+  .msg-assistant-wrap { display: flex; flex-direction: column; max-width: 900px; width: 100%; margin: 0 auto; }
+  .msg-assistant-card {
+    background: var(--md-surface);
+    border: 1px solid var(--md-border);
+    border-radius: 20px;
+    padding: 32px 36px;
+    transition: border-color .2s;
+  }
+  .msg-assistant-card:hover { border-color: rgba(255,255,255,.12); }
+
+  .msg-streaming { display: flex; align-items: center; }
+  .cursor-blink {
+    display: inline-block; width: 2px; height: 18px;
+    background: var(--md-accent); border-radius: 1px;
+    animation: blink .8s step-end infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .msg-meta-bar {
+    display: flex; align-items: center; gap: 12px;
+    margin-top: 20px; padding-top: 16px;
+    border-top: 1px solid var(--md-border);
+  }
+  .msg-stat {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; color: var(--md-text-3); font-weight: 500;
+  }
+  .msg-meta-spacer { flex: 1; }
+  .msg-action-btn {
+    display: inline-flex; align-items: center; justify-content: center;
     width: 28px; height: 28px; border-radius: 8px;
-    background: var(--bg-3); border: 1px solid var(--border);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 11px; font-weight: 700; color: var(--text-3);
-    flex-shrink: 0;
+    border: none; background: transparent;
+    color: var(--md-text-3); cursor: pointer; transition: all .12s;
   }
-  .ai-msg.user .ai-msg-avatar { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .msg-action-btn:hover { color: var(--md-text); background: rgba(255,255,255,.06); }
 
-  .ai-msg-content {
-    background: var(--bg-3); border: 1px solid var(--border);
-    border-radius: 12px; padding: 12px 16px;
-    font-size: 13px; line-height: 1.6; color: var(--text-1);
-    word-break: break-word; min-width: 0;
+  /* ── Markdown Rendered ───────────────────────────────────── */
+  .md-rendered {
+    font-size: 15px; line-height: 1.8; color: var(--md-text);
+    letter-spacing: -.005em;
   }
-  .ai-msg-user-content {
-    background: var(--accent); color: #fff; border-color: var(--accent);
-  }
+  .md-rendered :global(p) { margin: 0 0 16px; max-width: 72ch; }
+  .md-rendered :global(p:last-child) { margin-bottom: 0; }
+  .md-rendered :global(strong) { font-weight: 600; color: #fff; }
+  .md-rendered :global(em) { font-style: italic; }
+  .md-rendered :global(del) { text-decoration: line-through; opacity: .5; }
 
-  .ai-msg-body { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-
-  /* ── Markdown rendering ─────────────────────────────────── */
-  .ai-markdown { white-space: normal; line-height: 1.65; }
-  .ai-markdown p { margin: 0 0 10px; }
-  .ai-markdown p:last-child { margin-bottom: 0; }
-  .ai-markdown strong { font-weight: 600; color: var(--text-1); }
-  .ai-markdown em { font-style: italic; }
-  .ai-markdown del { text-decoration: line-through; opacity: .6; }
-  .ai-markdown code {
-    background: rgba(99,102,241,.1); padding: 2px 6px; border-radius: 4px;
-    font-family: 'Geist Mono', monospace; font-size: 12px;
-    color: color-mix(in srgb, var(--accent) 90%, var(--text-1));
-  }
-  .ai-markdown pre {
-    background: var(--bg-1); border: 1px solid var(--border); border-radius: 10px;
-    padding: 14px 16px; overflow-x: auto; margin: 12px 0;
+  /* Headings */
+  .md-rendered :global(h1), .md-rendered :global(h2), .md-rendered :global(h3),
+  .md-rendered :global(h4), .md-rendered :global(h5), .md-rendered :global(h6) {
+    font-weight: 700; line-height: 1.25; color: #fff;
+    margin: 32px 0 12px; letter-spacing: -.02em;
     position: relative;
   }
-  .ai-markdown pre code { background: none; padding: 0; color: var(--text-1); font-size: 12px; line-height: 1.5; }
-  .ai-markdown pre[data-lang]::before {
-    content: attr(data-lang);
-    position: absolute; top: 8px; right: 12px;
-    font-size: 10px; font-weight: 600; color: var(--text-3);
+  .md-rendered :global(h1) { font-size: 32px; margin-top: 40px; }
+  .md-rendered :global(h2) { font-size: 24px; padding-bottom: 10px; border-bottom: 1px solid var(--md-border); }
+  .md-rendered :global(h3) { font-size: 20px; }
+  .md-rendered :global(h4) { font-size: 17px; }
+  .md-rendered :global(h5) { font-size: 15px; }
+  .md-rendered :global(h6) { font-size: 14px; color: var(--md-text-2); }
+
+  :global(.heading-anchor) {
+    position: absolute; left: -24px; top: 50%; transform: translateY(-50%);
+    color: var(--md-text-3); text-decoration: none; font-weight: 400;
+    opacity: 0; transition: opacity .15s; font-size: 0.85em;
+  }
+  :global(h1:hover .heading-anchor), :global(h2:hover .heading-anchor),
+  :global(h3:hover .heading-anchor), :global(h4:hover .heading-anchor) { opacity: 1; }
+
+  /* Lists */
+  .md-rendered :global(ul), .md-rendered :global(ol) {
+    margin: 8px 0 16px; padding-left: 24px;
+  }
+  .md-rendered :global(li) { margin: 6px 0; line-height: 1.7; }
+  .md-rendered :global(li::marker) { color: var(--md-accent); }
+
+  /* Code */
+  :global(.code-block) {
+    margin: 16px 0; border-radius: 14px;
+    background: var(--md-bg); border: 1px solid var(--md-border);
+    overflow: hidden;
+  }
+  :global(.code-header) {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 14px; background: var(--md-elevated);
+    border-bottom: 1px solid var(--md-border);
+  }
+  :global(.code-lang) {
+    font-size: 11px; font-weight: 600; color: var(--md-accent);
     text-transform: uppercase; letter-spacing: .5px;
+    background: rgba(124,108,255,.1); padding: 2px 8px; border-radius: 6px;
   }
-  .ai-markdown ul, .ai-markdown ol { margin: 6px 0 10px; padding-left: 24px; }
-  .ai-markdown li { margin: 4px 0; line-height: 1.6; }
-  .ai-markdown li > p { margin: 4px 0; }
-  .ai-markdown a { color: var(--accent); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; }
-  .ai-markdown blockquote {
-    border-left: 3px solid var(--accent); margin: 10px 0; padding: 8px 14px;
-    color: var(--text-2); background: rgba(99,102,241,.04); border-radius: 0 10px 10px 0;
+  :global(.code-copy-btn) {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 4px 10px; border-radius: 6px; border: none;
+    background: rgba(255,255,255,.06); color: var(--md-text-3);
+    font-size: 11px; font-family: 'Geist', sans-serif; cursor: pointer;
+    transition: all .12s;
   }
-  .ai-markdown blockquote p { margin: 4px 0; }
-  .ai-markdown h1, .ai-markdown h2, .ai-markdown h3, .ai-markdown h4, .ai-markdown h5, .ai-markdown h6 {
-    margin: 18px 0 8px; font-weight: 700; line-height: 1.3; color: var(--text-1);
+  :global(.code-copy-btn:hover) { color: var(--md-text); background: rgba(255,255,255,.1); }
+  :global(.code-copy-btn.copied) { color: var(--md-success); }
+  :global(.code-pre) {
+    margin: 0; padding: 16px 18px; overflow-x: auto;
+    font-family: 'Geist Mono', monospace; font-size: 13px;
+    line-height: 1.6; color: var(--md-text);
   }
-  .ai-markdown h1 { font-size: 18px; }
-  .ai-markdown h2 { font-size: 16px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
-  .ai-markdown h3 { font-size: 14px; }
-  .ai-markdown h4 { font-size: 13px; }
-  .ai-markdown hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+  :global(.code-pre code) { background: none; }
+
+  .md-rendered :global(.md-inline-code) {
+    background: rgba(124,108,255,.1); padding: 2px 7px; border-radius: 6px;
+    font-family: 'Geist Mono', monospace; font-size: 13px;
+    color: var(--md-accent);
+  }
+
+  /* Links */
+  :global(.md-link) {
+    color: var(--md-accent); text-decoration: none; font-weight: 500;
+    transition: opacity .12s;
+  }
+  :global(.md-link:hover) { text-decoration: underline; text-underline-offset: 3px; }
+  :global(.md-ext-icon) { margin-left: 3px; opacity: .5; vertical-align: super; }
+
+  /* Images */
+  :global(.md-img) {
+    max-width: 100%; border-radius: 12px; margin: 12px 0;
+    border: 1px solid var(--md-border);
+  }
+
+  /* Blockquote */
+  :global(.md-blockquote) {
+    border-left: 3px solid var(--md-accent);
+    margin: 16px 0; padding: 12px 18px;
+    color: var(--md-text-2);
+    background: rgba(124,108,255,.04);
+    border-radius: 0 12px 12px 0;
+    font-style: italic;
+  }
+
+  /* HR */
+  :global(.md-hr) {
+    border: none; border-top: 1px solid var(--md-border);
+    margin: 32px 0;
+  }
 
   /* Tables */
-  .md-table-wrap { overflow-x: auto; margin: 10px 0; border-radius: 8px; border: 1px solid var(--border); }
-  .ai-markdown table { border-collapse: collapse; width: 100%; }
-  .ai-markdown th, .ai-markdown td {
-    padding: 8px 12px; font-size: 12px; text-align: left;
-    border-bottom: 1px solid var(--border); border-right: 1px solid var(--border);
+  :global(.md-table-wrap) {
+    overflow-x: auto; margin: 16px 0;
+    border-radius: 12px; border: 1px solid var(--md-border);
   }
-  .ai-markdown th {
-    background: var(--bg-3); font-weight: 600; color: var(--text-1);
-    position: sticky; top: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .3px;
+  .md-rendered :global(table) { border-collapse: collapse; width: 100%; }
+  .md-rendered :global(th), .md-rendered :global(td) {
+    padding: 10px 14px; font-size: 13px; text-align: left;
+    border-bottom: 1px solid var(--md-border); border-right: 1px solid var(--md-border);
   }
-  .ai-markdown td { color: var(--text-2); }
-  .ai-markdown tr:last-child td { border-bottom: none; }
-  .ai-markdown tr:hover td { background: var(--hover); }
-
-  .cite-ref a {
-    color: var(--accent); font-size: 10px; font-weight: 700;
-    text-decoration: none; vertical-align: super;
+  .md-rendered :global(th) {
+    background: var(--md-elevated); font-weight: 600; color: #fff;
+    position: sticky; top: 0; font-size: 11px;
+    text-transform: uppercase; letter-spacing: .4px;
   }
-  .cite-ref a:hover { text-decoration: underline; }
+  .md-rendered :global(td) { color: var(--md-text-2); }
+  .md-rendered :global(tr:last-child td) { border-bottom: none; }
+  .md-rendered :global(tr.odd td) { background: rgba(255,255,255,.02); }
+  .md-rendered :global(tr:hover td) { background: rgba(255,255,255,.04); }
 
-  /* ── Sources bar ─────────────────────────────────────────── */
-  .ai-sources {
-    display: flex; flex-direction: column; gap: 4px;
-    margin-top: 4px;
+  /* ── Callouts ────────────────────────────────────────────── */
+  :global(.callout) {
+    margin: 20px 0; border-radius: 14px;
+    border: 1px solid color-mix(in srgb, var(--callout-accent) 25%, transparent);
+    background: color-mix(in srgb, var(--callout-accent) 5%, var(--md-surface));
+    overflow: hidden;
+  }
+  :global(.callout-header) {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 16px; font-size: 12px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .5px;
+    color: var(--callout-accent);
+    border-bottom: 1px solid color-mix(in srgb, var(--callout-accent) 15%, transparent);
+  }
+  :global(.callout-body) {
+    padding: 14px 16px; font-size: 14px; line-height: 1.7;
+  }
+  :global(.callout-body p) { margin: 0 0 8px; }
+  :global(.callout-body p:last-child) { margin-bottom: 0; }
+
+  /* ── Task Lists ──────────────────────────────────────────── */
+  :global(.task-list) { margin: 12px 0; display: flex; flex-direction: column; gap: 6px; }
+  :global(.task-item) {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 0; cursor: default;
+  }
+  :global(.task-item input) { display: none; }
+  :global(.task-check) {
+    width: 18px; height: 18px; border-radius: 5px;
+    border: 2px solid var(--md-text-3); flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    transition: all .15s;
+  }
+  :global(.task-item input:checked + .task-check) {
+    background: var(--md-success); border-color: var(--md-success);
+  }
+  :global(.task-item input:checked + .task-check::after) {
+    content: ''; display: block; width: 5px; height: 9px;
+    border: solid #fff; border-width: 0 2px 2px 0;
+    transform: rotate(45deg) translate(-1px, -1px);
+  }
+  :global(.task-text) { font-size: 14px; line-height: 1.5; }
+  :global(.task-text.done) { text-decoration: line-through; opacity: .5; }
+
+  /* ── Step Timeline ───────────────────────────────────────── */
+  :global(.step-timeline) {
+    margin: 20px 0; padding-left: 0; list-style: none;
+    display: flex; flex-direction: column; gap: 0;
+  }
+  :global(.step-item) {
+    display: flex; gap: 16px; padding: 14px 0;
+    border-left: 2px solid var(--md-border); margin-left: 12px;
+    padding-left: 24px; position: relative;
+  }
+  :global(.step-item:last-child) { border-left-color: transparent; }
+  :global(.step-marker) {
+    position: absolute; left: -13px; top: 14px;
+    width: 24px; height: 24px; border-radius: 50%;
+    background: var(--md-accent); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700;
+    box-shadow: 0 0 0 4px var(--md-bg);
+  }
+  :global(.step-content) {
+    font-size: 14px; line-height: 1.6; padding-top: 2px;
   }
 
-  .ai-sources-btn {
-    display: inline-flex; align-items: center; gap: 5px;
-    padding: 4px 10px; border-radius: 6px; width: fit-content;
-    border: none; background: var(--hover);
-    color: var(--text-3); font-size: 11px; font-family: 'Geist', sans-serif;
-    cursor: pointer; transition: all .12s;
+  /* ── Collapsible Lists ───────────────────────────────────── */
+  :global(.collapsible-list) {
+    margin: 12px 0; border-radius: 12px;
+    border: 1px solid var(--md-border); overflow: hidden;
   }
-  .ai-sources-btn:hover { color: var(--text-2); background: color-mix(in srgb, var(--text-1) 8%, transparent); }
-
-  .ai-sources-chevron { display: flex; transition: transform .15s; }
-  .ai-sources-chevron.open { transform: rotate(90deg); }
-
-  .ai-sources-list {
-    display: flex; flex-direction: column; gap: 2px;
-    padding: 6px; background: var(--bg-3); border: 1px solid var(--border);
-    border-radius: 8px; max-height: 200px; overflow-y: auto;
-  }
-
-  .cite-link {
+  :global(.collapsible-toggle) {
     display: flex; align-items: center; gap: 6px;
-    padding: 4px 8px; border-radius: 6px; text-decoration: none;
-    color: var(--text-2); font-size: 12px; transition: background .1s;
+    width: 100%; padding: 10px 14px;
+    background: var(--md-elevated); border: none;
+    color: var(--md-text-2); font-size: 12px; font-weight: 600;
+    font-family: 'Geist', sans-serif; cursor: pointer;
+    transition: all .12s;
   }
-  .cite-link:hover { background: var(--hover); color: var(--text-1); }
-
-  .cite-favicon { border-radius: 3px; flex-shrink: 0; }
-
-  .cite-num {
-    font-size: 10px; font-weight: 700; color: var(--accent);
-    min-width: 14px; text-align: center;
+  :global(.collapsible-toggle:hover) { color: var(--md-text); background: rgba(255,255,255,.04); }
+  :global(.collapsible-toggle svg) { transition: transform .2s; }
+  :global(.collapsible-list.open .collapsible-toggle svg) { transform: rotate(180deg); }
+  :global(.collapsible-content) {
+    max-height: 0; overflow: hidden; transition: max-height .3s ease;
+  }
+  :global(.collapsible-list.open .collapsible-content) { max-height: 2000px; }
+  :global(.collapsible-content ul), :global(.collapsible-content ol) {
+    padding: 12px 16px 12px 36px; margin: 0;
   }
 
-  .cite-domain { color: var(--text-3); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* ── Citations ───────────────────────────────────────────── */
+  :global(.cite-ref a) {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 18px; height: 18px; padding: 0 4px;
+    background: rgba(124,108,255,.15); color: var(--md-accent);
+    border-radius: 5px; font-size: 10px; font-weight: 700;
+    text-decoration: none; vertical-align: super;
+    transition: all .12s;
+  }
+  :global(.cite-ref a:hover) { background: var(--md-accent); color: #fff; }
 
-  /* ── History Panel ─────────────────────────────────────── */
+  /* ── Sources ─────────────────────────────────────────────── */
+  .msg-sources { margin-top: 8px; }
+  .msg-sources-toggle {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 5px 12px; border-radius: 8px; width: fit-content;
+    border: none; background: rgba(255,255,255,.04);
+    color: var(--md-text-3); font-size: 11px; font-weight: 600;
+    font-family: 'Geist', sans-serif; cursor: pointer; transition: all .12s;
+  }
+  .msg-sources-toggle:hover { color: var(--md-text-2); background: rgba(255,255,255,.06); }
+  .chevron { display: flex; transition: transform .15s; }
+  .chevron.open { transform: rotate(90deg); }
+  .msg-sources-list {
+    display: flex; flex-direction: column; gap: 2px;
+    padding: 6px; margin-top: 6px;
+    background: var(--md-elevated); border: 1px solid var(--md-border);
+    border-radius: 10px; max-height: 200px; overflow-y: auto;
+  }
+  .source-link {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 10px; border-radius: 8px; text-decoration: none;
+    color: var(--md-text-2); font-size: 12px; transition: background .1s;
+  }
+  .source-link:hover { background: rgba(255,255,255,.04); color: var(--md-text); }
+  .source-favicon { border-radius: 3px; flex-shrink: 0; }
+  .source-num { font-size: 10px; font-weight: 700; color: var(--md-accent); min-width: 14px; text-align: center; }
+  .source-domain { color: var(--md-text-3); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ── Back to Top ─────────────────────────────────────────── */
+  .back-to-top {
+    position: fixed; bottom: 100px; right: 24px;
+    width: 40px; height: 40px; border-radius: 12px;
+    border: 1px solid var(--md-border);
+    background: var(--md-elevated); color: var(--md-text-2);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; z-index: 50;
+    box-shadow: 0 4px 20px rgba(0,0,0,.3);
+    transition: all .2s;
+    animation: fadeUp .2s ease-out;
+  }
+  .back-to-top:hover { color: var(--md-text); border-color: rgba(255,255,255,.15); transform: translateY(-2px); }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* ── History Panel ───────────────────────────────────────── */
   .ai-history-panel {
     position: absolute; top: 0; left: 0; bottom: 0;
-    width: 280px; background: var(--bg-2); border-right: 1px solid var(--border);
+    width: 280px; background: var(--md-surface); border-right: 1px solid var(--md-border);
     display: flex; flex-direction: column; z-index: 10;
   }
-
   .ai-history-header {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 12px 14px; border-bottom: 1px solid var(--border);
-    font-size: 13px; font-weight: 600; color: var(--text-1);
+    padding: 14px 16px; border-bottom: 1px solid var(--md-border);
+    font-size: 13px; font-weight: 600; color: var(--md-text);
   }
-
   .ai-history-close {
-    background: none; border: none; color: var(--text-3); cursor: pointer;
-    font-size: 14px; padding: 2px; border-radius: 4px;
-    display: flex; align-items: center; justify-content: center;
+    background: none; border: none; color: var(--md-text-3); cursor: pointer;
+    padding: 4px; border-radius: 6px; display: flex; align-items: center; justify-content: center;
   }
-  .ai-history-close:hover { color: var(--text-1); background: var(--hover); }
-
-  .ai-history-list {
-    flex: 1; overflow-y: auto; padding: 8px;
-  }
-
-  .ai-history-empty {
-    text-align: center; color: var(--text-3); font-size: 12px; padding: 20px;
-  }
-
+  .ai-history-close:hover { color: var(--md-text); background: rgba(255,255,255,.06); }
+  .ai-history-list { flex: 1; overflow-y: auto; padding: 8px; }
+  .ai-history-empty { text-align: center; color: var(--md-text-3); font-size: 12px; padding: 24px; }
   .ai-history-item {
-    display: flex; flex-direction: column; gap: 2px;
-    width: 100%; text-align: left; padding: 10px 12px; border-radius: 8px;
+    display: flex; flex-direction: column; gap: 3px;
+    width: 100%; text-align: left; padding: 10px 12px; border-radius: 10px;
     border: none; background: transparent;
-    color: var(--text-1); font-family: 'Geist', sans-serif; cursor: pointer;
+    color: var(--md-text); font-family: 'Geist', sans-serif; cursor: pointer;
     transition: all .12s; position: relative;
   }
-  .ai-history-item:hover { background: var(--hover); }
-  .ai-history-item.active { background: color-mix(in srgb, var(--accent) 8%, transparent); }
-
-  .ai-history-title {
-    font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    padding-right: 20px;
-  }
-
-  .ai-history-meta {
-    font-size: 11px; color: var(--text-3);
-  }
-
+  .ai-history-item:hover { background: rgba(255,255,255,.04); }
+  .ai-history-item.active { background: rgba(124,108,255,.08); }
+  .ai-history-title { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 20px; }
+  .ai-history-meta { font-size: 11px; color: var(--md-text-3); }
   .ai-history-delete {
     position: absolute; top: 10px; right: 10px;
-    background: none; border: none; color: var(--text-3); cursor: pointer;
+    background: none; border: none; color: var(--md-text-3); cursor: pointer;
     padding: 2px; border-radius: 4px; opacity: 0; transition: opacity .12s;
     display: flex; align-items: center; justify-content: center;
   }
   .ai-history-item:hover .ai-history-delete { opacity: 1; }
-  .ai-history-delete:hover { color: var(--red); background: rgba(248,113,113,.08); }
+  .ai-history-delete:hover { color: var(--md-error); background: rgba(255,107,107,.08); }
 
-  /* ── Scrollbar ──────────────────────────────────────────── */
+  /* ── Scrollbar ───────────────────────────────────────────── */
   .ai-messages::-webkit-scrollbar { width: 6px; }
   .ai-messages::-webkit-scrollbar-track { background: transparent; }
-  .ai-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  .ai-messages::-webkit-scrollbar-thumb { background: var(--md-border); border-radius: 3px; }
 
-  @media (max-width: 600px) {
-    .ai-header { padding: 8px 12px; }
-    .ai-messages { padding: 14px; }
-    .ai-msg { max-width: 95%; }
+  @media (max-width: 700px) {
+    .ai-header { padding: 8px 14px; }
+    .ai-messages { padding: 20px 16px 100px; }
+    .msg-user-wrap { padding: 0 16px; }
+    .msg-assistant-card { padding: 20px 18px; border-radius: 16px; }
+    .msg-user-bubble { max-width: 90%; }
   }
 </style>
