@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { IconPlayerStop, IconSend, IconSettings, IconBrain, IconHistory, IconPlus, IconTrash, IconLink, IconChevronRight, IconCopy, IconCheck, IconArrowUp, IconDownload, IconClock, IconBookOpen } from '@tabler/icons-svelte';
+  import { IconPlayerStop, IconSend, IconSettings, IconBrain, IconHistory, IconPlus, IconTrash, IconLink, IconChevronRight, IconCopy, IconCheck, IconArrowUp, IconDownload, IconClock, IconBook } from '@tabler/icons-svelte';
   import BrandIcon from '$lib/components/BrandIcon.svelte';
 
   let { apiKey = '', barConfig = $bindable(null) }: { apiKey?: string; barConfig?: any } = $props();
@@ -997,7 +997,7 @@
               {#if msg.content && msg.role === 'assistant'}
                 <div class="msg-meta-bar">
                   <span class="msg-stat"><IconClock size={12} />{getReadingTime(idx)}</span>
-                  <span class="msg-stat"><IconBookOpen size={12} />{getWordCount(idx)} words</span>
+                  <span class="msg-stat"><IconBook size={12} />{getWordCount(idx)} words</span>
                   <div class="msg-meta-spacer"></div>
                   <button class="msg-action-btn" onclick={() => copyToClipboard(msg.content, `msg-${idx}`)} title="Copy">
                     {#if copiedStates[`msg-${idx}`]}<IconCheck size={13} />{:else}<IconCopy size={13} />{/if}
