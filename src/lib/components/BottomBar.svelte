@@ -105,6 +105,7 @@
   let hasButtons = $derived(!!config?.buttons && config!.buttons!.length > 0);
   let hasSelects = $derived(!!config?.selects && config!.selects!.length > 0);
   let hasBeforeInput = $derived(!!config?.beforeInput && config!.beforeInput!.length > 0);
+  let hasCustomUtility = $derived(hasInput || hasSelects || hasBeforeInput);
 
   // ── Hover tooltip state ────────────────────────────────────────
   let hoverTabId = $state<string | null>(null);
@@ -127,7 +128,7 @@
   // ── Nav expand on cloud hover ────────────────────────────────
   function onNavEnter() {
     if (navHoverTimeout) { clearTimeout(navHoverTimeout); navHoverTimeout = null; }
-    navExpanded = true;
+    if (!hasCustomUtility) navExpanded = true;
   }
 
   function onNavLeave() {
@@ -734,7 +735,7 @@
     transition: max-width .3s cubic-bezier(.16,1,.3,1), opacity .2s ease;
   }
   .bb-nav-tabs.expanded { max-width: 500px; opacity: 1; }
-  .bb.pos-bottom.full-width .bb-nav-tabs.expanded, .bb.pos-top.full-width .bb-nav-tabs.expanded { max-width: none; }
+  .bb.pos-bottom.full-width .bb-nav-tabs.expanded, .bb.pos-top.full-width .bb-nav-tabs.expanded { max-width: 0; opacity: 0; }
 
   .bb-sep {
     width: 1px; height: 24px;

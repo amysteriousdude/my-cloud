@@ -419,7 +419,6 @@ Assistant: ${firstAssistantMsg}`;
     try {
       const folderId = await ensureHistoryFolder();
 
-      // Try folder listing first, fallback to root listing
       let files: any[] = [];
       if (folderId) {
         const res = await fetch(`/api/telegram/ls?api_key=${apiKey}&folderId=${folderId}&_t=${Date.now()}`);
@@ -427,7 +426,6 @@ Assistant: ${firstAssistantMsg}`;
         files = data.files ?? [];
       }
 
-      // If no files in folder, try root listing for legacy files
       if (files.length === 0) {
         const res = await fetch(`/api/telegram/ls?api_key=${apiKey}&_t=${Date.now()}`);
         const data = await res.json();
@@ -436,18 +434,22 @@ Assistant: ${firstAssistantMsg}`;
         );
       }
 
-      const loaded: ChatHistory[] = [];
-      for (const file of files) {
+      const loaded = new Map<string, ChatHistory>();
+      const fetches = files.map(async (file: any) => {
         try {
           const resp = await fetch(`/api/telegram/getRequestFile?api_key=${apiKey}&meta_file_id=${file.metaFileId}&download=true`);
           const text = await resp.text();
           const chat = JSON.parse(text) as ChatHistory;
-          if (chat.id && chat.messages?.length > 0) loaded.push(chat);
+          if (chat.id && chat.messages?.length > 0 && !loaded.has(chat.id)) {
+            loaded.set(chat.id, chat);
+          }
         } catch {}
-      }
+      });
 
-      loaded.sort((a, b) => b.updatedAt - a.updatedAt);
-      chatHistory = loaded;
+      await Promise.allSettled(fetches);
+
+      const sorted = [...loaded.values()].sort((a, b) => b.updatedAt - a.updatedAt);
+      chatHistory = sorted;
     } catch (e) {
       console.error('Failed to load history:', e);
     } finally {
@@ -457,45 +459,62 @@ Assistant: ${firstAssistantMsg}`;
 
   let saving = false;
 
+  async function deleteExistingFile(chatId: string) {
+    try {
+      const folderId = await ensureHistoryFolder();
+      const res = await fetch(`/api/telegram/ls?api_key=${apiKey}${folderId ? `&folderId=${folderId}` : ''}&_t=${Date.now()}`);
+      const data = await res.json();
+      const file = (data.files ?? []).find((f: any) => f.fileName === `${chatId}.json`);
+      if (file) {
+        await fetch('/api/telegram/deleteFile', {
+          method: 'DELETE',
+          headers: { 'X-Api-Key': apiKey, 'X-Meta-File-Id': file.metaFileId },
+        });
+      }
+    } catch {}
+  }
+
   async function saveChat() {
-    // Only save if there are actual user messages
     const userMsgs = messages.filter(m => m.role === 'user');
     if (userMsgs.length === 0 || saving) return;
     saving = true;
 
     try {
-
-    const needsTitle = !currentChatId || !chatHistory.find(c => c.id === currentChatId);
-    let title = 'New Chat';
-    if (needsTitle) {
-      titleGenerating = true;
-      title = await generateTitle();
-      titleGenerating = false;
-    }
-
-    const now = Date.now();
-    const existing = currentChatId ? chatHistory.find(c => c.id === currentChatId) : null;
-
-    const chat: ChatHistory = {
-      id: currentChatId ?? generateId(),
-      title: existing?.title ?? title,
-      messages: [...messages],
-      provider: selectedProvider.id,
-      model: selectedModel,
-      systemPrompt,
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
-    };
-
-    const ok = await uploadChatJson(chat);
-    if (ok) {
-      currentChatId = chat.id;
-      if (existing) {
-        chatHistory = chatHistory.map(c => c.id === chat.id ? chat : c);
-      } else {
-        chatHistory = [chat, ...chatHistory];
+      const needsTitle = !currentChatId || !chatHistory.find(c => c.id === currentChatId);
+      let title = 'New Chat';
+      if (needsTitle) {
+        titleGenerating = true;
+        title = await generateTitle();
+        titleGenerating = false;
       }
-    }
+
+      const now = Date.now();
+      const existing = currentChatId ? chatHistory.find(c => c.id === currentChatId) : null;
+
+      const chat: ChatHistory = {
+        id: currentChatId ?? generateId(),
+        title: existing?.title ?? title,
+        messages: [...messages],
+        provider: selectedProvider.id,
+        model: selectedModel,
+        systemPrompt,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      };
+
+      if (existing) {
+        await deleteExistingFile(chat.id);
+      }
+
+      const ok = await uploadChatJson(chat);
+      if (ok) {
+        currentChatId = chat.id;
+        if (existing) {
+          chatHistory = chatHistory.map(c => c.id === chat.id ? chat : c);
+        } else {
+          chatHistory = [chat, ...chatHistory];
+        }
+      }
     } catch (e) {
       console.error('Failed to save chat:', e);
     } finally {
@@ -572,14 +591,16 @@ Assistant: ${firstAssistantMsg}`;
   {#if showHistory}
     <div class="ai-history-panel">
       <div class="ai-history-header">
-        <span>Chat History</span>
+        <span>History</span>
         <button class="ai-history-close" onclick={() => showHistory = false}>✕</button>
       </div>
       <div class="ai-history-list">
-        {#if chatHistory.length === 0}
+        {#if loadingHistory}
+          <div class="ai-history-empty">Loading...</div>
+        {:else if chatHistory.length === 0}
           <div class="ai-history-empty">No saved chats yet</div>
         {:else}
-          {#each chatHistory as chat (chat.id)}
+          {#each chatHistory as chat, idx (chat.id + '-' + idx)}
             <div class="ai-history-item" class:active={currentChatId === chat.id} onclick={() => loadChat(chat)} role="button" tabindex="0" onkeydown={(e) => { if (e.key === 'Enter') loadChat(chat); }}>
               <div class="ai-history-title">{chat.title}</div>
               <div class="ai-history-meta">{new Date(chat.updatedAt).toLocaleDateString()} · {chat.messages.length} msgs</div>
@@ -593,14 +614,14 @@ Assistant: ${firstAssistantMsg}`;
     </div>
   {/if}
 
-  <!-- Header: history/new chat + provider pills + system -->
+  <!-- Header: provider pills + controls -->
   <div class="ai-header">
     <div class="ai-header-row">
-      <button class="ai-history-btn" onclick={() => { showHistory = !showHistory; if (showHistory) loadHistory(); }} title="Chat history">
-        <IconHistory size={14} />
+      <button class="ai-icon-btn" onclick={() => { showHistory = !showHistory; if (showHistory) loadHistory(); }} title="Chat history" class:active={showHistory}>
+        <IconHistory size={15} />
       </button>
-      <button class="ai-history-btn" onclick={newChat} title="New chat">
-        <IconPlus size={14} />
+      <button class="ai-icon-btn" onclick={newChat} title="New chat">
+        <IconPlus size={15} />
       </button>
 
       <div class="ai-sep"></div>
@@ -612,7 +633,7 @@ Assistant: ${firstAssistantMsg}`;
           style="--pill-color: {p.color}"
           onclick={() => { selectedProvider = p; }}
         >
-          <BrandIcon brand={p.id} size={14} />
+          <BrandIcon brand={p.id} size={13} />
           <span>{p.label}</span>
         </button>
       {/each}
@@ -623,18 +644,17 @@ Assistant: ${firstAssistantMsg}`;
         <span class="ai-current-title">{chatHistory.find(c => c.id === currentChatId)?.title ?? 'Chat'}</span>
       {/if}
       {#if titleGenerating}
-        <span class="ai-current-title">Generating title...</span>
+        <span class="ai-current-title ai-generating">Generating title...</span>
       {/if}
 
-      <div class="ai-header-spacer"></div>
-
-      <button class="ai-system-toggle" onclick={() => showSystem = !showSystem} title="System prompt">
-        {#if showSystem}<IconChevronUp size={14}/>{:else}<IconChevronDown size={14}/>{/if}
-        System
+      <button class="ai-icon-btn" onclick={() => showSystem = !showSystem} title="System prompt" class:active={showSystem}>
+        <IconSettings size={15} />
       </button>
 
       {#if messages.length > 0}
-        <button class="ai-clear-btn" onclick={clearChat}>Clear</button>
+        <button class="ai-icon-btn ai-danger-btn" onclick={clearChat} title="Clear chat">
+          <IconTrash size={15} />
+        </button>
       {/if}
     </div>
 
@@ -643,7 +663,7 @@ Assistant: ${firstAssistantMsg}`;
         <input
           class="ai-system-input"
           type="text"
-          placeholder="You are a helpful assistant..."
+          placeholder="System prompt (optional)..."
           bind:value={systemPrompt}
         />
       </div>
@@ -654,9 +674,11 @@ Assistant: ${firstAssistantMsg}`;
   <div class="ai-messages">
     {#if messages.length === 0}
       <div class="ai-empty">
-        <IconBrain size={48} stroke={1} />
-        <p>Ask anything</p>
-        <p class="ai-empty-sub">Select a provider and model, then start chatting</p>
+        <div class="ai-empty-icon">
+          <IconBrain size={40} stroke={1.2} />
+        </div>
+        <p class="ai-empty-title">Start a conversation</p>
+        <p class="ai-empty-sub">Choose a provider and model below, then type your message</p>
       </div>
     {:else}
       {#each messages as msg, idx (idx)}
@@ -673,8 +695,7 @@ Assistant: ${firstAssistantMsg}`;
                 <div class="ai-sources">
                   <button class="ai-sources-btn" onclick={() => { msg._showSources = !msg._showSources; messages = [...messages]; }}>
                     <IconLink size={12} />
-                    <span>Sources</span>
-                    <span class="ai-sources-count">{msg.citations.length}</span>
+                    <span>{msg.citations.length} sources</span>
                     <span class="ai-sources-chevron" class:open={msg._showSources}><IconChevronRight size={12} /></span>
                   </button>
                   {#if msg._showSources}
@@ -691,7 +712,7 @@ Assistant: ${firstAssistantMsg}`;
                 </div>
               {/if}
             {:else}
-              <div class="ai-msg-content">{msg.content}</div>
+              <div class="ai-msg-content ai-msg-user-content">{msg.content}</div>
             {/if}
           </div>
         </div>
@@ -709,64 +730,57 @@ Assistant: ${firstAssistantMsg}`;
 
   /* ── Header ──────────────────────────────────────────────── */
   .ai-header {
-    padding: 16px 20px 12px;
+    padding: 10px 16px;
     border-bottom: 1px solid var(--border);
-    display: flex; flex-direction: column; gap: 10px;
+    display: flex; flex-direction: column; gap: 8px;
     flex-shrink: 0;
   }
 
   .ai-header-row {
-    display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+    display: flex; gap: 4px; align-items: center; flex-wrap: wrap;
   }
 
   .ai-sep {
-    width: 1px; height: 20px; background: var(--border); margin: 0 2px; flex-shrink: 0;
+    width: 1px; height: 18px; background: var(--border); margin: 0 2px; flex-shrink: 0;
   }
 
-  .ai-provider-pill {
-    display: inline-flex; align-items: center; gap: 5px;
-    padding: 5px 10px; border-radius: 999px;
-    border: 1px solid var(--border); background: var(--bg-3);
-    color: var(--text-2); font-size: 11px; font-weight: 600;
-    font-family: 'Geist', sans-serif; cursor: pointer;
-    transition: all .15s;
+  .ai-icon-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; border-radius: 8px;
+    border: none; background: transparent;
+    color: var(--text-3); cursor: pointer; transition: all .12s;
   }
-  .ai-provider-pill:hover { border-color: var(--border-hover); color: var(--text-1); }
+  .ai-icon-btn:hover { color: var(--text-1); background: var(--hover); }
+  .ai-icon-btn.active { color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+  .ai-danger-btn:hover { color: var(--red); background: rgba(248,113,113,.08); }
+
+  .ai-provider-pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 4px 9px; border-radius: 8px;
+    border: none; background: transparent;
+    color: var(--text-3); font-size: 11px; font-weight: 600;
+    font-family: 'Geist', sans-serif; cursor: pointer;
+    transition: all .12s;
+  }
+  .ai-provider-pill:hover { color: var(--text-2); background: var(--hover); }
   .ai-provider-pill.active {
-    border-color: var(--pill-color); color: var(--pill-color);
-    background: color-mix(in srgb, var(--pill-color) 10%, var(--bg-3));
+    color: var(--pill-color);
+    background: color-mix(in srgb, var(--pill-color) 10%, transparent);
   }
 
   .ai-header-spacer { flex: 1; }
 
   .ai-current-title {
-    font-size: 12px; color: var(--text-3); font-weight: 500;
-    max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: 11px; color: var(--text-3); font-weight: 500;
+    max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
+  .ai-generating { opacity: .6; }
 
-  .ai-system-toggle, .ai-clear-btn {
-    display: inline-flex; align-items: center; gap: 4px;
-    padding: 4px 10px; border-radius: 6px;
-    border: 1px solid var(--border); background: var(--bg-3);
-    color: var(--text-3); font-size: 11px; font-family: 'Geist', sans-serif;
-    cursor: pointer; transition: all .13s;
-  }
-  .ai-system-toggle:hover, .ai-clear-btn:hover { color: var(--text-2); border-color: var(--border-hover); }
-
-  /* ── History Button ─────────────────────────────────────── */
-  .ai-history-btn {
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 28px; height: 28px; border-radius: 6px;
-    border: 1px solid var(--border); background: var(--bg-3);
-    color: var(--text-3); cursor: pointer; transition: all .13s;
-  }
-  .ai-history-btn:hover { color: var(--text-2); border-color: var(--border-hover); }
-
-  .ai-system-row { margin-top: 4px; }
+  .ai-system-row { margin-top: 2px; }
 
   .ai-system-input {
     width: 100%; background: var(--bg-3); border: 1px solid var(--border);
-    border-radius: 8px; padding: 8px 12px; outline: none;
+    border-radius: 8px; padding: 7px 12px; outline: none;
     color: var(--text-1); font-size: 12px; font-family: 'Geist', sans-serif;
   }
   .ai-system-input::placeholder { color: var(--text-3); }
@@ -774,20 +788,25 @@ Assistant: ${firstAssistantMsg}`;
 
   /* ── Messages ──────────────────────────────────────────── */
   .ai-messages {
-    flex: 1; overflow-y: auto; padding: 20px;
-    display: flex; flex-direction: column; gap: 16px;
+    flex: 1; overflow-y: auto; padding: 20px 24px;
+    display: flex; flex-direction: column; gap: 14px;
   }
 
   .ai-empty {
     display: flex; flex-direction: column; align-items: center;
-    justify-content: center; flex: 1; gap: 8px;
-    color: var(--text-3);
+    justify-content: center; flex: 1; gap: 12px;
   }
-  .ai-empty p { margin: 0; font-size: 14px; font-weight: 500; }
-  .ai-empty-sub { font-size: 12px; opacity: .6; }
+  .ai-empty-icon {
+    width: 72px; height: 72px; border-radius: 20px;
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--accent);
+  }
+  .ai-empty-title { margin: 0; font-size: 16px; font-weight: 600; color: var(--text-1); }
+  .ai-empty-sub { margin: 0; font-size: 12px; color: var(--text-3); }
 
   .ai-msg {
-    display: flex; gap: 10px; max-width: 80%;
+    display: flex; gap: 10px; max-width: 85%;
   }
   .ai-msg.user { align-self: flex-end; flex-direction: row-reverse; }
   .ai-msg.assistant { align-self: flex-start; }
@@ -799,15 +818,15 @@ Assistant: ${firstAssistantMsg}`;
     font-size: 11px; font-weight: 700; color: var(--text-3);
     flex-shrink: 0;
   }
-  .ai-msg.user .ai-msg-avatar { background: var(--accent); color: #fff; }
+  .ai-msg.user .ai-msg-avatar { background: var(--accent); color: #fff; border-color: var(--accent); }
 
   .ai-msg-content {
     background: var(--bg-3); border: 1px solid var(--border);
     border-radius: 12px; padding: 10px 14px;
-    font-size: 13px; line-height: 1.5; color: var(--text-1);
+    font-size: 13px; line-height: 1.6; color: var(--text-1);
     white-space: pre-wrap; word-break: break-word;
   }
-  .ai-msg.user .ai-msg-content {
+  .ai-msg-user-content {
     background: var(--accent); color: #fff; border-color: var(--accent);
   }
 
@@ -820,7 +839,7 @@ Assistant: ${firstAssistantMsg}`;
   .ai-markdown strong { font-weight: 600; }
   .ai-markdown em { font-style: italic; }
   .ai-markdown code {
-    background: rgba(99,102,241,.15); padding: 1px 5px; border-radius: 4px;
+    background: rgba(99,102,241,.12); padding: 1px 5px; border-radius: 4px;
     font-family: 'Geist Mono', monospace; font-size: 12px;
   }
   .ai-markdown pre {
@@ -833,7 +852,7 @@ Assistant: ${firstAssistantMsg}`;
   .ai-markdown a { color: var(--accent); text-decoration: underline; }
   .ai-markdown blockquote {
     border-left: 3px solid var(--accent); margin: 8px 0; padding: 4px 12px;
-    color: var(--text-2); background: rgba(99,102,241,.05); border-radius: 0 6px 6px 0;
+    color: var(--text-2); background: rgba(99,102,241,.04); border-radius: 0 6px 6px 0;
   }
   .ai-markdown h1, .ai-markdown h2, .ai-markdown h3, .ai-markdown h4 {
     margin: 12px 0 6px; font-weight: 600;
@@ -846,7 +865,6 @@ Assistant: ${firstAssistantMsg}`;
   .ai-markdown th { background: var(--bg-3); font-weight: 600; }
   .ai-markdown hr { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
 
-  /* Citation superscript links */
   .cite-ref a {
     color: var(--accent); font-size: 10px; font-weight: 700;
     text-decoration: none; vertical-align: super;
@@ -862,16 +880,11 @@ Assistant: ${firstAssistantMsg}`;
   .ai-sources-btn {
     display: inline-flex; align-items: center; gap: 5px;
     padding: 4px 10px; border-radius: 6px; width: fit-content;
-    border: 1px solid var(--border); background: var(--bg-3);
+    border: none; background: var(--hover);
     color: var(--text-3); font-size: 11px; font-family: 'Geist', sans-serif;
-    cursor: pointer; transition: all .13s;
+    cursor: pointer; transition: all .12s;
   }
-  .ai-sources-btn:hover { color: var(--text-2); border-color: var(--border-hover); }
-
-  .ai-sources-count {
-    background: var(--bg-1); border-radius: 999px; padding: 0 6px;
-    font-size: 10px; font-weight: 700;
-  }
+  .ai-sources-btn:hover { color: var(--text-2); background: color-mix(in srgb, var(--text-1) 8%, transparent); }
 
   .ai-sources-chevron { display: flex; transition: transform .15s; }
   .ai-sources-chevron.open { transform: rotate(90deg); }
@@ -913,9 +926,10 @@ Assistant: ${firstAssistantMsg}`;
 
   .ai-history-close {
     background: none; border: none; color: var(--text-3); cursor: pointer;
-    font-size: 14px; padding: 2px;
+    font-size: 14px; padding: 2px; border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
   }
-  .ai-history-close:hover { color: var(--text-2); }
+  .ai-history-close:hover { color: var(--text-1); background: var(--hover); }
 
   .ai-history-list {
     flex: 1; overflow-y: auto; padding: 8px;
@@ -928,12 +942,12 @@ Assistant: ${firstAssistantMsg}`;
   .ai-history-item {
     display: flex; flex-direction: column; gap: 2px;
     width: 100%; text-align: left; padding: 10px 12px; border-radius: 8px;
-    border: 1px solid transparent; background: transparent;
+    border: none; background: transparent;
     color: var(--text-1); font-family: 'Geist', sans-serif; cursor: pointer;
-    transition: all .13s; position: relative;
+    transition: all .12s; position: relative;
   }
-  .ai-history-item:hover { background: var(--bg-3); border-color: var(--border); }
-  .ai-history-item.active { background: var(--bg-3); border-color: var(--accent); }
+  .ai-history-item:hover { background: var(--hover); }
+  .ai-history-item.active { background: color-mix(in srgb, var(--accent) 8%, transparent); }
 
   .ai-history-title {
     font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -947,10 +961,11 @@ Assistant: ${firstAssistantMsg}`;
   .ai-history-delete {
     position: absolute; top: 10px; right: 10px;
     background: none; border: none; color: var(--text-3); cursor: pointer;
-    padding: 2px; border-radius: 4px; opacity: 0; transition: opacity .13s;
+    padding: 2px; border-radius: 4px; opacity: 0; transition: opacity .12s;
+    display: flex; align-items: center; justify-content: center;
   }
   .ai-history-item:hover .ai-history-delete { opacity: 1; }
-  .ai-history-delete:hover { color: var(--red); background: var(--red-bg); }
+  .ai-history-delete:hover { color: var(--red); background: rgba(248,113,113,.08); }
 
   /* ── Scrollbar ──────────────────────────────────────────── */
   .ai-messages::-webkit-scrollbar { width: 6px; }
@@ -958,7 +973,7 @@ Assistant: ${firstAssistantMsg}`;
   .ai-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
   @media (max-width: 600px) {
-    .ai-header { padding: 12px 14px 10px; }
+    .ai-header { padding: 8px 12px; }
     .ai-messages { padding: 14px; }
     .ai-msg { max-width: 95%; }
   }
