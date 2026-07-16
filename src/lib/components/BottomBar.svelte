@@ -4,7 +4,7 @@
     IconLock, IconTerminal, IconBook, IconLanguage, IconApi,
     IconSun, IconMoon, IconDeviceDesktop, IconLogout, IconCloud,
     IconDots, IconX, IconSettings,
-    IconDatabase, IconBrain,
+    IconDatabase, IconBrain, IconHistory, IconPlus, IconTrash, IconPlayerStop,
   } from '@tabler/icons-svelte';
   import { env } from '$env/dynamic/public';
   const NAME = env.PUBLIC_NAME ?? "Omar";
@@ -27,6 +27,14 @@
     label?: string;
   };
 
+  type BarPill = {
+    icon?: any;
+    label: string;
+    color?: string;
+    active?: boolean;
+    onClick?: () => void;
+  };
+
   type BarConfig = {
     input?: {
       placeholder: string;
@@ -38,7 +46,13 @@
     };
     buttons?: BarButton[];
     selects?: BarSelect[];
-    beforeInput?: any[];
+    beforeInput?: BarPill[];
+    aiChat?: {
+      providers?: { id: string; label: string; color: string; icon?: any; active?: boolean; onClick?: () => void }[];
+      chatActions?: BarButton[];
+      systemPrompt?: string;
+      onSystemPromptInput?: (v: string) => void;
+    };
   } | null;
 
   let {
@@ -105,7 +119,11 @@
   let hasButtons = $derived(!!config?.buttons && config!.buttons!.length > 0);
   let hasSelects = $derived(!!config?.selects && config!.selects!.length > 0);
   let hasBeforeInput = $derived(!!config?.beforeInput && config!.beforeInput!.length > 0);
-  let hasCustomUtility = $derived(hasInput || hasSelects || hasBeforeInput);
+  let hasCustomUtility = $derived(hasInput || hasSelects || hasBeforeInput || !!config?.aiChat);
+  let hasAiChat = $derived(!!config?.aiChat);
+  let hasProviders = $derived(!!config?.aiChat?.providers && config!.aiChat!.providers!.length > 0);
+  let hasChatActions = $derived(!!config?.aiChat?.chatActions && config!.aiChat!.chatActions!.length > 0);
+  let showSystemPrompt = $derived(!!config?.aiChat?.systemPrompt || config?.aiChat?.systemPrompt === '' || !!config?.aiChat?.onSystemPromptInput);
 
   // ── Hover tooltip state ────────────────────────────────────────
   let hoverTabId = $state<string | null>(null);
@@ -126,14 +144,22 @@
   function onItemLeave() { hoverTabId = null; }
 
   // ── Nav expand on cloud hover ────────────────────────────────
+  let bbEl: HTMLDivElement | null = null;
+
   function onBarNavEnter() {
     if (navHoverTimeout) { clearTimeout(navHoverTimeout); navHoverTimeout = null; }
     navExpanded = true;
   }
 
-  function onBarNavLeave() {
+  function onBarNavLeave(e: MouseEvent) {
     if (fullWidth) return;
-    navHoverTimeout = setTimeout(() => { navExpanded = false; }, 400);
+    // Only collapse if cursor truly left the .bb region (not moving between children)
+    const related = e.relatedTarget as HTMLElement | null;
+    if (related && bbEl?.contains(related)) return;
+    // Also check if something inside still has focus
+    const active = document.activeElement as HTMLElement | null;
+    if (active && bbEl?.contains(active)) return;
+    navHoverTimeout = setTimeout(() => { navExpanded = false; }, 300);
   }
 
   // ── Long-press tooltip (mobile) ──────────────────────────────
@@ -316,10 +342,10 @@
 
   $effect(() => {
     if (!hasCustomUtility) {
+      // Auto-expand when no custom utility present (files tab, etc.)
       navExpanded = true;
-    } else {
-      navExpanded = false;
     }
+    // When hasCustomUtility, let hover control expansion — don't force collapse
   });
 
   function handleOutsideClick(e: MouseEvent) {
@@ -454,6 +480,7 @@
 <!-- ── Main bottom bar ─────────────────────────────────────────── -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
+  bind:this={bbEl}
   class="bb pos-{position}"
   class:repositioning
   class:auto-hide={autoHide}
@@ -465,7 +492,7 @@
   ontouchend={cancelDockDrag}
   onmousemove={cancelDockDrag}
   onmouseenter={() => { if (autoHide) dockHovered = true; onBarNavEnter(); }}
-  onmouseleave={() => { if (autoHide) dockHovered = false; onBarNavLeave(); }}
+  onmouseleave={(e) => { if (autoHide) dockHovered = false; onBarNavLeave(e); }}
 >
   <!-- Nav section: cloud icon + expandable tabs -->
   <div class="bb-nav-section">
@@ -526,6 +553,44 @@
 
   <div class="bb-sep"></div>
 
+  <!-- AI Provider pills -->
+  {#if hasProviders}
+    <div class="bb-ai-providers">
+      {#each config!.aiChat!.providers! as pill}
+        <button
+          class="bb-ai-pill"
+          class:active={pill.active}
+          style={pill.color ? `--pill-color: ${pill.color}` : ''}
+          onclick={pill.onClick}
+        >
+          {#if pill.icon}
+            <pill.icon size={14} stroke={1.5}/>
+          {/if}
+          <span>{pill.label}</span>
+        </button>
+      {/each}
+    </div>
+    <div class="bb-sep"></div>
+  {/if}
+
+  <!-- AI Chat actions (history, new chat, clear, etc.) -->
+  {#if hasChatActions}
+    <div class="bb-ai-actions">
+      {#each config!.aiChat!.chatActions! as action}
+        <button
+          class="bb-action-btn"
+          class:danger={action.danger}
+          disabled={action.disabled}
+          onclick={action.onClick}
+          title={action.label}
+        >
+          <action.icon size={16} stroke={1.5}/>
+        </button>
+      {/each}
+    </div>
+    <div class="bb-sep"></div>
+  {/if}
+
   <!-- Selects (model selector, etc.) -->
   {#if hasSelects}
     <div class="bb-selects-section">
@@ -539,6 +604,20 @@
           </select>
         </div>
       {/each}
+    </div>
+    <div class="bb-sep"></div>
+  {/if}
+
+  <!-- AI System prompt (inline) -->
+  {#if hasAiChat && config!.aiChat?.onSystemPromptInput}
+    <div class="bb-system-prompt-wrap">
+      <input
+        class="bb-system-prompt-input"
+        type="text"
+        placeholder="System prompt..."
+        value={config!.aiChat!.systemPrompt ?? ''}
+        oninput={(e) => config!.aiChat!.onSystemPromptInput!((e.target as HTMLInputElement).value)}
+      />
     </div>
     <div class="bb-sep"></div>
   {/if}
@@ -711,19 +790,31 @@
   .bb {
     position: fixed; z-index: 200;
     display: flex; align-items: center; gap: 0;
-    background: var(--bg-2); border: 1px solid var(--border);
-    box-shadow: 0 8px 32px rgba(0,0,0,.3), inset 0 1px 0 color-mix(in srgb, var(--bg-1) 30%, transparent);
-    transition: all .3s cubic-bezier(.16,1,.3,1);
+    background: color-mix(in srgb, var(--bg-2) 85%, transparent);
+    backdrop-filter: blur(20px) saturate(1.4);
+    border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+    box-shadow: 0 8px 32px rgba(0,0,0,.35), inset 0 1px 0 color-mix(in srgb, var(--bg-1) 30%, transparent);
+    transition: all .24s cubic-bezier(.16,1,.3,1);
     user-select: none; padding: 6px 8px;
+    transform-origin: center bottom;
+  }
+  .bb:hover {
+    transform: scale(1);
+    box-shadow: 0 12px 44px rgba(0,0,0,.45), inset 0 1px 0 color-mix(in srgb, var(--bg-1) 30%, transparent);
   }
   .bb.repositioning { opacity: .7; cursor: grabbing; }
 
   /* Position variants */
-  .bb.pos-bottom { bottom: 16px; left: 50%; transform: translateX(-50%); border-radius: 999px; }
+  .bb.pos-bottom { bottom: 16px; left: 50%; transform: translateX(-50%) scale(.98); border-radius: 999px; }
+  .bb.pos-bottom:hover { transform: translateX(-50%) scale(1); }
   .bb.pos-bottom.full-width { left: 16px; right: 16px; transform: none; border-radius: 16px; max-width: none; }
-  .bb.pos-top { top: 16px; left: 50%; transform: translateX(-50%); border-radius: 999px; }
-  .bb.pos-left { left: 16px; top: 50%; transform: translateY(-50%); border-radius: 999px; flex-direction: column; }
-  .bb.pos-right { right: 16px; top: 50%; transform: translateY(-50%); border-radius: 999px; flex-direction: column; }
+  .bb.pos-bottom.full-width:hover { transform: none; }
+  .bb.pos-top { top: 16px; left: 50%; transform: translateX(-50%) scale(.98); border-radius: 999px; }
+  .bb.pos-top:hover { transform: translateX(-50%) scale(1); }
+  .bb.pos-left { left: 16px; top: 50%; transform: translateY(-50%) scale(.98); border-radius: 999px; flex-direction: column; }
+  .bb.pos-left:hover { transform: translateY(-50%) scale(1); }
+  .bb.pos-right { right: 16px; top: 50%; transform: translateY(-50%) scale(.98); border-radius: 999px; flex-direction: column; }
+  .bb.pos-right:hover { transform: translateY(-50%) scale(1); }
 
   /* ── Nav section (cloud + expandable tabs) ────────────────────── */
   .bb-nav-section { display: flex; align-items: center; }
@@ -737,10 +828,11 @@
   .bb-nav-tabs {
     display: flex; align-items: center; gap: 2px;
     max-width: 0; overflow: hidden; opacity: 0;
-    transition: max-width .3s cubic-bezier(.16,1,.3,1), opacity .2s ease;
+    transition: max-width .28s cubic-bezier(.16,1,.3,1), opacity .2s ease;
   }
   .bb-nav-tabs.expanded { max-width: 500px; opacity: 1; }
-  .bb.pos-bottom.full-width .bb-nav-tabs.expanded, .bb.pos-top.full-width .bb-nav-tabs.expanded { max-width: 0; opacity: 0; }
+  .bb-pos-bottom.full-width .bb-nav-tabs.expanded, .bb.pos-top.full-width .bb-nav-tabs.expanded { max-width: 0; opacity: 0; }
+  .bb-nav-section:has(+ .bb-sep + .bb-ai-providers) .bb-nav-tabs { max-width: 0; opacity: 0; }
 
   .bb-sep {
     width: 1px; height: 24px;
@@ -788,6 +880,36 @@
   }
   .bb-textarea::placeholder { color: var(--text-3); }
   .bb-textarea:disabled { opacity: .5; }
+
+  /* ── AI Provider pills ──────────────────────────────────────── */
+  .bb-ai-providers { display: flex; align-items: center; gap: 3px; }
+  .bb-ai-pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 5px 10px; border-radius: 8px;
+    border: none; background: transparent;
+    color: var(--text-3); font-size: 11px; font-weight: 600;
+    font-family: 'Geist', sans-serif; cursor: pointer; transition: all .12s;
+    white-space: nowrap;
+  }
+  .bb-ai-pill:hover { color: var(--text-2); background: var(--hover); }
+  .bb-ai-pill.active {
+    color: var(--pill-color, var(--accent));
+    background: color-mix(in srgb, var(--pill-color, var(--accent)) 12%, transparent);
+  }
+
+  /* ── AI Chat actions ────────────────────────────────────────── */
+  .bb-ai-actions { display: flex; align-items: center; gap: 2px; }
+
+  /* ── System prompt ──────────────────────────────────────────── */
+  .bb-system-prompt-wrap { flex: 0 0 auto; }
+  .bb-system-prompt-input {
+    width: 160px; background: var(--bg-3); border: 1px solid var(--border);
+    border-radius: 8px; padding: 5px 10px; outline: none;
+    color: var(--text-1); font-size: 12px; font-family: 'Geist', sans-serif;
+    transition: border-color .12s;
+  }
+  .bb-system-prompt-input::placeholder { color: var(--text-3); }
+  .bb-system-prompt-input:focus { border-color: var(--accent); }
 
   /* ── Selects section ──────────────────────────────────────────── */
   .bb-selects-section { display: flex; align-items: center; gap: 6px; }

@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { IconPlayerStop, IconSend, IconSettings, IconBrain, IconHistory, IconPlus, IconTrash, IconLink, IconChevronRight, IconCopy, IconCheck, IconArrowUp, IconDownload, IconClock, IconBook } from '@tabler/icons-svelte';
-  import BrandIcon from '$lib/components/BrandIcon.svelte';
+  import { IconPlayerStop, IconSend, IconBrain, IconHistory, IconPlus, IconTrash, IconLink, IconChevronRight, IconCopy, IconCheck, IconArrowUp, IconDownload, IconClock, IconBook } from '@tabler/icons-svelte';
 
   let { apiKey = '', barConfig = $bindable(null) }: { apiKey?: string; barConfig?: any } = $props();
 
@@ -36,11 +35,9 @@
   let input = $state('');
   let isStreaming = $state(false);
   let systemPrompt = $state('');
-  let showSystem = $state(false);
   let loadingModels = $state(false);
   let abortController: AbortController | null = null;
   let copiedStates = $state<Record<string, boolean>>({});
-  let expandedCallouts = $state<Record<string, boolean>>({});
   let expandedCollapsibles = $state<Record<string, boolean>>({});
   let showBackToTop = $state(false);
   let messagesContainer: HTMLDivElement;
@@ -603,45 +600,50 @@
     loadModels();
   });
 
+  // System prompt is managed separately to avoid circular reactivity
+  let systemPromptVersion = $state(0);
+
   $effect(() => {
-    const btns: BarButton[] = [];
-    if (isStreaming) {
-      btns.push({ icon: IconPlayerStop, label: 'Stop', onClick: () => abortController?.abort(), danger: true });
-    }
-    btns.push({ icon: IconSend, label: 'Send', onClick: sendMessage, primary: true, disabled: !input.trim() || isStreaming || !selectedModel });
-    const selects = [{
-      value: selectedModel,
-      options: models.map(m => ({ value: m.id, label: getDisplayName(m) })),
-      onchange: (v: string) => { selectedModel = v; },
-      label: loadingModels ? 'Loading...' : undefined,
-    }];
-    barConfig = {
-      selects,
-      input: {
-        placeholder: 'Ask anything...',
-        value: input,
-        oninput: (v: string) => { input = v; },
-        onsubmit: sendMessage,
-        loading: isStreaming,
-      },
-      buttons: btns,
-    };
+    const _ = systemPromptVersion;
+    buildBarConfig();
   });
 
-  function updateBarConfig() {
+  function buildBarConfig() {
     const btns: BarButton[] = [];
     if (isStreaming) {
       btns.push({ icon: IconPlayerStop, label: 'Stop', onClick: () => abortController?.abort(), danger: true });
     }
     btns.push({ icon: IconSend, label: 'Send', onClick: sendMessage, primary: true, disabled: !input.trim() || isStreaming || !selectedModel });
-    const selects = [{
-      value: selectedModel,
-      options: models.map(m => ({ value: m.id, label: getDisplayName(m) })),
-      onchange: (v: string) => { selectedModel = v; },
-      label: loadingModels ? 'Loading...' : undefined,
-    }];
+
+    const providers = PROVIDERS.map(p => ({
+      id: p.id,
+      label: p.label,
+      color: p.color,
+      active: selectedProvider.id === p.id,
+      onClick: () => { selectedProvider = p; },
+    }));
+
+    const chatActions: BarButton[] = [
+      { icon: IconHistory, label: 'History', onClick: () => { showHistory = !showHistory; if (showHistory) loadHistory(); } },
+      { icon: IconPlus, label: 'New Chat', onClick: newChat },
+    ];
+    if (messages.length > 0) {
+      chatActions.push({ icon: IconTrash, label: 'Clear', onClick: clearChat, danger: true });
+    }
+
     barConfig = {
-      selects,
+      aiChat: {
+        providers,
+        chatActions,
+        systemPrompt,
+        onSystemPromptInput: (v: string) => { systemPrompt = v; systemPromptVersion++; },
+      },
+      selects: [{
+        value: selectedModel,
+        options: models.map(m => ({ value: m.id, label: getDisplayName(m) })),
+        onchange: (v: string) => { selectedModel = v; },
+        label: loadingModels ? 'Loading...' : undefined,
+      }],
       input: {
         placeholder: 'Ask anything...',
         value: input,
@@ -651,6 +653,10 @@
       },
       buttons: btns,
     };
+  }
+
+  function updateBarConfig() {
+    buildBarConfig();
   }
 
   async function sendMessage() {
@@ -848,6 +854,7 @@
     currentChatId = chat.id;
     messages = [...chat.messages];
     systemPrompt = chat.systemPrompt;
+    systemPromptVersion++;
     const prov = PROVIDERS.find(p => p.id === chat.provider);
     if (prov) selectedProvider = prov;
     if (chat.model) selectedModel = chat.model;
@@ -866,7 +873,7 @@
     if (currentChatId === chatId) { currentChatId = null; messages = []; }
   }
 
-  function newChat() { currentChatId = null; messages = []; systemPrompt = ''; }
+  function newChat() { currentChatId = null; messages = []; systemPrompt = ''; systemPromptVersion++; }
 
   // Auto-save
   let wasStreaming = false;
@@ -930,45 +937,6 @@
       </div>
     </div>
   {/if}
-
-  <!-- Header -->
-  <div class="ai-header">
-    <div class="ai-header-row">
-      <button class="ai-icon-btn" onclick={() => { showHistory = !showHistory; if (showHistory) loadHistory(); }} title="History" class:active={showHistory}>
-        <IconHistory size={15} />
-      </button>
-      <button class="ai-icon-btn" onclick={newChat} title="New chat">
-        <IconPlus size={15} />
-      </button>
-      <div class="ai-sep"></div>
-      {#each PROVIDERS as p}
-        <button class="ai-provider-pill" class:active={selectedProvider.id === p.id} style="--pill-color: {p.color}" onclick={() => { selectedProvider = p; }}>
-          <BrandIcon brand={p.id} size={13} />
-          <span>{p.label}</span>
-        </button>
-      {/each}
-      <div class="ai-header-spacer"></div>
-      {#if currentChatId}
-        <span class="ai-current-title">{chatHistory.find(c => c.id === currentChatId)?.title ?? 'Chat'}</span>
-      {/if}
-      {#if titleGenerating}
-        <span class="ai-current-title ai-generating">Generating title...</span>
-      {/if}
-      <button class="ai-icon-btn" onclick={() => showSystem = !showSystem} title="System prompt" class:active={showSystem}>
-        <IconSettings size={15} />
-      </button>
-      {#if messages.length > 0}
-        <button class="ai-icon-btn ai-danger-btn" onclick={clearChat} title="Clear">
-          <IconTrash size={15} />
-        </button>
-      {/if}
-    </div>
-    {#if showSystem}
-      <div class="ai-system-row">
-        <input class="ai-system-input" type="text" placeholder="System prompt (optional)..." bind:value={systemPrompt} />
-      </div>
-    {/if}
-  </div>
 
   <!-- Messages -->
   <div class="ai-messages" bind:this={messagesContainer} onscroll={onMessagesScroll}>
@@ -1059,93 +1027,65 @@
 
   .ai-root {
     display: flex; flex-direction: column;
-    height: 100%; overflow: hidden; position: relative;
+    position: fixed;
+    top: 16px; left: 50%; transform: translateX(-50%);
+    width: min(960px, calc(100vw - 32px));
+    height: calc(100vh - 100px);
+    overflow: hidden;
     font-family: 'Geist', sans-serif;
-    background: var(--md-bg);
+    background: color-mix(in srgb, var(--md-bg) 92%, transparent);
+    backdrop-filter: blur(20px) saturate(1.3);
     color: var(--md-text);
+    border: 1px solid var(--md-border);
+    border-radius: 20px;
+    box-shadow: 0 24px 80px rgba(0,0,0,.5), 0 0 0 1px color-mix(in srgb, var(--md-border) 40%, transparent);
+    z-index: 190;
+    animation: aiPanelIn .28s cubic-bezier(.16,1,.3,1);
   }
-
-  /* ── Header ──────────────────────────────────────────────── */
-  .ai-header {
-    padding: 10px 20px;
-    border-bottom: 1px solid var(--md-border);
-    display: flex; flex-direction: column; gap: 8px;
-    flex-shrink: 0;
-    background: var(--md-surface);
+  @keyframes aiPanelIn {
+    from { opacity: 0; transform: translateX(-50%) translateY(16px) scale(.97); }
+    to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
   }
-  .ai-header-row { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
-  .ai-sep { width: 1px; height: 18px; background: var(--md-border); margin: 0 4px; flex-shrink: 0; }
-
-  .ai-icon-btn {
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 30px; height: 30px; border-radius: 8px;
-    border: none; background: transparent;
-    color: var(--md-text-3); cursor: pointer; transition: all .12s;
-  }
-  .ai-icon-btn:hover { color: var(--md-text); background: rgba(255,255,255,.06); }
-  .ai-icon-btn.active { color: var(--md-accent); background: rgba(124,108,255,.1); }
-  .ai-danger-btn:hover { color: var(--md-error); background: rgba(255,107,107,.08); }
-
-  .ai-provider-pill {
-    display: inline-flex; align-items: center; gap: 4px;
-    padding: 4px 10px; border-radius: 8px;
-    border: none; background: transparent;
-    color: var(--md-text-3); font-size: 11px; font-weight: 600;
-    font-family: 'Geist', sans-serif; cursor: pointer; transition: all .12s;
-  }
-  .ai-provider-pill:hover { color: var(--md-text-2); background: rgba(255,255,255,.04); }
-  .ai-provider-pill.active { color: var(--pill-color); background: color-mix(in srgb, var(--pill-color) 10%, transparent); }
-
-  .ai-header-spacer { flex: 1; }
-  .ai-current-title { font-size: 11px; color: var(--md-text-3); font-weight: 500; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ai-generating { opacity: .6; }
-  .ai-system-row { margin-top: 2px; }
-  .ai-system-input {
-    width: 100%; background: var(--md-elevated); border: 1px solid var(--md-border);
-    border-radius: 8px; padding: 7px 12px; outline: none;
-    color: var(--md-text); font-size: 12px; font-family: 'Geist', sans-serif;
-  }
-  .ai-system-input::placeholder { color: var(--md-text-3); }
-  .ai-system-input:focus { border-color: var(--md-accent); }
 
   /* ── Messages Container ──────────────────────────────────── */
   .ai-messages {
-    flex: 1; overflow-y: auto; padding: 32px 24px 120px;
+    flex: 1; overflow-y: auto; padding: 48px 36px 40px;
     display: flex; flex-direction: column; gap: 24px;
     scroll-behavior: smooth;
   }
 
   .ai-empty {
     display: flex; flex-direction: column; align-items: center;
-    justify-content: center; flex: 1; gap: 16px;
+    justify-content: center; flex: 1; gap: 12px;
+    opacity: .7;
   }
   .ai-empty-icon {
-    width: 80px; height: 80px; border-radius: 24px;
+    width: 64px; height: 64px; border-radius: 18px;
     background: linear-gradient(135deg, rgba(124,108,255,.12), rgba(124,108,255,.04));
     display: flex; align-items: center; justify-content: center;
     color: var(--md-accent);
     border: 1px solid rgba(124,108,255,.15);
   }
-  .ai-empty-title { margin: 0; font-size: 18px; font-weight: 600; color: var(--md-text); letter-spacing: -.02em; }
-  .ai-empty-sub { margin: 0; font-size: 13px; color: var(--md-text-3); }
+  .ai-empty-title { margin: 0; font-size: 16px; font-weight: 600; color: var(--md-text); letter-spacing: -.02em; }
+  .ai-empty-sub { margin: 0; font-size: 12px; color: var(--md-text-3); }
 
   /* ── User Message ────────────────────────────────────────── */
-  .msg-user-wrap { display: flex; justify-content: flex-end; padding: 0 40px; }
+  .msg-user-wrap { display: flex; justify-content: flex-end; padding: 0 24px; }
   .msg-user-bubble {
-    max-width: 480px; padding: 10px 16px;
+    max-width: 420px; padding: 9px 14px;
     background: var(--md-accent); color: #fff;
-    border-radius: 16px 16px 4px 16px;
-    font-size: 14px; line-height: 1.55;
+    border-radius: 14px 14px 4px 14px;
+    font-size: 13px; line-height: 1.55;
     word-break: break-word;
   }
 
   /* ── Assistant Message (Document Card) ───────────────────── */
-  .msg-assistant-wrap { display: flex; flex-direction: column; max-width: 900px; width: 100%; margin: 0 auto; }
+  .msg-assistant-wrap { display: flex; flex-direction: column; max-width: 820px; width: 100%; margin: 0 auto; }
   .msg-assistant-card {
-    background: var(--md-surface);
+    background: color-mix(in srgb, var(--md-surface) 85%, transparent);
     border: 1px solid var(--md-border);
-    border-radius: 20px;
-    padding: 32px 36px;
+    border-radius: 16px;
+    padding: 24px 28px;
     transition: border-color .2s;
   }
   .msg-assistant-card:hover { border-color: rgba(255,255,255,.12); }
@@ -1436,8 +1376,8 @@
 
   /* ── Back to Top ─────────────────────────────────────────── */
   .back-to-top {
-    position: fixed; bottom: 100px; right: 24px;
-    width: 40px; height: 40px; border-radius: 12px;
+    position: absolute; bottom: 20px; right: 20px;
+    width: 36px; height: 36px; border-radius: 10px;
     border: 1px solid var(--md-border);
     background: var(--md-elevated); color: var(--md-text-2);
     display: flex; align-items: center; justify-content: center;
@@ -1452,8 +1392,9 @@
   /* ── History Panel ───────────────────────────────────────── */
   .ai-history-panel {
     position: absolute; top: 0; left: 0; bottom: 0;
-    width: 280px; background: var(--md-surface); border-right: 1px solid var(--md-border);
+    width: 260px; background: var(--md-surface); border-right: 1px solid var(--md-border);
     display: flex; flex-direction: column; z-index: 10;
+    border-radius: 20px 0 0 20px;
   }
   .ai-history-header {
     display: flex; align-items: center; justify-content: space-between;
@@ -1493,10 +1434,19 @@
   .ai-messages::-webkit-scrollbar-thumb { background: var(--md-border); border-radius: 3px; }
 
   @media (max-width: 700px) {
-    .ai-header { padding: 8px 14px; }
-    .ai-messages { padding: 20px 16px 100px; }
-    .msg-user-wrap { padding: 0 16px; }
-    .msg-assistant-card { padding: 20px 18px; border-radius: 16px; }
+    .ai-root {
+      top: 8px; left: 8px; right: 8px; transform: none;
+      width: auto; height: calc(100vh - 80px);
+      border-radius: 16px;
+    }
+    @keyframes aiPanelIn {
+      from { opacity: 0; transform: translateY(12px) scale(.98); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .ai-messages { padding: 16px 14px 80px; }
+    .msg-user-wrap { padding: 0 14px; }
+    .msg-assistant-card { padding: 18px 16px; border-radius: 14px; }
     .msg-user-bubble { max-width: 90%; }
+    .ai-history-panel { width: 220px; border-radius: 16px 0 0 16px; }
   }
 </style>
