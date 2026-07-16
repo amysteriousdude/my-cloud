@@ -25,6 +25,8 @@
     options: { value: string; label: string }[];
     onchange: (v: string) => void;
     label?: string;
+    variant?: 'model' | 'default';
+    accent?: string;
   };
 
   type BarPill = {
@@ -341,11 +343,9 @@
   $effect(() => { loadState(); });
 
   $effect(() => {
-    if (!hasCustomUtility) {
-      // Auto-expand when no custom utility present (files tab, etc.)
+    if (!hasCustomUtility || fullWidth) {
       navExpanded = true;
     }
-    // When hasCustomUtility, let hover control expansion — don't force collapse
   });
 
   function handleOutsideClick(e: MouseEvent) {
@@ -595,14 +595,26 @@
   {#if hasSelects}
     <div class="bb-selects-section">
       {#each config!.selects! as sel}
-        <div class="bb-select-wrap">
-          {#if sel.label}<span class="bb-select-label">{sel.label}</span>{/if}
-          <select class="bb-select" value={sel.value} onchange={(e) => sel.onchange((e.target as HTMLSelectElement).value)}>
-            {#each sel.options as opt}
-              <option value={opt.value}>{opt.label}</option>
-            {/each}
-          </select>
-        </div>
+        {#if sel.variant === 'model'}
+          <div class="bb-model-picker" style={sel.accent ? `--model-accent:${sel.accent}` : ''}>
+            <span class="bb-model-dot"></span>
+            <span class="bb-model-label">{sel.label}</span>
+            <select class="bb-model-select" value={sel.value} onchange={(e) => sel.onchange((e.target as HTMLSelectElement).value)}>
+              {#each sel.options as opt}
+                <option value={opt.value}>{opt.label}</option>
+              {/each}
+            </select>
+          </div>
+        {:else}
+          <div class="bb-select-wrap">
+            {#if sel.label}<span class="bb-select-label">{sel.label}</span>{/if}
+            <select class="bb-select" value={sel.value} onchange={(e) => sel.onchange((e.target as HTMLSelectElement).value)}>
+              {#each sel.options as opt}
+                <option value={opt.value}>{opt.label}</option>
+              {/each}
+            </select>
+          </div>
+        {/if}
       {/each}
     </div>
     <div class="bb-sep"></div>
@@ -799,7 +811,6 @@
     transform-origin: center bottom;
   }
   .bb:hover {
-    transform: scale(1);
     box-shadow: 0 12px 44px rgba(0,0,0,.45), inset 0 1px 0 color-mix(in srgb, var(--bg-1) 30%, transparent);
   }
   .bb.repositioning { opacity: .7; cursor: grabbing; }
@@ -807,10 +818,12 @@
   /* Position variants */
   .bb.pos-bottom { bottom: 16px; left: 50%; transform: translateX(-50%) scale(.98); border-radius: 999px; }
   .bb.pos-bottom:hover { transform: translateX(-50%) scale(1); }
-  .bb.pos-bottom.full-width { left: 16px; right: 16px; transform: none; border-radius: 16px; max-width: none; }
+  .bb.pos-bottom.full-width { left: 16px; right: 16px; transform: none; border-radius: 16px; max-width: none; padding: 6px 12px; }
   .bb.pos-bottom.full-width:hover { transform: none; }
   .bb.pos-top { top: 16px; left: 50%; transform: translateX(-50%) scale(.98); border-radius: 999px; }
   .bb.pos-top:hover { transform: translateX(-50%) scale(1); }
+  .bb.pos-top.full-width { left: 16px; right: 16px; transform: none; border-radius: 16px; max-width: none; padding: 6px 12px; }
+  .bb.pos-top.full-width:hover { transform: none; }
   .bb.pos-left { left: 16px; top: 50%; transform: translateY(-50%) scale(.98); border-radius: 999px; flex-direction: column; }
   .bb.pos-left:hover { transform: translateY(-50%) scale(1); }
   .bb.pos-right { right: 16px; top: 50%; transform: translateY(-50%) scale(.98); border-radius: 999px; flex-direction: column; }
@@ -831,8 +844,6 @@
     transition: max-width .28s cubic-bezier(.16,1,.3,1), opacity .2s ease;
   }
   .bb-nav-tabs.expanded { max-width: 500px; opacity: 1; }
-  .bb-pos-bottom.full-width .bb-nav-tabs.expanded, .bb.pos-top.full-width .bb-nav-tabs.expanded { max-width: 0; opacity: 0; }
-  .bb-nav-section:has(+ .bb-sep + .bb-ai-providers) .bb-nav-tabs { max-width: 0; opacity: 0; }
 
   .bb-sep {
     width: 1px; height: 24px;
@@ -886,16 +897,20 @@
   .bb-ai-pill {
     display: inline-flex; align-items: center; gap: 4px;
     padding: 5px 10px; border-radius: 8px;
-    border: none; background: transparent;
+    border: 1px solid transparent;
+    background: transparent;
     color: var(--text-3); font-size: 11px; font-weight: 600;
-    font-family: 'Geist', sans-serif; cursor: pointer; transition: all .12s;
+    font-family: 'Geist', sans-serif; cursor: pointer; transition: all .15s cubic-bezier(.16,1,.3,1);
     white-space: nowrap;
   }
-  .bb-ai-pill:hover { color: var(--text-2); background: var(--hover); }
+  .bb-ai-pill:hover { color: var(--text-2); background: var(--hover); transform: translateY(-1px); }
   .bb-ai-pill.active {
     color: var(--pill-color, var(--accent));
-    background: color-mix(in srgb, var(--pill-color, var(--accent)) 12%, transparent);
+    background: color-mix(in srgb, var(--pill-color, var(--accent)) 10%, transparent);
+    border-color: color-mix(in srgb, var(--pill-color, var(--accent)) 20%, transparent);
+    box-shadow: 0 0 12px color-mix(in srgb, var(--pill-color, var(--accent)) 8%, transparent);
   }
+  .bb-ai-pill:active { transform: scale(.95); }
 
   /* ── AI Chat actions ────────────────────────────────────────── */
   .bb-ai-actions { display: flex; align-items: center; gap: 2px; }
@@ -929,6 +944,34 @@
   }
   .bb-select option { background: var(--bg-2); color: var(--text-1); }
 
+  /* ── Model Picker (unique variant) ─────────────────────────── */
+  .bb-model-picker {
+    display: flex; align-items: center; gap: 6px;
+    background: color-mix(in srgb, var(--model-accent, var(--accent)) 10%, var(--bg-2));
+    border: 1px solid color-mix(in srgb, var(--model-accent, var(--accent)) 25%, var(--border));
+    border-radius: 10px; padding: 4px 10px 4px 8px;
+    position: relative; transition: all .15s;
+  }
+  .bb-model-picker:hover {
+    border-color: color-mix(in srgb, var(--model-accent, var(--accent)) 50%, transparent);
+    box-shadow: 0 0 16px color-mix(in srgb, var(--model-accent, var(--accent)) 15%, transparent);
+  }
+  .bb-model-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--model-accent, var(--accent));
+    flex-shrink: 0; box-shadow: 0 0 6px color-mix(in srgb, var(--model-accent, var(--accent)) 40%, transparent);
+  }
+  .bb-model-label {
+    font-size: 10px; font-weight: 600; color: var(--text-3);
+    text-transform: uppercase; letter-spacing: .4px; white-space: nowrap;
+  }
+  .bb-model-select {
+    background: transparent; border: none; outline: none;
+    color: var(--text-1); font-size: 12px; font-family: 'Geist', sans-serif;
+    cursor: pointer; max-width: 220px; font-weight: 500;
+  }
+  .bb-model-select option { background: var(--bg-2); color: var(--text-1); }
+
   /* ── Action buttons section ────────────────────────────────────── */
   .bb-actions-section { display: flex; align-items: center; gap: 4px; }
 
@@ -936,15 +979,21 @@
     display: flex; align-items: center; justify-content: center;
     width: 32px; height: 32px; border-radius: 8px;
     border: none; background: none; color: var(--text-2);
-    cursor: pointer; transition: all .15s; flex-shrink: 0;
+    cursor: pointer; transition: all .15s cubic-bezier(.16,1,.3,1); flex-shrink: 0;
+    position: relative;
   }
-  .bb-action-btn:hover { background: var(--hover); color: var(--text-1); }
-  .bb-action-btn:disabled { opacity: .3; cursor: not-allowed; }
-  .bb-action-btn.primary { background: var(--accent); color: #fff; }
-  .bb-action-btn.primary:hover { filter: brightness(1.1); }
-  .bb-action-btn.primary:disabled { background: var(--accent); opacity: .5; }
+  .bb-action-btn:hover { background: var(--hover); color: var(--text-1); transform: scale(1.08); }
+  .bb-action-btn:active { transform: scale(.92); }
+  .bb-action-btn:disabled { opacity: .3; cursor: not-allowed; transform: none; }
+  .bb-action-btn.primary {
+    background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #fff));
+    color: #fff; box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+  .bb-action-btn.primary:hover { filter: brightness(1.12); transform: scale(1.08); box-shadow: 0 3px 14px color-mix(in srgb, var(--accent) 40%, transparent); }
+  .bb-action-btn.primary:active { transform: scale(.95); }
+  .bb-action-btn.primary:disabled { background: var(--accent); opacity: .5; box-shadow: none; transform: none; }
   .bb-action-btn.danger { color: var(--red); }
-  .bb-action-btn.danger:hover { background: rgba(248,113,113,.1); }
+  .bb-action-btn.danger:hover { background: rgba(248,113,113,.12); color: #f87171; transform: scale(1.08); }
 
   .bb-spinner {
     width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.3);

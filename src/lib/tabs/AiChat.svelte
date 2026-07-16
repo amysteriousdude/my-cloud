@@ -723,7 +723,9 @@
         value: selectedModel,
         options: models.map(m => ({ value: m.id, label: getDisplayName(m) })),
         onchange: (v: string) => { selectedModel = v; },
-        label: loadingModels ? 'Loading...' : undefined,
+        label: loadingModels ? 'Loading...' : 'Model',
+        variant: 'model',
+        accent: selectedProvider.color,
       }],
       input: {
         placeholder: 'Ask anything...',
@@ -1209,8 +1211,8 @@
 
   /* ── Messages Container ──────────────────────────────────── */
   .ai-messages {
-    flex: 1; overflow-y: auto; padding: 40px 24px 40px;
-    display: flex; flex-direction: column; gap: 24px;
+    flex: 1; overflow-y: auto; padding: 24px 24px 40px;
+    display: flex; flex-direction: column; gap: 16px;
     scroll-behavior: smooth;
   }
 
@@ -1245,7 +1247,7 @@
     background: color-mix(in srgb, var(--md-surface) 85%, transparent);
     border: 1px solid var(--md-border);
     border-radius: 16px;
-    padding: 24px 28px;
+    padding: 18px 22px;
     transition: border-color .2s;
   }
   .msg-assistant-card:hover { border-color: rgba(255,255,255,.12); }
