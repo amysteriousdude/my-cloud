@@ -59,6 +59,10 @@
   let loadingHistory = $state(false);
 
   // ── Utility helpers ──────────────────────────────────────────
+  function isRtl(text: string): boolean {
+    return /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\u0590-\u05FF]/.test(text);
+  }
+
   function escapeHtml(s: string): string {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
@@ -284,15 +288,15 @@
       while (i < lines.length) {
         const line = lines[i];
 
-        // ── Think block (reasoning) ────────────────────────
-        if (line.trimStart() === '<think>') {
+        // ── Think / Thought block (reasoning) ──────────────
+        if (line.trimStart() === '<think>' || line.trimStart() === '<thought>') {
           const thinkLines: string[] = [];
           i++;
-          while (i < lines.length && !lines[i].trimStart().startsWith('</think>')) {
+          while (i < lines.length && !lines[i].trimStart().startsWith('</think>') && !lines[i].trimStart().startsWith('</thought>')) {
             thinkLines.push(lines[i]);
             i++;
           }
-          if (i < lines.length && lines[i].trimStart().startsWith('</think>')) i++;
+          if (i < lines.length && (lines[i].trimStart().startsWith('</think>') || lines[i].trimStart().startsWith('</thought>'))) i++;
           const thinkId = `think-${Math.random().toString(36).slice(2, 8)}`;
           const thinkContent = thinkLines.join('\n').trim();
           if (thinkContent) {
@@ -1120,12 +1124,14 @@
       </div>
     {:else}
       {#each messages as msg, idx (idx)}
-        {#if msg.role === 'user'}
-          <div class="msg-user-wrap">
-            <div class="msg-user-bubble">{msg.content}</div>
-          </div>
+          {#if msg.role === 'user'}
+            {@const rtl = isRtl(msg.content)}
+            <div class="msg-user-wrap" class:rtl>
+              <div class="msg-user-bubble">{msg.content}</div>
+            </div>
         {:else}
-          <div class="msg-assistant-wrap">
+          {@const rtl = isRtl(msg.content)}
+          <div class="msg-assistant-wrap" class:rtl>
             <div class="msg-assistant-card">
               {#if msg.content}
                 <div class="md-rendered">{@html renderMarkdown(msg.content, msg.citations)}</div>
@@ -1255,6 +1261,8 @@
 
   /* ── User Message ────────────────────────────────────────── */
   .msg-user-wrap { display: flex; justify-content: flex-end; padding: 0 24px; }
+  .msg-user-wrap.rtl { justify-content: flex-start; }
+  .msg-user-wrap.rtl .msg-user-bubble { border-radius: 14px 14px 14px 4px; }
   .msg-user-bubble {
     max-width: 420px; padding: 9px 14px;
     background: var(--md-accent); color: #fff;
@@ -1265,6 +1273,7 @@
 
   /* ── Assistant Message (Document Card) ───────────────────── */
   .msg-assistant-wrap { display: flex; flex-direction: column; max-width: 1000px; width: 100%; margin: 0 auto; }
+  .msg-assistant-wrap.rtl .md-rendered { direction: rtl; text-align: right; }
   .msg-assistant-card {
     background: color-mix(in srgb, var(--md-surface) 85%, transparent);
     border: 1px solid var(--md-border);
