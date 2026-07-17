@@ -501,7 +501,7 @@
     </div>
     {#if hasCustomUtility}
       <button class="bb-mobile-nav-toggle" onclick={() => navExpanded = !navExpanded} aria-label="Toggle navigation tabs">
-        <IconChevronDown size={14} class:rotated={navExpanded} />
+        <span class:rotated={navExpanded}><IconChevronDown size={14} /></span>
       </button>
     {/if}
 
