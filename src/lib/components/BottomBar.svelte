@@ -986,7 +986,7 @@
   @keyframes spin { to { transform: rotate(360deg); } }
 
   /* ── Auto-hide ────────────────────────────────────────────── */
-  .bb-hover-zone { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 400px; height: 60px; z-index: 250; }
+  .bb-hover-zone { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 400px; height: 60px; z-index: 150; }
   .bb.auto-hide { transition: transform 0.35s cubic-bezier(.16,1,.3,1), opacity 0.3s ease; }
   .bb.auto-hide.hide-dock { pointer-events: none; }
   .bb.auto-hide.hide-dock.pos-bottom { transform: translateX(-50%) translateY(calc(100% + 32px)); opacity: 0; }

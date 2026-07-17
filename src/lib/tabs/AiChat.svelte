@@ -284,6 +284,26 @@
       while (i < lines.length) {
         const line = lines[i];
 
+        // ── Think block (reasoning) ────────────────────────
+        if (line.trimStart() === '<think>') {
+          const thinkLines: string[] = [];
+          i++;
+          while (i < lines.length && !lines[i].trimStart().startsWith('</think>')) {
+            thinkLines.push(lines[i]);
+            i++;
+          }
+          if (i < lines.length && lines[i].trimStart().startsWith('</think>')) i++;
+          const thinkId = `think-${Math.random().toString(36).slice(2, 8)}`;
+          const thinkContent = thinkLines.join('\n').trim();
+          if (thinkContent) {
+            html += `<details class="think-block" id="${thinkId}">
+              <summary class="think-summary"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> <span>Reasoning</span></summary>
+              <div class="think-content">${escapeHtml(thinkContent)}</div>
+            </details>`;
+          }
+          continue;
+        }
+
         // ── Fenced code block ────────────────────────────
         if (line.trimStart().startsWith('```')) {
           const lang = line.trimStart().slice(3).trim();
@@ -661,7 +681,8 @@
       if (!res.ok) throw new Error(`Failed to load models: ${res.status}`);
       const data = await res.json();
       const filtered = (data.data ?? []).filter((m: any) => {
-        const out = m.output_modalities ?? [];
+        const out = m.output_modalities;
+        if (!out || !Array.isArray(out) || out.length === 0) return true;
         return out.includes('text') && !out.includes('audio') && !out.includes('speech') && !out.includes('transcription');
       });
       filtered.sort((a: any, b: any) => (b.requests ?? 0) - (a.requests ?? 0));
@@ -1519,6 +1540,28 @@
   :global(.collapsible-list.open .collapsible-content) { max-height: 2000px; }
   :global(.collapsible-content ul), :global(.collapsible-content ol) {
     padding: 12px 16px 12px 36px; margin: 0;
+  }
+
+  /* ── Think / Reasoning Block ──────────────────────────────── */
+  :global(.think-block) {
+    margin: 12px 0; border-radius: 12px;
+    border: 1px solid var(--md-border);
+    background: color-mix(in srgb, var(--md-accent) 4%, var(--md-surface));
+    overflow: hidden;
+  }
+  :global(.think-summary) {
+    display: flex; align-items: center; gap: 6px;
+    padding: 8px 12px; cursor: pointer;
+    font-size: 11px; font-weight: 600; color: var(--md-text-2);
+    user-select: none; font-family: 'Geist', sans-serif;
+    transition: color .12s;
+  }
+  :global(.think-summary:hover) { color: var(--md-text); }
+  :global(.think-summary svg) { flex-shrink: 0; opacity: .6; }
+  :global(.think-content) {
+    padding: 0 12px 10px; font-size: 12px; line-height: 1.6;
+    color: var(--md-text-3); white-space: pre-wrap;
+    font-family: 'Geist', sans-serif;
   }
 
   /* ── Citations ───────────────────────────────────────────── */
