@@ -115,6 +115,7 @@
   let moreDragIdx = $state<number>(-1);
   let moreDragOverIdx = $state<number>(-1);
   let navExpanded = $state(false);
+  let navHovered = false;
   let navHoverTimeout: ReturnType<typeof setTimeout> | null = null;
   let showModelPopup = $state(false);
 
@@ -153,11 +154,13 @@
   let dockLeaveTimeout: ReturnType<typeof setTimeout> | null = null;
 
   function onBarNavEnter() {
+    navHovered = true;
     if (navHoverTimeout) { clearTimeout(navHoverTimeout); navHoverTimeout = null; }
     navExpanded = true;
   }
 
   function onBarNavLeave(_e: MouseEvent) {
+    navHovered = false;
     if (!hasCustomUtility) return;
     navHoverTimeout = setTimeout(() => { navExpanded = false; }, 300);
   }
@@ -338,11 +341,26 @@
     }
   }
 
+  let textareaEl = $state<HTMLTextAreaElement | null>(null);
+
+  function resizeTextarea() {
+    if (!textareaEl) return;
+    textareaEl.style.height = 'auto';
+    textareaEl.style.height = Math.min(textareaEl.scrollHeight, 100) + 'px';
+  }
+
+  $effect(() => {
+    if (textareaEl) {
+      const v = config?.input?.value;
+      resizeTextarea();
+    }
+  });
+
   $effect(() => { loadState(); });
 
   $effect(() => {
     if (config?.aiChat) {
-      navExpanded = false;
+      if (!navHovered) navExpanded = false;
     } else if (!hasCustomUtility) {
       navExpanded = true;
     }
@@ -644,10 +662,11 @@
   {#if hasInput}
     <div class="bb-input-section">
       <textarea
+        bind:this={textareaEl}
         class="bb-textarea"
         placeholder={config!.input!.placeholder}
         value={config!.input!.value}
-        oninput={(e) => config!.input!.oninput((e.target as HTMLTextAreaElement).value)}
+        oninput={(e) => { config!.input!.oninput((e.target as HTMLTextAreaElement).value); resizeTextarea(); }}
         onkeydown={handleInputKeydown}
         rows={1}
         disabled={config!.input!.loading}
@@ -908,10 +927,19 @@
   .bb-textarea:disabled { opacity: .5; }
 
   /* ── AI Provider pills ──────────────────────────────────────── */
-  .bb-ai-providers { display: flex; align-items: center; gap: 3px; }
+  .bb-ai-providers {
+    display: flex; align-items: center; gap: 3px;
+    max-width: 240px; overflow-x: auto; overflow-y: hidden;
+    scrollbar-width: none; flex-shrink: 0;
+    padding: 2px 0;
+  }
+  .bb-ai-providers::-webkit-scrollbar { display: none; }
+  .bb-ai-providers:hover { scrollbar-width: thin; }
+  .bb-ai-providers:hover::-webkit-scrollbar { display: block; width: 3px; height: 3px; }
+  .bb-ai-providers:hover::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
   .bb-ai-pill {
-    display: inline-flex; align-items: center; gap: 4px;
-    padding: 5px 10px; border-radius: 8px;
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 4px 8px; border-radius: 7px;
     border: 1px solid transparent;
     background: transparent;
     color: var(--text-3); font-size: 11px; font-weight: 600;

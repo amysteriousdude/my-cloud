@@ -719,8 +719,9 @@
     const btns: BarButton[] = [];
     if (isStreaming) {
       btns.push({ icon: IconPlayerStop, label: 'Stop', onClick: () => abortController?.abort(), danger: true });
+    } else {
+      btns.push({ icon: IconSend, label: 'Send', onClick: sendMessage, primary: true, disabled: !input.trim() || !selectedModel });
     }
-    btns.push({ icon: IconSend, label: 'Send', onClick: sendMessage, primary: true, disabled: !input.trim() || isStreaming || !selectedModel });
 
     const providers = PROVIDERS.map(p => ({
       id: p.id,
