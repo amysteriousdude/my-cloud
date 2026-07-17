@@ -929,7 +929,7 @@
   /* ── AI Provider pills ──────────────────────────────────────── */
   .bb-ai-providers {
     display: flex; align-items: center; gap: 3px;
-    max-width: 240px; overflow-x: auto; overflow-y: hidden;
+    max-width: 380px; overflow-x: auto; overflow-y: hidden;
     scrollbar-width: none; flex-shrink: 0;
     padding: 2px 0;
   }
@@ -1082,5 +1082,6 @@
     .bb-pill-tip.touch-visible { opacity: 1; }
     .bb-textarea { min-width: 120px; max-width: 200px; }
     .bb-mobile-nav-toggle { display: flex; }
+    .bb-ai-providers { max-width: 160px; }
   }
 </style>
