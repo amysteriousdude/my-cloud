@@ -485,6 +485,8 @@
   onmouseup={cancelDockDrag}
   ontouchend={cancelDockDrag}
   onmousemove={cancelDockDrag}
+  onmouseenter={() => { if (autoHide) dockHovered = true; }}
+  onmouseleave={() => { if (autoHide) dockHovered = false; }}
 >
   <!-- Nav section: cloud icon + expandable tabs -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -495,7 +497,7 @@
     </div>
 
     <!-- Expandable nav tabs -->
-    <div class="bb-nav-tabs" class:expanded={navExpanded || fullWidth}>
+    <div class="bb-nav-tabs" class:expanded={navExpanded}>
       <div class="bb-sep"></div>
       {#each mainTabs as tab, i (tab.id)}
         {@const active = activeTab === tab.id}
