@@ -138,6 +138,10 @@
     dockHoverTimeout = setTimeout(() => { dockHovered = false; }, 300);
   }
 
+  function onBarEnter() {
+    if (dockHoverTimeout) { clearTimeout(dockHoverTimeout); dockHoverTimeout = null; }
+  }
+
   function loadDockMode() {
     try {
       const mode = localStorage.getItem('dock-mode');
@@ -185,6 +189,7 @@
         bind:dockHovered
         config={barConfig}
         fullWidth={activeTab === 'ai'}
+        onbarenter={onBarEnter}
         oncycleTheme={cycleTheme}
         onlogout={logout}
         ontabchange={(t: Tab) => { activeTab = t; barConfig = null; }}

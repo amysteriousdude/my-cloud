@@ -5,6 +5,7 @@
     IconSun, IconMoon, IconDeviceDesktop, IconLogout, IconCloud,
     IconDots, IconX, IconSettings,
     IconDatabase, IconBrain, IconHistory, IconPlus, IconTrash, IconPlayerStop, IconAdjustments,
+    IconChevronDown,
   } from '@tabler/icons-svelte';
   import { env } from '$env/dynamic/public';
   const NAME = env.PUBLIC_NAME ?? "Omar";
@@ -71,6 +72,7 @@
     oncycleTheme,
     onlogout,
     ontabchange,
+    onbarenter,
   }: {
     user: { username: string } | null;
     theme: 'system' | 'light' | 'dark';
@@ -85,6 +87,7 @@
     oncycleTheme: () => void;
     onlogout: () => void;
     ontabchange: (t: Tab) => void;
+    onbarenter?: () => void;
   } = $props();
 
   const ALL_TABS: { id: Tab; icon: any; label: string }[] = [
@@ -125,7 +128,6 @@
   let hasAiChat = $derived(!!config?.aiChat);
   let hasProviders = $derived(!!config?.aiChat?.providers && config!.aiChat!.providers!.length > 0);
   let hasChatActions = $derived(!!config?.aiChat?.chatActions && config!.aiChat!.chatActions!.length > 0);
-  let showSystemPrompt = $derived(!!config?.aiChat?.systemPrompt || config?.aiChat?.systemPrompt === '' || !!config?.aiChat?.onSystemPromptInput);
 
   // ── Hover tooltip state ────────────────────────────────────────
   let hoverTabId = $state<string | null>(null);
@@ -337,7 +339,9 @@
   $effect(() => { loadState(); });
 
   $effect(() => {
-    if (!hasCustomUtility || fullWidth) {
+    if (config?.aiChat) {
+      navExpanded = false;
+    } else if (!hasCustomUtility) {
       navExpanded = true;
     }
   });
@@ -485,7 +489,7 @@
   onmouseup={cancelDockDrag}
   ontouchend={cancelDockDrag}
   onmousemove={cancelDockDrag}
-  onmouseenter={() => { if (autoHide) dockHovered = true; }}
+  onmouseenter={() => { if (autoHide) dockHovered = true; onbarenter?.(); }}
   onmouseleave={() => { if (autoHide) dockHovered = false; }}
 >
   <!-- Nav section: cloud icon + expandable tabs -->
@@ -495,6 +499,11 @@
     <div class="bb-brand">
       <IconCloud size={16} stroke={1.5}/>
     </div>
+    {#if hasCustomUtility}
+      <button class="bb-mobile-nav-toggle" onclick={() => navExpanded = !navExpanded} aria-label="Toggle navigation tabs">
+        <IconChevronDown size={14} class:rotated={navExpanded} />
+      </button>
+    {/if}
 
     <!-- Expandable nav tabs -->
     <div class="bb-nav-tabs" class:expanded={navExpanded}>
@@ -593,7 +602,6 @@
         {#if sel.variant === 'model'}
           <div class="bb-model-picker" style={sel.accent ? `--model-accent:${sel.accent}` : ''}>
             <span class="bb-model-dot"></span>
-            <span class="bb-model-label">{sel.label}</span>
             <select class="bb-model-select" value={sel.value} onchange={(e) => sel.onchange((e.target as HTMLSelectElement).value)}>
               {#each sel.options as opt}
                 <option value={opt.value}>{opt.label}</option>
@@ -611,20 +619,6 @@
           </div>
         {/if}
       {/each}
-    </div>
-    <div class="bb-sep"></div>
-  {/if}
-
-  <!-- AI System prompt (inline) -->
-  {#if hasAiChat && config!.aiChat?.onSystemPromptInput}
-    <div class="bb-system-prompt-wrap">
-      <input
-        class="bb-system-prompt-input"
-        type="text"
-        placeholder="System prompt..."
-        value={config!.aiChat!.systemPrompt ?? ''}
-        oninput={(e) => config!.aiChat!.onSystemPromptInput!((e.target as HTMLInputElement).value)}
-      />
     </div>
     <div class="bb-sep"></div>
   {/if}
@@ -833,6 +827,14 @@
     cursor: pointer;
   }
 
+  .bb-mobile-nav-toggle {
+    display: none; align-items: center; justify-content: center;
+    background: none; border: none; color: var(--text-3); cursor: pointer;
+    padding: 4px; border-radius: 6px; flex-shrink: 0;
+    transition: transform .2s cubic-bezier(.16,1,.3,1);
+  }
+  .bb-mobile-nav-toggle .rotated { transform: rotate(180deg); }
+
   .bb-nav-tabs {
     display: flex; align-items: center; gap: 2px;
     max-width: 0; overflow: hidden; opacity: 0;
@@ -910,17 +912,6 @@
   /* ── AI Chat actions ────────────────────────────────────────── */
   .bb-ai-actions { display: flex; align-items: center; gap: 2px; }
 
-  /* ── System prompt ──────────────────────────────────────────── */
-  .bb-system-prompt-wrap { flex: 0 0 auto; }
-  .bb-system-prompt-input {
-    width: 160px; background: var(--bg-3); border: 1px solid var(--border);
-    border-radius: 8px; padding: 5px 10px; outline: none;
-    color: var(--text-1); font-size: 12px; font-family: 'Geist', sans-serif;
-    transition: border-color .12s;
-  }
-  .bb-system-prompt-input::placeholder { color: var(--text-3); }
-  .bb-system-prompt-input:focus { border-color: var(--accent); }
-
   /* ── Selects section ──────────────────────────────────────────── */
   .bb-selects-section { display: flex; align-items: center; gap: 6px; }
 
@@ -939,31 +930,27 @@
   }
   .bb-select option { background: var(--bg-2); color: var(--text-1); }
 
-  /* ── Model Picker (unique variant) ─────────────────────────── */
+  /* ── Model Picker (compact pill) ──────────────────────────── */
   .bb-model-picker {
-    display: flex; align-items: center; gap: 6px;
+    display: flex; align-items: center; gap: 4px;
     background: color-mix(in srgb, var(--model-accent, var(--accent)) 10%, var(--bg-2));
-    border: 1px solid color-mix(in srgb, var(--model-accent, var(--accent)) 25%, var(--border));
-    border-radius: 10px; padding: 4px 10px 4px 8px;
-    position: relative; transition: all .15s;
+    border: 1px solid color-mix(in srgb, var(--model-accent, var(--accent)) 20%, var(--border));
+    border-radius: 8px; padding: 3px 6px 3px 4px;
+    transition: all .15s;
   }
   .bb-model-picker:hover {
-    border-color: color-mix(in srgb, var(--model-accent, var(--accent)) 50%, transparent);
-    box-shadow: 0 0 16px color-mix(in srgb, var(--model-accent, var(--accent)) 15%, transparent);
+    border-color: color-mix(in srgb, var(--model-accent, var(--accent)) 40%, transparent);
+    box-shadow: 0 0 12px color-mix(in srgb, var(--model-accent, var(--accent)) 12%, transparent);
   }
   .bb-model-dot {
-    width: 8px; height: 8px; border-radius: 50%;
+    width: 6px; height: 6px; border-radius: 50%;
     background: var(--model-accent, var(--accent));
-    flex-shrink: 0; box-shadow: 0 0 6px color-mix(in srgb, var(--model-accent, var(--accent)) 40%, transparent);
-  }
-  .bb-model-label {
-    font-size: 10px; font-weight: 600; color: var(--text-3);
-    text-transform: uppercase; letter-spacing: .4px; white-space: nowrap;
+    flex-shrink: 0;
   }
   .bb-model-select {
     background: transparent; border: none; outline: none;
-    color: var(--text-1); font-size: 12px; font-family: 'Geist', sans-serif;
-    cursor: pointer; max-width: 220px; font-weight: 500;
+    color: var(--text-1); font-size: 11px; font-family: 'Geist', sans-serif;
+    cursor: pointer; max-width: 130px; font-weight: 500; padding: 0;
   }
   .bb-model-select option { background: var(--bg-2); color: var(--text-1); }
 
@@ -1017,5 +1004,6 @@
     .bb-pill-tip { opacity: 0; pointer-events: none; transition: opacity .15s; }
     .bb-pill-tip.touch-visible { opacity: 1; }
     .bb-textarea { min-width: 120px; max-width: 200px; }
+    .bb-mobile-nav-toggle { display: flex; }
   }
 </style>

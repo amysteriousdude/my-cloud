@@ -22,14 +22,12 @@
   let historyFolderId = $state<string | null>(null);
 
   const PROVIDERS = [
-    { id: 'deepseek', label: 'DeepSeek', color: '#4f46e5', apiBase: 'https://g4f.space' },
     { id: 'pollinations', label: 'Pollinations', color: '#a855f7', apiBase: 'https://g4f.space' },
     { id: 'groq', label: 'Groq', color: '#f97316', apiBase: 'https://g4f.space' },
     { id: 'ollama', label: 'Ollama', color: '#14b8a6', apiBase: 'https://g4f.space' },
     { id: 'nvidia', label: 'Nvidia', color: '#76B900', apiBase: 'https://g4f.space' },
     { id: 'gemini', label: 'Gemini', color: '#3b82f6', apiBase: 'https://g4f.space' },
   ];
-
   let selectedProvider = $state(PROVIDERS[0]);
   let models = $state<any[]>([]);
   let selectedModel = $state('');
@@ -717,8 +715,6 @@
       aiChat: {
         providers,
         chatActions,
-        systemPrompt,
-        onSystemPromptInput: (v: string) => { systemPrompt = v; systemPromptVersion++; },
       },
       selects: [{
         value: selectedModel,
@@ -1051,6 +1047,11 @@
         </div>
         <div class="ai-extras-body">
           <div class="ai-extras-group">
+            <label class="ai-extras-label">System Prompt</label>
+            <textarea class="ai-extras-textarea" placeholder="Optional system prompt..." value={systemPrompt} oninput={(e) => { systemPrompt = (e.target as HTMLTextAreaElement).value; systemPromptVersion++; }} rows={2}></textarea>
+          </div>
+          <div class="ai-extras-divider"></div>
+          <div class="ai-extras-group">
             <label class="ai-extras-label">Temperature <span class="ai-extras-val">{temperature.toFixed(1)}</span></label>
             <input type="range" class="ai-extras-range" min="0" max="2" step="0.1" bind:value={temperature} />
           </div>
@@ -1199,7 +1200,6 @@
     background: color-mix(in srgb, var(--md-bg) 92%, transparent);
     backdrop-filter: blur(20px) saturate(1.3);
     color: var(--md-text);
-    border: 1px solid var(--md-border);
     border-radius: 20px;
     box-shadow: 0 24px 80px rgba(0,0,0,.5), 0 0 0 1px color-mix(in srgb, var(--md-border) 40%, transparent);
     z-index: 190;
@@ -1660,6 +1660,14 @@
     color: var(--md-text); font-size: 12px; font-family: 'Geist Mono', monospace;
   }
   .ai-extras-number:focus { border-color: var(--md-accent); }
+  .ai-extras-textarea {
+    width: 100%; background: var(--md-elevated); border: 1px solid var(--md-border);
+    border-radius: 8px; padding: 6px 10px; outline: none; resize: vertical;
+    color: var(--md-text); font-size: 12px; font-family: 'Geist', sans-serif;
+    line-height: 1.5; min-height: 40px;
+  }
+  .ai-extras-textarea:focus { border-color: var(--md-accent); }
+  .ai-extras-textarea::placeholder { color: var(--md-text-3); }
   .ai-extras-divider { border-top: 1px solid var(--md-border); }
   .ai-extras-toggle-row {
     display: flex; align-items: center; justify-content: space-between;
