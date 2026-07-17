@@ -149,6 +149,7 @@
 
   // ── Nav expand on cloud hover ────────────────────────────────
   let bbEl: HTMLDivElement | null = null;
+  let dockLeaveTimeout: ReturnType<typeof setTimeout> | null = null;
 
   function onBarNavEnter() {
     if (navHoverTimeout) { clearTimeout(navHoverTimeout); navHoverTimeout = null; }
@@ -489,8 +490,8 @@
   onmouseup={cancelDockDrag}
   ontouchend={cancelDockDrag}
   onmousemove={cancelDockDrag}
-  onmouseenter={() => { if (autoHide) dockHovered = true; onbarenter?.(); }}
-  onmouseleave={() => { if (autoHide) dockHovered = false; }}
+  onmouseenter={() => { if (autoHide) { if (dockLeaveTimeout) clearTimeout(dockLeaveTimeout); dockHovered = true; } onbarenter?.(); }}
+  onmouseleave={() => { if (autoHide) { dockLeaveTimeout = setTimeout(() => { dockHovered = false; }, 300); } }}
 >
   <!-- Nav section: cloud icon + expandable tabs -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
