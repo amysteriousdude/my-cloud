@@ -22,6 +22,7 @@
   let historyFolderId = $state<string | null>(null);
 
   const PROVIDERS = [
+    { id: 'deepseek', label: 'DeepSeek', color: '#4f46e5', apiBase: 'https://g4f.space' },
     { id: 'pollinations', label: 'Pollinations', color: '#a855f7', apiBase: 'https://g4f.space' },
     { id: 'groq', label: 'Groq', color: '#f97316', apiBase: 'https://g4f.space' },
     { id: 'ollama', label: 'Ollama', color: '#14b8a6', apiBase: 'https://g4f.space' },

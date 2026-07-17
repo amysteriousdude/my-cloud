@@ -153,14 +153,8 @@
     navExpanded = true;
   }
 
-  function onBarNavLeave(e: MouseEvent) {
-    if (fullWidth) return;
-    // Only collapse if cursor truly left the .bb region (not moving between children)
-    const related = e.relatedTarget as HTMLElement | null;
-    if (related && bbEl?.contains(related)) return;
-    // Also check if something inside still has focus
-    const active = document.activeElement as HTMLElement | null;
-    if (active && bbEl?.contains(active)) return;
+  function onBarNavLeave(_e: MouseEvent) {
+    if (!hasCustomUtility) return;
     navHoverTimeout = setTimeout(() => { navExpanded = false; }, 300);
   }
 
@@ -491,11 +485,10 @@
   onmouseup={cancelDockDrag}
   ontouchend={cancelDockDrag}
   onmousemove={cancelDockDrag}
-  onmouseenter={() => { if (autoHide) dockHovered = true; onBarNavEnter(); }}
-  onmouseleave={(e) => { if (autoHide) dockHovered = false; onBarNavLeave(e); }}
 >
   <!-- Nav section: cloud icon + expandable tabs -->
-  <div class="bb-nav-section">
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="bb-nav-section" onmouseenter={onBarNavEnter} onmouseleave={onBarNavLeave}>
     <!-- Brand / cloud icon (always visible) -->
     <div class="bb-brand">
       <IconCloud size={16} stroke={1.5}/>
