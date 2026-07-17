@@ -27,6 +27,7 @@
     { id: 'ollama', label: 'Ollama', color: '#14b8a6', apiBase: 'https://g4f.space' },
     { id: 'nvidia', label: 'Nvidia', color: '#76B900', apiBase: 'https://g4f.space' },
     { id: 'gemini', label: 'Gemini', color: '#3b82f6', apiBase: 'https://g4f.space' },
+    { id: 'custom', label: 'Custom', color: '#ec4899', apiBase: 'https://g4f.space/custom/srv_mrgynwuz08a167112109' },
   ];
   let selectedProvider = $state(PROVIDERS[0]);
   let models = $state<any[]>([]);
@@ -680,7 +681,9 @@
     models = [];
     selectedModel = '';
     try {
-      const url = `${selectedProvider.apiBase}/api/${selectedProvider.id}/models`;
+      const url = selectedProvider.id === 'custom'
+        ? `${selectedProvider.apiBase}/models`
+        : `${selectedProvider.apiBase}/api/${selectedProvider.id}/models`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`Failed to load models: ${res.status}`);
       const data = await res.json();
@@ -743,7 +746,7 @@
       },
       selects: [{
         value: selectedModel,
-        options: models.map(m => ({ value: m.id, label: getDisplayName(m) })),
+        options: models.map(m => ({ value: m.id, label: getDisplayName(m), owner: getOwner(m.id) })),
         onchange: (v: string) => { selectedModel = v; },
         label: loadingModels ? 'Loading...' : 'Model',
         variant: 'model',
@@ -762,6 +765,12 @@
 
   function updateBarConfig() {
     buildBarConfig();
+  }
+
+  function chatUrl(provider: typeof PROVIDERS[0]): string {
+    return provider.id === 'custom'
+      ? `${provider.apiBase}/chat/completions`
+      : `${provider.apiBase}/v1/chat/completions`;
   }
 
   async function sendMessage() {
@@ -795,7 +804,7 @@
       let res: Response | null = null;
       const MAX_RETRIES = 3;
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-        res = await fetch(`${selectedProvider.apiBase}/v1/chat/completions`, {
+        res = await fetch(chatUrl(selectedProvider), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ model: selectedModel, messages: apiMessages, stream: false }),
@@ -844,7 +853,7 @@
     const firstAssistantMsg = messages.find(m => m.role === 'assistant')?.content.slice(0, 500) ?? '';
     const titlePrompt = `Generate a concise title (2-6 words) summarizing this conversation. Plain text only, no markdown, no quotes, no punctuation at the end.\n\nUser: ${firstUserMsg}\nAssistant: ${firstAssistantMsg}`;
     try {
-      const res = await fetch(`${selectedProvider.apiBase}/v1/chat/completions`, {
+      const res = await fetch(chatUrl(selectedProvider), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model: selectedModel, messages: [{ role: 'user', content: titlePrompt }], stream: false }),

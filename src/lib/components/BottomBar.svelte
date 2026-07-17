@@ -23,7 +23,7 @@
 
   type BarSelect = {
     value: string;
-    options: { value: string; label: string }[];
+    options: { value: string; label: string; owner?: string }[];
     onchange: (v: string) => void;
     label?: string;
     variant?: 'model' | 'default';
@@ -116,6 +116,7 @@
   let moreDragOverIdx = $state<number>(-1);
   let navExpanded = $state(false);
   let navHoverTimeout: ReturnType<typeof setTimeout> | null = null;
+  let showModelPopup = $state(false);
 
   let mainTabIds = $state<Tab[]>(['files', 'generators', 'translator', 'draw']);
   let mainTabs = $derived(ALL_TABS.filter(t => mainTabIds.includes(t.id)));
@@ -351,6 +352,7 @@
     const target = e.target as HTMLElement;
     if (!target.closest('.bb-more-overlay') && !target.closest('.bb-more-btn')) showMore = false;
     if (!target.closest('.bb-user-panel') && !target.closest('.bb-avatar-item')) showUser = false;
+    if (!target.closest('.bb-model-picker')) showModelPopup = false;
   }
 
   function handleOutsideTouch(e: TouchEvent) {
@@ -601,13 +603,27 @@
     <div class="bb-selects-section">
       {#each config!.selects! as sel}
         {#if sel.variant === 'model'}
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div class="bb-model-picker" style={sel.accent ? `--model-accent:${sel.accent}` : ''}>
             <span class="bb-model-dot"></span>
-            <select class="bb-model-select" value={sel.value} onchange={(e) => sel.onchange((e.target as HTMLSelectElement).value)}>
-              {#each sel.options as opt}
-                <option value={opt.value}>{opt.label}</option>
-              {/each}
-            </select>
+            <button class="bb-model-btn" onclick={() => showModelPopup = !showModelPopup}>
+              <span class="bb-model-name">{sel.options.find(o => o.value === sel.value)?.label ?? 'Select model'}</span>
+              <svg class="bb-model-chevron" class:open={showModelPopup} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            {#if showModelPopup}
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <div class="bb-model-popup" class:pos-top={position === 'top'} onclick={(e) => e.stopPropagation()}>
+                <div class="bb-model-popup-header">Models</div>
+                <div class="bb-model-popup-list">
+                  {#each sel.options as opt}
+                    <button class="bb-model-opt" class:active={opt.value === sel.value} onclick={() => { sel.onchange(opt.value); showModelPopup = false; }}>
+                      <span class="bb-model-opt-name">{opt.label}</span>
+                      {#if opt.owner}<span class="bb-model-opt-owner">{opt.owner}</span>{/if}
+                    </button>
+                  {/each}
+                </div>
+              </div>
+            {/if}
           </div>
         {:else}
           <div class="bb-select-wrap">
@@ -797,8 +813,9 @@
     border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
     box-shadow: 0 8px 32px rgba(0,0,0,.35), inset 0 1px 0 color-mix(in srgb, var(--bg-1) 30%, transparent);
     transition: all .24s cubic-bezier(.16,1,.3,1);
-    user-select: none; padding: 6px 8px;
+    user-select: none; padding: 6px 10px;
     transform-origin: center bottom;
+    gap: 2px;
   }
   .bb:hover {
     box-shadow: 0 12px 44px rgba(0,0,0,.45), inset 0 1px 0 color-mix(in srgb, var(--bg-1) 30%, transparent);
@@ -808,12 +825,12 @@
   /* Position variants */
   .bb.pos-bottom { bottom: 16px; left: 50%; transform: translateX(-50%) scale(.98); border-radius: 999px; }
   .bb.pos-bottom:hover { transform: translateX(-50%) scale(1); }
-  .bb.pos-bottom.full-width { left: 16px; right: 16px; transform: none; border-radius: 16px; max-width: none; padding: 6px 12px; }
-  .bb.pos-bottom.full-width:hover { transform: none; }
+  .bb.pos-bottom.full-width { left: 50%; transform: translateX(-50%); border-radius: 16px; max-width: min(920px, calc(100vw - 32px)); padding: 8px 14px; width: 100%; }
+  .bb.pos-bottom.full-width:hover { transform: translateX(-50%); }
   .bb.pos-top { top: 16px; left: 50%; transform: translateX(-50%) scale(.98); border-radius: 999px; }
   .bb.pos-top:hover { transform: translateX(-50%) scale(1); }
-  .bb.pos-top.full-width { left: 16px; right: 16px; transform: none; border-radius: 16px; max-width: none; padding: 6px 12px; }
-  .bb.pos-top.full-width:hover { transform: none; }
+  .bb.pos-top.full-width { left: 50%; transform: translateX(-50%); border-radius: 16px; max-width: min(920px, calc(100vw - 32px)); padding: 8px 14px; width: 100%; }
+  .bb.pos-top.full-width:hover { transform: translateX(-50%); }
   .bb.pos-left { left: 16px; top: 50%; transform: translateY(-50%) scale(.98); border-radius: 999px; flex-direction: column; }
   .bb.pos-left:hover { transform: translateY(-50%) scale(1); }
   .bb.pos-right { right: 16px; top: 50%; transform: translateY(-50%) scale(.98); border-radius: 999px; flex-direction: column; }
@@ -881,10 +898,10 @@
   .bb-input-section { display: flex; align-items: center; flex: 1; min-width: 150px; }
 
   .bb-textarea {
-    width: 100%; min-width: 200px; max-width: 400px;
+    width: 100%; min-width: 200px; max-width: 500px;
     background: transparent; border: none; outline: none;
     color: var(--text-1); font-size: 13px; font-family: 'Geist', sans-serif;
-    padding: 4px 8px; resize: none; line-height: 1.4;
+    padding: 6px 8px; resize: none; line-height: 1.4;
     max-height: 100px; overflow-y: auto;
   }
   .bb-textarea::placeholder { color: var(--text-3); }
@@ -937,7 +954,7 @@
     background: color-mix(in srgb, var(--model-accent, var(--accent)) 10%, var(--bg-2));
     border: 1px solid color-mix(in srgb, var(--model-accent, var(--accent)) 20%, var(--border));
     border-radius: 8px; padding: 3px 6px 3px 4px;
-    transition: all .15s;
+    transition: all .15s; position: relative;
   }
   .bb-model-picker:hover {
     border-color: color-mix(in srgb, var(--model-accent, var(--accent)) 40%, transparent);
@@ -948,12 +965,43 @@
     background: var(--model-accent, var(--accent));
     flex-shrink: 0;
   }
-  .bb-model-select {
-    background: transparent; border: none; outline: none;
-    color: var(--text-1); font-size: 11px; font-family: 'Geist', sans-serif;
-    cursor: pointer; max-width: 130px; font-weight: 500; padding: 0;
+  .bb-model-btn {
+    display: flex; align-items: center; gap: 3px;
+    background: none; border: none; color: var(--text-1);
+    font-size: 11px; font-family: 'Geist', sans-serif; cursor: pointer;
+    font-weight: 500; padding: 0; white-space: nowrap;
   }
-  .bb-model-select option { background: var(--bg-2); color: var(--text-1); }
+  .bb-model-chevron { transition: transform .2s; color: var(--text-3); }
+  .bb-model-chevron.open { transform: rotate(180deg); }
+  .bb-model-popup {
+    position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+    background: var(--bg-2); border: 1px solid var(--border);
+    border-radius: 12px; min-width: 260px; max-width: 340px;
+    max-height: 320px; overflow-y: auto;
+    box-shadow: 0 12px 48px rgba(0,0,0,.5);
+    z-index: 300; animation: popupIn .15s ease-out;
+  }
+  .bb-model-popup.pos-top { bottom: auto; top: calc(100% + 8px); }
+  @keyframes popupIn {
+    from { opacity: 0; transform: translateX(-50%) translateY(8px) scale(.96); }
+    to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+  }
+  .bb-model-popup-header {
+    padding: 10px 12px 6px; font-size: 10px; font-weight: 600;
+    color: var(--text-3); text-transform: uppercase; letter-spacing: .4px;
+    position: sticky; top: 0; background: var(--bg-2);
+  }
+  .bb-model-popup-list { display: flex; flex-direction: column; padding: 0 4px 4px; gap: 1px; }
+  .bb-model-opt {
+    display: flex; flex-direction: column; gap: 1px;
+    padding: 8px 10px; border-radius: 8px; border: none;
+    background: none; cursor: pointer; text-align: left;
+    transition: background .1s; font-family: 'Geist', sans-serif;
+  }
+  .bb-model-opt:hover { background: var(--hover); }
+  .bb-model-opt.active { background: color-mix(in srgb, var(--model-accent, var(--accent)) 10%, transparent); }
+  .bb-model-opt-name { font-size: 12px; font-weight: 500; color: var(--text-1); }
+  .bb-model-opt-owner { font-size: 10px; color: var(--text-3); }
 
   /* ── Action buttons section ────────────────────────────────────── */
   .bb-actions-section { display: flex; align-items: center; gap: 4px; }
