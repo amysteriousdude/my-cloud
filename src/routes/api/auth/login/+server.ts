@@ -12,10 +12,18 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
     });
 
   const rec = await getRecordByApiKey(apiKey);
-  if (!rec)
+  if (!rec) {
+    const { readIndex } = await import('$lib/telegramStorage');
+    const index = await readIndex();
+    console.log('[login debug] received apiKey:', JSON.stringify(apiKey));
+    console.log('[login debug] index keys:', Object.keys(index).length);
+    for (const r of Object.values(index)) {
+      console.log('[login debug] stored apiKey:', JSON.stringify(r.apiKey), 'match:', r.apiKey === apiKey);
+    }
     return new Response(JSON.stringify({ error: 'Invalid token' }), {
       status: 403, headers: { 'Content-Type': 'application/json' }
     });
+  }
 
   const encrypted = encrypt(apiKey);
 
