@@ -19,11 +19,17 @@ async function getTgUrl(fileId: string): Promise<string | null> {
   try {
     const r = await fetch(`${TELE_API}/getFile?file_id=${encodeURIComponent(fileId)}`);
     const j = await r.json() as any;
-    if (!j?.ok) return null;
+    if (!j?.ok) {
+      console.error(`getTgUrl failed for ${fileId}: ${j?.description || j?.error_code || 'unknown'}`);
+      return null;
+    }
     const url = `https://api.telegram.org/file/bot${BOT_TOKEN}/${j.result.file_path}`;
     cdnUrlCache.set(fileId, { url, exp: Date.now() + CDN_URL_TTL });
     return url;
-  } catch { return null; }
+  } catch (e) {
+    console.error(`getTgUrl error for ${fileId}:`, (e as Error).message);
+    return null;
+  }
 }
 
 function delay(ms: number): Promise<void> {
@@ -90,11 +96,11 @@ function parseRange(range: string | null, size: number) {
 
 async function fetchMetaJson(metaFileId: string): Promise<any> {
   const metaRes = await fetch(`${TELE_API}/getFile?file_id=${encodeURIComponent(metaFileId)}`);
-  const metaJson = await metaRes.json();
-  if (!metaJson?.ok) throw new Error('Meta file lookup failed');
+  const metaJson = await metaRes.json() as any;
+  if (!metaJson?.ok) throw new Error(`Meta getFile failed: ${metaJson?.description || metaJson?.error_code || 'unknown'}`);
   const metaUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${metaJson.result.file_path}`;
   const res = await fetch(metaUrl);
-  if (!res.ok) throw new Error(`Meta download failed: ${res.status}`);
+  if (!res.ok) throw new Error(`Meta download failed: ${res.status} ${res.statusText}`);
   return await res.json();
 }
 

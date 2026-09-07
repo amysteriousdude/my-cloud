@@ -29,6 +29,7 @@ export type FileRecord = {
   sortOrder?: number;
   folderId?: string;
   compressed?: boolean;
+  publicSlug?: string;
   _type?: 'folder';
   name?: string;
   parentId?: string;
@@ -61,7 +62,10 @@ async function downloadFileId(fileId: string, responseType: 'arraybuffer'): Prom
 async function downloadFileId(fileId: string, responseType: 'text' | 'arraybuffer'): Promise<any> {
   if (!TELE_API) throw new Error('Telegram not configured');
   const r1 = await axios.get(`${TELE_API}/getFile`, { params: { file_id: fileId } });
-  if (!r1.data?.ok) throw new Error('getFile failed');
+  if (!r1.data?.ok) {
+    const desc = r1.data?.description || r1.data?.error_code || 'unknown';
+    throw new Error(`getFile failed for ${fileId}: ${desc}`);
+  }
   const fileUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${r1.data.result.file_path}`;
   const r2 = await axios.get(fileUrl, { responseType });
   return responseType === 'arraybuffer' ? Buffer.from(r2.data) : r2.data;
@@ -304,7 +308,10 @@ export async function readRegistry(): Promise<Record<string, FileRecord>> {
 
 async function readRegistryInner(retry: boolean): Promise<Record<string, FileRecord>> {
   const ptr = await getRegistryPtr();
-  if (!ptr) return {};
+  if (!ptr) {
+    console.error('telegramStorage.readRegistry: no registry pointer found in index');
+    return {};
+  }
 
   const local = await getLocalCache();
   if (local.registryData && local.registryPtr?.file_id === ptr.file_id) {
@@ -319,11 +326,12 @@ async function readRegistryInner(retry: boolean): Promise<Record<string, FileRec
     await updateLocalCache({ registryData: result, registryPtr: ptr });
     return result;
   } catch (err) {
+    const msg = (err as any).message || err;
     if (retry) {
-      console.warn('telegramStorage.readRegistry: failed on retry', (err as any).message || err);
+      console.error('telegramStorage.readRegistry: failed on retry:', msg);
       return {};
     }
-    console.warn('telegramStorage.readRegistry: failed, retrying with cleared cache', (err as any).message || err);
+    console.warn('telegramStorage.readRegistry: failed, retrying with cleared cache:', msg);
     await updateLocalCache({ registryData: undefined, registryPtr: undefined });
     return readRegistryInner(true);
   }
@@ -387,6 +395,9 @@ export async function setFilePublicity(metaFileId: string, isPublic: boolean): P
     const registry = await readRegistry() ?? {};
     if (!registry[metaFileId]) return false;
     registry[metaFileId].public = isPublic;
+    if (isPublic && !registry[metaFileId].publicSlug) {
+      registry[metaFileId].publicSlug = normalizePublicPath(walkFilePath(registry[metaFileId], registry));
+    }
     await writeRegistryInternal(registry);
     return true;
   } finally {
@@ -645,7 +656,22 @@ export async function getPublicFileByPath(fullPath: string): Promise<FileRecord 
 
   if (exact.length > 0) {
     exact.sort((a, b) => new Date(b.time || 0).getTime() - new Date(a.time || 0).getTime());
-    return exact[0];
+    const best = exact[0];
+    if (!best.publicSlug) {
+      best.publicSlug = normalizePublicPath(walkFilePath(best, registry));
+      await writeRegistryInternal(registry);
+    }
+    return best;
+  }
+
+  const slugMatch = allFiles.filter((file) => {
+    if (!isFilePublic(file, registry)) return false;
+    return file.publicSlug && normalizePublicPath(file.publicSlug) === targetPath;
+  });
+
+  if (slugMatch.length > 0) {
+    slugMatch.sort((a, b) => new Date(b.time || 0).getTime() - new Date(a.time || 0).getTime());
+    return slugMatch[0];
   }
 
   const parts = targetPath.split('/').filter(Boolean);
