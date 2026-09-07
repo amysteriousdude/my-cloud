@@ -185,12 +185,20 @@ async function readIndexFileInner(retry: boolean): Promise<IndexFile> {
   const pinned = await getPinnedMessage();
   const pinnedMsgId = pinned?.message_id || 0;
 
+  console.log('[readIndex debug] pinned msg id:', pinnedMsgId);
+  console.log('[readIndex debug] pinned keys:', pinned ? Object.keys(pinned) : 'null');
+  console.log('[readIndex debug] pinned.document:', pinned?.document ? Object.keys(pinned.document) : 'null/undefined');
+
   const local = await getLocalCache();
   if (local.indexFile && local.pinned_message_id && local.pinned_message_id >= pinnedMsgId) {
+    console.log('[readIndex debug] returning cached index');
     return local.indexFile;
   }
 
-  if (!pinned?.document?.file_id) return { keys: {} };
+  if (!pinned?.document?.file_id) {
+    console.log('[readIndex debug] no document.file_id on pinned message, returning empty');
+    return { keys: {} };
+  }
 
   try {
     const text = await downloadFileId(pinned.document.file_id, 'text');
