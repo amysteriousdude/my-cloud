@@ -11,7 +11,12 @@ export const load: LayoutServerLoad = async ({ cookies }) => {
   const apiKey = decrypt(session);
   if (!apiKey) throw redirect(302, '/');
 
-  const rec = await getRecordByApiKey(apiKey);
+  let rec;
+  try {
+    rec = await getRecordByApiKey(apiKey);
+  } catch {
+    throw redirect(302, '/');
+  }
   if (!rec) throw redirect(302, '/');
 
   return {

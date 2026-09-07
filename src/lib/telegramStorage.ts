@@ -46,11 +46,7 @@ if (!BOT_TOKEN || !CHAT_ID) {
 
 async function getChatInfo(): Promise<any> {
   if (!TELE_API) throw new Error('Telegram not configured');
-  console.log('[getChatInfo] CHAT_ID:', CHAT_ID);
   const res = await axios.get(`${TELE_API}/getChat`, { params: { chat_id: CHAT_ID } });
-  console.log('[getChatInfo] ok:', res.data?.ok);
-  console.log('[getChatInfo] has pinned_message:', 'pinned_message' in (res.data?.result || {}));
-  console.log('[getChatInfo] pinned_message:', res.data?.result?.pinned_message ? 'exists' : 'null/missing');
   if (!res.data?.ok) throw new Error('getChat failed');
   return res.data.result;
 }
@@ -189,19 +185,13 @@ async function readIndexFileInner(retry: boolean): Promise<IndexFile> {
   const pinned = await getPinnedMessage();
   const pinnedMsgId = pinned?.message_id || 0;
 
-  console.log('[readIndex debug] pinned msg id:', pinnedMsgId);
-  console.log('[readIndex debug] pinned keys:', pinned ? Object.keys(pinned) : 'null');
-  console.log('[readIndex debug] pinned.document:', pinned?.document ? Object.keys(pinned.document) : 'null/undefined');
-
   const local = await getLocalCache();
   if (local.indexFile && local.pinned_message_id && local.pinned_message_id >= pinnedMsgId) {
-    console.log('[readIndex debug] returning cached index');
     return local.indexFile;
   }
 
   if (!pinned?.document?.file_id) {
-    console.log('[readIndex debug] no document.file_id on pinned message, returning empty');
-    return { keys: {} };
+    throw new Error('No pinned index file found. The Telegram chat may have been migrated or the pinned message was removed.');
   }
 
   try {
@@ -213,10 +203,8 @@ async function readIndexFileInner(retry: boolean): Promise<IndexFile> {
     return result;
   } catch (err) {
     if (retry) {
-      console.warn('telegramStorage.readIndexFile: failed on retry', (err as any).message || err);
-      return { keys: {} };
+      throw new Error('Failed to load index file from Telegram: ' + ((err as any).message || err));
     }
-    console.warn('telegramStorage.readIndexFile: failed, retrying with cleared cache', (err as any).message || err);
     await updateLocalCache({ pinned_message_id: undefined, indexFile: undefined });
     return readIndexFileInner(true);
   }

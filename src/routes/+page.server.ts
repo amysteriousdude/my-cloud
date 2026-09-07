@@ -10,7 +10,12 @@ export const load: PageServerLoad = async ({ cookies }) => {
   const apiKey = decrypt(session);
   if (!apiKey) return { user: null, apiKey: null };
 
-  const rec = await getRecordByApiKey(apiKey);
+  let rec;
+  try {
+    rec = await getRecordByApiKey(apiKey);
+  } catch {
+    return { user: null, apiKey: null };
+  }
   if (!rec) return { user: null, apiKey: null };
 
   return {
