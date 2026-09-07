@@ -1,6 +1,6 @@
 // src/routes/api/auth/login/+server.ts
 import type { RequestHandler } from './$types';
-import { getRecordByApiKey } from '$lib/telegramStorage';
+import { getRecordByApiKey, readIndex } from '$lib/telegramStorage';
 import { encrypt } from '$lib/crypto';
 
 export const POST: RequestHandler = async ({ request, cookies }) => {
@@ -20,10 +20,15 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
     });
   }
 
-  if (!rec)
-    return new Response(JSON.stringify({ error: 'Invalid token' }), {
+  if (!rec) {
+    const index = await readIndex().catch(() => ({}));
+    const error = Object.keys(index).length === 0
+      ? 'Index is empty — the pinned Telegram message may have been lost. Use Discord OAuth to re-seed.'
+      : 'Invalid token';
+    return new Response(JSON.stringify({ error }), {
       status: 403, headers: { 'Content-Type': 'application/json' }
     });
+  }
 
   const encrypted = encrypt(apiKey);
 

@@ -191,7 +191,8 @@ async function readIndexFileInner(retry: boolean): Promise<IndexFile> {
   }
 
   if (!pinned?.document?.file_id) {
-    throw new Error('No pinned index file found. The Telegram chat may have been migrated or the pinned message was removed.');
+    console.warn('telegramStorage: no pinned index file found — index will need to be re-seeded');
+    return { keys: {} };
   }
 
   try {
