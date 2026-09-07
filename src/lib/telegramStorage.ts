@@ -46,7 +46,11 @@ if (!BOT_TOKEN || !CHAT_ID) {
 
 async function getChatInfo(): Promise<any> {
   if (!TELE_API) throw new Error('Telegram not configured');
+  console.log('[getChatInfo] CHAT_ID:', CHAT_ID);
   const res = await axios.get(`${TELE_API}/getChat`, { params: { chat_id: CHAT_ID } });
+  console.log('[getChatInfo] ok:', res.data?.ok);
+  console.log('[getChatInfo] has pinned_message:', 'pinned_message' in (res.data?.result || {}));
+  console.log('[getChatInfo] pinned_message:', res.data?.result?.pinned_message ? 'exists' : 'null/missing');
   if (!res.data?.ok) throw new Error('getChat failed');
   return res.data.result;
 }
