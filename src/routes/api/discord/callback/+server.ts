@@ -6,7 +6,6 @@ import { env } from '$env/dynamic/private';
 export const GET: RequestHandler = async ({ url, fetch }) => {
   try {
     const OWNER_ID = env.OWNER_ID;
-    const BASE_URL = (env.PUBLIC_BASE_URL ?? 'http://localhost:5173').replace(/\/+$/, '');
     const CLIENT_ID = env.DISCORD_CLIENT_ID;
     const CLIENT_SECRET = env.DISCORD_CLIENT_SECRET;
 
@@ -19,7 +18,7 @@ export const GET: RequestHandler = async ({ url, fetch }) => {
     const code = url.searchParams.get('code');
     if (!code) return json({ error: 'Missing code' }, 400);
 
-    const redirectUri = `${BASE_URL}/api/discord/callback`;
+    const redirectUri = `${url.origin}/api/discord/callback`;
 
     const body = new URLSearchParams({
       client_id: CLIENT_ID,
