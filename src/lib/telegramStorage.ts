@@ -302,20 +302,22 @@ async function getRegistryPtr(): Promise<{ file_id: string; message_id: number }
   return null;
 }
 
-export async function readRegistry(): Promise<Record<string, FileRecord>> {
-  return readRegistryInner(false);
+export async function readRegistry(forceFresh = false): Promise<Record<string, FileRecord>> {
+  return readRegistryInner(false, forceFresh);
 }
 
-async function readRegistryInner(retry: boolean): Promise<Record<string, FileRecord>> {
+async function readRegistryInner(retry: boolean, forceFresh = false): Promise<Record<string, FileRecord>> {
   const ptr = await getRegistryPtr();
   if (!ptr) {
     console.error('telegramStorage.readRegistry: no registry pointer found in index');
     return {};
   }
 
-  const local = await getLocalCache();
-  if (local.registryData && local.registryPtr?.file_id === ptr.file_id) {
-    return local.registryData;
+  if (!forceFresh) {
+    const local = await getLocalCache();
+    if (local.registryData && local.registryPtr?.file_id === ptr.file_id) {
+      return local.registryData;
+    }
   }
 
   try {
@@ -349,6 +351,28 @@ export async function writeRegistry(registry: Record<string, any>): Promise<void
 async function writeRegistryInternal(registry: Record<string, any>): Promise<void> {
   const oldPtr = await getRegistryPtr();
 
+  // Strict dedup: remove duplicate file entries (same fileName + folderId, keep newest)
+  const fileEntries = Object.entries(registry).filter(([k, v]) => v && !(v as any)._type);
+  const deduped = new Map<string, string>();
+  for (const [key, entry] of fileEntries) {
+    const composite = `${(entry as any).fileName}|||${(entry as any).folderId || ''}`;
+    const existing = deduped.get(composite);
+    if (existing) {
+      const existingTime = (registry[existing] as any)?.time || '';
+      const newTime = (entry as any)?.time || '';
+      if (newTime >= existingTime) {
+        console.log(`writeRegistryInternal: dedup removing ${existing} (older) in favor of ${key}`);
+        delete registry[existing];
+        deduped.set(composite, key);
+      } else {
+        console.log(`writeRegistryInternal: dedup removing ${key} (older) in favor of ${existing}`);
+        delete registry[key];
+      }
+    } else {
+      deduped.set(composite, key);
+    }
+  }
+
   const tmp = `/tmp/_registry_${Date.now()}.json`;
   await fs.promises.writeFile(tmp, JSON.stringify(registry, null, 2), 'utf8');
 
@@ -370,10 +394,32 @@ async function writeRegistryInternal(registry: Record<string, any>): Promise<voi
   }
 }
 
+/**
+ * Register a file in the registry.
+ * Strict dedup: removes any existing entries with the same fileName + folderId
+ * before adding the new one. Uses forceFresh to avoid stale cache.
+ */
 export async function registerFile(rec: FileRecord): Promise<void> {
   await acquireMutex();
   try {
-    const registry = await readRegistry() ?? {};
+    const registry = await readRegistry(true) ?? {};
+
+    // Strict dedup: remove stale entries with same fileName + folderId
+    const staleKeys: string[] = [];
+    for (const [key, existing] of Object.entries(registry)) {
+      if (!existing || (existing as any)._type) continue;
+      if (key === rec.metaFileId) continue;
+      const sameName = existing.fileName === rec.fileName;
+      const sameFolder = (existing.folderId || null) === (rec.folderId || null);
+      if (sameName && sameFolder) {
+        staleKeys.push(key);
+      }
+    }
+    for (const key of staleKeys) {
+      console.log(`registerFile: dedup removing stale entry ${key} (${(registry[key] as any)?.fileName})`);
+      delete registry[key];
+    }
+
     registry[rec.metaFileId] = rec;
     await writeRegistryInternal(registry);
   } finally {
@@ -392,7 +438,7 @@ export async function listFiles(query?: string): Promise<FileRecord[]> {
 export async function setFilePublicity(metaFileId: string, isPublic: boolean): Promise<boolean> {
   await acquireMutex();
   try {
-    const registry = await readRegistry() ?? {};
+    const registry = await readRegistry(true) ?? {};
     if (!registry[metaFileId]) return false;
     registry[metaFileId].public = isPublic;
     if (isPublic && !registry[metaFileId].publicSlug) {
@@ -408,7 +454,7 @@ export async function setFilePublicity(metaFileId: string, isPublic: boolean): P
 export async function renameFile(metaFileId: string, newName: string): Promise<boolean> {
   await acquireMutex();
   try {
-    const registry = await readRegistry() ?? {};
+    const registry = await readRegistry(true) ?? {};
     if (!registry[metaFileId]) return false;
     registry[metaFileId].fileName = newName;
     await writeRegistryInternal(registry);
@@ -421,7 +467,7 @@ export async function renameFile(metaFileId: string, newName: string): Promise<b
 export async function setFileTags(metaFileId: string, tags: string[]): Promise<boolean> {
   await acquireMutex();
   try {
-    const registry = await readRegistry() ?? {};
+    const registry = await readRegistry(true) ?? {};
     if (!registry[metaFileId]) return false;
     registry[metaFileId].tags = tags;
     await writeRegistryInternal(registry);
@@ -434,7 +480,7 @@ export async function setFileTags(metaFileId: string, tags: string[]): Promise<b
 export async function toggleFavorite(metaFileId: string): Promise<{ success: boolean; favorite?: boolean }> {
   await acquireMutex();
   try {
-    const registry = await readRegistry() ?? {};
+    const registry = await readRegistry(true) ?? {};
     if (!registry[metaFileId]) return { success: false };
     registry[metaFileId].favorite = !registry[metaFileId].favorite;
     await writeRegistryInternal(registry);
@@ -447,7 +493,7 @@ export async function toggleFavorite(metaFileId: string): Promise<{ success: boo
 export async function deleteFile(metaFileId: string): Promise<boolean> {
   await acquireMutex();
   try {
-    const registry = await readRegistry() ?? {};
+    const registry = await readRegistry(true) ?? {};
     const rec = registry[metaFileId];
     if (!rec) return false;
 

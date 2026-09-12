@@ -88,7 +88,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
     const { message_id: metaMessageId, file_id: metaFileId } = await uploadJsonToTelegram(meta, `${fileName}.json`);
 
-    const registry = (await readRegistry()) as Record<string, any>;
+    const registry = (await readRegistry(true)) as Record<string, any>;
     const folderId = await getOrCreateSharexFolder(registry);
 
     registry[metaFileId] = {

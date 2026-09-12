@@ -46,7 +46,7 @@ export const GET: RequestHandler = async ({ request, url, cookies }) => {
   const rec = await getRecordByApiKey(key);
   if (!rec) return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 });
 
-  const registry = await readRegistry();
+  const registry = await readRegistry(true);
   const folders = Object.values(registry).filter((r: any) => r?._type === 'folder');
 
   return new Response(JSON.stringify({ folders }), {
@@ -60,7 +60,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
   try {
     const body = await request.json();
-    const registry = (await readRegistry()) as Record<string, any>;
+    const registry = (await readRegistry(true)) as Record<string, any>;
 
   if (body.action === 'create') {
     const name = (body.name?.trim() || 'New Folder');
