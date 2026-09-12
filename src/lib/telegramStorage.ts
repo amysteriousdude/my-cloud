@@ -116,6 +116,8 @@ type CacheData = {
 };
 
 let _memCache: CacheData = {};
+let _slugCache: Map<string, FileRecord> | null = null;
+let _slugCachePtr: string | null = null;
 
 async function getLocalCache(): Promise<CacheData> {
   try {
@@ -128,6 +130,9 @@ async function getLocalCache(): Promise<CacheData> {
 
 async function updateLocalCache(patch: Partial<CacheData>) {
   _memCache = { ..._memCache, ...patch };
+  // Invalidate slug lookup cache when registry changes
+  _slugCache = null;
+  _slugCachePtr = null;
   // File write is best-effort — fails silently on CF Workers (no shared fs)
   try {
     await fs.promises.writeFile(CACHE_FILE, JSON.stringify(_memCache, null, 2), 'utf8');
@@ -667,50 +672,35 @@ export async function getPublicFileByPath(fullPath: string): Promise<FileRecord 
   const targetPath = normalizePublicPath(fullPath);
   if (!targetPath) return null;
 
-  const allFiles = Object.values(registry).filter((r: any) => !r?._type) as FileRecord[];
-
-  const exact = allFiles.filter((file) => {
-    if (!isFilePublic(file, registry)) return false;
-    return normalizePublicPath(walkFilePath(file, registry)) === targetPath;
-  });
-
-  if (exact.length > 0) {
-    exact.sort((a, b) => new Date(b.time || 0).getTime() - new Date(a.time || 0).getTime());
-    const best = exact[0];
-    if (!best.publicSlug) {
-      best.publicSlug = normalizePublicPath(walkFilePath(best, registry));
-      await writeRegistryInternal(registry);
-    }
-    return best;
-  }
-
-  const slugMatch = allFiles.filter((file) => {
-    if (!isFilePublic(file, registry)) return false;
-    return file.publicSlug && normalizePublicPath(file.publicSlug) === targetPath;
-  });
-
-  if (slugMatch.length > 0) {
-    slugMatch.sort((a, b) => new Date(b.time || 0).getTime() - new Date(a.time || 0).getTime());
-    return slugMatch[0];
-  }
-
-  const parts = targetPath.split('/').filter(Boolean);
-  if (parts.length >= 1) {
-    const fileName = parts[parts.length - 1];
-
-    const fallback = allFiles.filter((file) => {
-      if (!isFilePublic(file, registry)) return false;
-      if (file.fileName !== fileName) return false;
-
-      const current = normalizePublicPath(walkFilePath(file, registry));
-      return current === targetPath || current.endsWith(`/${fileName}`);
-    });
-
-    if (fallback.length > 0) {
-      fallback.sort((a, b) => new Date(b.time || 0).getTime() - new Date(a.time || 0).getTime());
-      return fallback[0];
+  // Build slug→file lookup map (O(N) once, then O(1) per lookup)
+  const cacheKey = JSON.stringify(Object.keys(registry).sort());
+  if (_slugCache && _slugCachePtr === cacheKey) {
+    const cached = _slugCache.get(targetPath);
+    if (cached !== undefined) return cached || null;
+    // Fall through to slug miss handling below
+  } else {
+    _slugCache = new Map();
+    _slugCachePtr = cacheKey;
+    const allFiles = Object.values(registry).filter((r: any) => !r?._type) as FileRecord[];
+    for (const file of allFiles) {
+      if (!isFilePublic(file, registry)) continue;
+      const slug = file.publicSlug || normalizePublicPath(walkFilePath(file, registry));
+      if (slug) {
+        // Keep newest by time
+        const existing = _slugCache.get(slug);
+        if (!existing || (file.time || '') > (existing.time || '')) {
+          _slugCache.set(slug, file);
+        }
+      }
     }
   }
+
+  const match = _slugCache.get(targetPath);
+  if (match) return match;
+
+  _slugCache.set(targetPath, null as any);
+  return null;
+}
 
   return null;
 }
