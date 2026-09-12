@@ -128,6 +128,7 @@ async function getLocalCache(): Promise<CacheData> {
 
 async function updateLocalCache(patch: Partial<CacheData>) {
   _memCache = { ..._memCache, ...patch };
+  // File write is best-effort — fails silently on CF Workers (no shared fs)
   try {
     await fs.promises.writeFile(CACHE_FILE, JSON.stringify(_memCache, null, 2), 'utf8');
   } catch {}
@@ -306,8 +307,14 @@ async function readRegistryInner(retry: boolean, forceFresh = false): Promise<Re
     return {};
   }
 
-  // CF Workers have no shared filesystem — always fetch fresh from Telegram
-  // Local cache is per-isolate and causes stale reads across instances.
+  // Pointer-based cache: if the registry pointer hasn't changed, data is the same.
+  // The index is fetched fresh from Telegram (pinned message check), so the pointer is always current.
+  if (!forceFresh) {
+    const local = await getLocalCache();
+    if (local.registryData && local.registryPtr?.file_id === ptr.file_id) {
+      return local.registryData;
+    }
+  }
 
   try {
     const text = await downloadFileId(ptr.file_id, 'text');
@@ -339,28 +346,6 @@ export async function writeRegistry(registry: Record<string, any>): Promise<void
 
 async function writeRegistryInternal(registry: Record<string, any>): Promise<void> {
   const oldPtr = await getRegistryPtr();
-
-  // Strict dedup: remove duplicate file entries (same fileName + folderId, keep newest)
-  const fileEntries = Object.entries(registry).filter(([k, v]) => v && !(v as any)._type);
-  const deduped = new Map<string, string>();
-  for (const [key, entry] of fileEntries) {
-    const composite = `${(entry as any).fileName}|||${(entry as any).folderId || ''}`;
-    const existing = deduped.get(composite);
-    if (existing) {
-      const existingTime = (registry[existing] as any)?.time || '';
-      const newTime = (entry as any)?.time || '';
-      if (newTime >= existingTime) {
-        console.log(`writeRegistryInternal: dedup removing ${existing} (older) in favor of ${key}`);
-        delete registry[existing];
-        deduped.set(composite, key);
-      } else {
-        console.log(`writeRegistryInternal: dedup removing ${key} (older) in favor of ${existing}`);
-        delete registry[key];
-      }
-    } else {
-      deduped.set(composite, key);
-    }
-  }
 
   const tmp = `/tmp/_registry_${Date.now()}.json`;
   await fs.promises.writeFile(tmp, JSON.stringify(registry, null, 2), 'utf8');
