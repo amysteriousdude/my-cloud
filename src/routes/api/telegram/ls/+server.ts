@@ -38,7 +38,7 @@ export const GET: RequestHandler = async ({ request, url, cookies }) => {
       });
     }
 
-    const raw = await readRegistry();
+    const raw = await readRegistry(true);
     const registry: Record<string, any> = JSON.parse(JSON.stringify(raw));
     const folderId = normalizeFolderId(url.searchParams.get('folderId'));
 
