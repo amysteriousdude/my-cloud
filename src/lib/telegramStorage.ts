@@ -288,15 +288,8 @@ async function getRegistryPtr(): Promise<{ file_id: string; message_id: number }
   const idx = await readIndexFile();
   const reportedMsgId = idx.registryMessageId || 0;
 
-  const local = await getLocalCache();
-  if (local.registryPtr && local.registryPtr.message_id >= reportedMsgId) {
-    return local.registryPtr;
-  }
-
   if (idx.registryFileId && typeof idx.registryMessageId === 'number') {
-    const ptr = { file_id: idx.registryFileId, message_id: idx.registryMessageId };
-    await updateLocalCache({ registryPtr: ptr });
-    return ptr;
+    return { file_id: idx.registryFileId, message_id: idx.registryMessageId };
   }
 
   return null;
@@ -313,12 +306,8 @@ async function readRegistryInner(retry: boolean, forceFresh = false): Promise<Re
     return {};
   }
 
-  if (!forceFresh) {
-    const local = await getLocalCache();
-    if (local.registryData && local.registryPtr?.file_id === ptr.file_id) {
-      return local.registryData;
-    }
-  }
+  // CF Workers have no shared filesystem — always fetch fresh from Telegram
+  // Local cache is per-isolate and causes stale reads across instances.
 
   try {
     const text = await downloadFileId(ptr.file_id, 'text');
