@@ -2,6 +2,7 @@
 import type { RequestHandler } from './$types';
 import { getRecordByApiKey, uploadBytesToTelegram, uploadJsonToTelegram, registerFile } from '$lib/telegramStorage';
 import { TG_SAFE_CHUNK_BYTES } from '$lib/telegramLimits';
+import { purgePublicFiles, purgeByMetaFileId } from '$lib/cfPurge';
 
 export const POST: RequestHandler = async ({ request, url }) => {
   try {
@@ -106,6 +107,9 @@ export const POST: RequestHandler = async ({ request, url }) => {
       chunkMessageIds: chunked ? telegramChunks.map(c => c.message_id) : undefined,
       folderId: folderId || undefined
     });
+
+    // Purge Cloudflare cache (fire-and-forget)
+    purgePublicFiles().catch(() => {});
 
     return new Response(
       JSON.stringify({

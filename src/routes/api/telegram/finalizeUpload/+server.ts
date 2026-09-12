@@ -2,6 +2,7 @@
 import type { RequestHandler } from './$types';
 import { getRecordByApiKey, uploadJsonToTelegram, registerFile } from '$lib/telegramStorage';
 import { TG_SAFE_CHUNK_BYTES } from '$lib/telegramLimits';
+import { purgePublicFiles } from '$lib/cfPurge';
 
 export const POST: RequestHandler = async ({ request, url }) => {
   try {
@@ -70,6 +71,9 @@ export const POST: RequestHandler = async ({ request, url }) => {
       folderId: folderId || undefined,
       compressed: compressed || undefined
     });
+
+    // Purge Cloudflare cache (fire-and-forget)
+    purgePublicFiles().catch(() => {});
 
     return new Response(JSON.stringify({ success: true, metaFileId, metaMessageId, fileName }), {
       status: 200, headers: { 'Content-Type': 'application/json' }

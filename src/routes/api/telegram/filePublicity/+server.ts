@@ -1,6 +1,7 @@
 // src/routes/api/telegram/filePublicity/+server.ts
 import type { RequestHandler } from './$types';
 import { getRecordByApiKey, setFilePublicity } from '$lib/telegramStorage';
+import { purgeByMetaFileId } from '$lib/cfPurge';
 
 export const POST: RequestHandler = async ({ request, url }) => {
   const apiKey =
@@ -32,6 +33,9 @@ export const POST: RequestHandler = async ({ request, url }) => {
       return new Response(JSON.stringify({ error: 'File not found in registry' }), {
         status: 404, headers: { 'Content-Type': 'application/json' }
       });
+
+    // Purge cache (fire-and-forget)
+    purgeByMetaFileId(metaFileId).catch(() => {});
 
     return new Response(JSON.stringify({ success: true, metaFileId, public: isPublic }), {
       status: 200, headers: { 'Content-Type': 'application/json' }

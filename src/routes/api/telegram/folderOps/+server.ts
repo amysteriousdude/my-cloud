@@ -1,6 +1,7 @@
 // src/routes/api/telegram/folderOps/+server.ts
 import type { RequestHandler } from './$types';
 import { getRecordByApiKey, readRegistry, writeRegistry } from '$lib/telegramStorage';
+import { purgePublicFiles } from '$lib/cfPurge';
 import crypto from 'crypto';
 
 export type FolderRecord = {
@@ -86,6 +87,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
     registry[folderId] = folder;
     await writeRegistry(registry);
+    purgePublicFiles().catch(() => {});
 
     return Response.json({ folder });
   }
@@ -109,6 +111,7 @@ export const POST: RequestHandler = async ({ request }) => {
     }
 
     await writeRegistry(registry);
+    purgePublicFiles().catch(() => {});
     return Response.json({ ok: true, folder: f });
   }
 
@@ -143,6 +146,7 @@ export const POST: RequestHandler = async ({ request }) => {
     }
 
     await writeRegistry(registry);
+    purgePublicFiles().catch(() => {});
 
     return Response.json({ ok: true });
   }
@@ -160,6 +164,7 @@ export const POST: RequestHandler = async ({ request }) => {
     else delete file.folderId;
 
     await writeRegistry(registry);
+    purgePublicFiles().catch(() => {});
     return Response.json({ ok: true });
   }
 
@@ -192,6 +197,7 @@ export const POST: RequestHandler = async ({ request }) => {
     };
 
     await writeRegistry(registry);
+    purgePublicFiles().catch(() => {});
     return Response.json({ ok: true, file: registry[registryKey] });
   }
 
@@ -220,6 +226,7 @@ export const POST: RequestHandler = async ({ request }) => {
     }
 
     await writeRegistry(registry);
+    purgePublicFiles().catch(() => {});
     return Response.json({ ok: true, public: f.public });
   }
 

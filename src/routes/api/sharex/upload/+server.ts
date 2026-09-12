@@ -11,6 +11,7 @@ import {
 
 import crypto from 'crypto';
 import { TG_SAFE_CHUNK_BYTES } from '$lib/telegramLimits';
+import { purgePublicFiles } from '$lib/cfPurge';
 
 const BASE_URL =
   import.meta.env.PUBLIC_BASE_URL ?? 'http://localhost:5173';
@@ -106,6 +107,9 @@ export const POST: RequestHandler = async ({ request }) => {
     };
 
     await writeRegistry(registry);
+
+    // Purge Cloudflare cache (fire-and-forget)
+    purgePublicFiles().catch(() => {});
 
     return jsonResp({
       url: `${BASE_URL}/sharex/public/${fileName}`

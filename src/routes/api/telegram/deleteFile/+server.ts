@@ -1,6 +1,7 @@
 // src/routes/api/telegram/deleteFile/+server.ts
 import type { RequestHandler } from './$types';
 import { getRecordByApiKey, deleteFile } from '$lib/telegramStorage';
+import { purgeByMetaFileId } from '$lib/cfPurge';
 
 export const DELETE: RequestHandler = async ({ request, url }) => {
   const apiKey =
@@ -23,6 +24,9 @@ export const DELETE: RequestHandler = async ({ request, url }) => {
     return new Response(JSON.stringify({ error: 'Missing meta_file_id' }), {
       status: 400, headers: { 'Content-Type': 'application/json' }
     });
+
+  // Purge cache BEFORE deleting (fire-and-forget)
+  purgeByMetaFileId(metaFileId).catch(() => {});
 
   const found = await deleteFile(metaFileId);
   if (!found)
