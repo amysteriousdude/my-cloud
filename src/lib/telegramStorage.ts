@@ -116,7 +116,7 @@ type CacheData = {
 };
 
 let _memCache: CacheData = {};
-let _slugCache: Map<string, FileRecord> | null = null;
+let _slugCache: Map<string, FileRecord | null> | null = null;
 let _slugCachePtr: string | null = null;
 
 async function getLocalCache(): Promise<CacheData> {
@@ -292,7 +292,6 @@ async function writeIndex(index: Record<string, ApiKeyRecord>, extra?: Partial<I
 
 async function getRegistryPtr(): Promise<{ file_id: string; message_id: number } | null> {
   const idx = await readIndexFile();
-  const reportedMsgId = idx.registryMessageId || 0;
 
   if (idx.registryFileId && typeof idx.registryMessageId === 'number') {
     return { file_id: idx.registryFileId, message_id: idx.registryMessageId };
@@ -698,10 +697,7 @@ export async function getPublicFileByPath(fullPath: string): Promise<FileRecord 
   const match = _slugCache.get(targetPath);
   if (match) return match;
 
-  _slugCache.set(targetPath, null as any);
-  return null;
-}
-
+  _slugCache.set(targetPath, null);
   return null;
 }
 
