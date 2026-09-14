@@ -123,7 +123,7 @@
 
   let ctx: AudioContext | null = null;
   let sourceNode: AudioBufferSourceNode | null = null;
-  let audioBuffer: AudioBuffer | null = null;
+  let audioBuffer: AudioBuffer | null = $state(null);
   let fileName = $state('');
   let isPlaying = $state(false);
   let isPaused = $state(false);
