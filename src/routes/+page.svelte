@@ -235,7 +235,7 @@
       {:else if activeTab === 'database'}
         <Database {apiKey} />
       {:else if activeTab === 'fx'}
-        <FX />
+        <FX {apiKey} />
       {/if}
     </main>
 

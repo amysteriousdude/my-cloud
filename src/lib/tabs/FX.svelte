@@ -4,7 +4,7 @@
   import {
     IconWaveSine, IconPlayerPlay, IconPlayerPause, IconPlayerStop,
     IconUpload, IconTrash, IconDownload, IconEye, IconEyeOff,
-    IconPlus, IconSettings,
+    IconPlus, IconSettings, IconCloud, IconGauge,
   } from '@tabler/icons-svelte';
 
   type FXType = 'reverb' | 'delay' | 'eq' | 'compressor' | 'distortion' | 'filter' | 'chorus' | 'limiter' | 'flanger' | 'phaser' | 'tremolo' | 'bitcrusher' | 'saturation';
@@ -121,6 +121,8 @@
 
   const ALL_FX_TYPES = Object.keys(FX_DEFS) as FXType[];
 
+  const { apiKey }: { apiKey?: string } = $props();
+
   let ctx: AudioContext | null = null;
   let sourceNode: AudioBufferSourceNode | null = null;
   let audioBuffer: AudioBuffer | null = $state(null);
@@ -134,10 +136,17 @@
   let startOffset = 0;
   let startCtxTime = 0;
 
+  let playbackRate = $state(1.0);
+
   let effects = $state<FXNode[]>([]);
   let showAddMenu = $state(false);
   let draggedOver = $state(false);
   let loading = $state(false);
+
+  let showCloudPicker = $state(false);
+  let cloudFiles = $state<{ fileName: string; metaFileId: string }[]>([]);
+  let cloudLoading = $state(false);
+  let cloudSearch = $state('');
 
   // Analyser for waveform
   let analyser: AnalyserNode | null = null;
@@ -524,6 +533,7 @@
 
     sourceNode = c.createBufferSource();
     sourceNode.buffer = audioBuffer;
+    sourceNode.playbackRate.value = playbackRate;
     rebuildChain();
 
     sourceNode.connect(chainGain!);
@@ -546,10 +556,16 @@
     startTracking();
   }
 
+  function applyPlaybackRate() {
+    if (sourceNode && isPlaying) {
+      sourceNode.playbackRate.value = playbackRate;
+    }
+  }
+
   function startTracking() {
     const tick = () => {
       if (!isPlaying || isPaused) return;
-      currentTime = startOffset + (ctx?.currentTime ?? 0) - startCtxTime;
+      currentTime = startOffset + ((ctx?.currentTime ?? 0) - startCtxTime) * playbackRate;
       if (currentTime >= duration) {
         currentTime = duration;
         progress = 100;
@@ -797,6 +813,46 @@
     return `${m}:${s.toString().padStart(2, '0')}`;
   }
 
+  async function fetchCloudFiles() {
+    if (!apiKey) return;
+    cloudLoading = true;
+    try {
+      const resp = await fetch(`/api/telegram/ls?api_key=${apiKey}`);
+      const data = await resp.json();
+      const allFiles: { fileName: string; metaFileId: string }[] = data.files ?? [];
+      cloudFiles = allFiles.filter(f => /\.(mp3|wav|ogg|flac|m4a|aac|wma|opus)$/i.test(f.fileName));
+    } catch {
+      cloudFiles = [];
+    } finally {
+      cloudLoading = false;
+    }
+  }
+
+  function openCloudPicker() {
+    showCloudPicker = true;
+    fetchCloudFiles();
+  }
+
+  async function loadFromCloud(file: { fileName: string; metaFileId: string }) {
+    showCloudPicker = false;
+    loading = true;
+    fileName = file.fileName;
+    try {
+      const c = ensureCtx();
+      const resp = await fetch(`/api/telegram/getRequestFile?api_key=${apiKey}&meta_file_id=${file.metaFileId}&download=true`);
+      const blob = await resp.blob();
+      const arrayBuf = await blob.arrayBuffer();
+      audioBuffer = await c.decodeAudioData(arrayBuf);
+      duration = audioBuffer.duration;
+    } catch (err) {
+      console.error('Failed to load from cloud:', err);
+      fileName = '';
+      audioBuffer = null;
+    } finally {
+      loading = false;
+    }
+  }
+
   onDestroy(() => {
     stop();
     ctx?.close();
@@ -818,6 +874,11 @@
         <IconWaveSine size={48} stroke={1} />
         <p>Drop an audio file here</p>
         <p class="fx-drop-hint">MP3, WAV, OGG, FLAC, etc.</p>
+        {#if apiKey}
+          <button class="fx-cloud-btn" onclick={openCloudPicker}>
+            <IconCloud size={16} /> Import from Cloud
+          </button>
+        {/if}
       {/if}
     </div>
   {:else}
@@ -853,6 +914,19 @@
         <div class="fx-progress-fill" style="width: {progress}%"></div>
       </div>
       <span class="fx-time">{formatTime(currentTime)} / {formatTime(duration)}</span>
+      <div class="fx-slowmo">
+        <IconGauge size={14} />
+        <input
+          type="range"
+          class="fx-slider"
+          min="0.1"
+          max="3"
+          step="0.05"
+          bind:value={playbackRate}
+          oninput={applyPlaybackRate}
+        />
+        <span class="fx-slowmo-val">{playbackRate.toFixed(2)}x</span>
+      </div>
     </div>
 
     <!-- Waveform -->
@@ -924,6 +998,39 @@
           </div>
         </div>
       {/each}
+    </div>
+  {/if}
+
+  {#if showCloudPicker}
+    <div class="fx-overlay" onclick={() => showCloudPicker = false} role="presentation">
+      <div class="fx-picker" onclick={(e) => e.stopPropagation()} role="dialog">
+        <div class="fx-picker-header">
+          <IconCloud size={16} />
+          <span>Import from Cloud</span>
+          <button class="fx-btn-sm" onclick={() => showCloudPicker = false}><IconTrash size={14} /></button>
+        </div>
+        <input
+          class="fx-picker-search"
+          type="text"
+          placeholder="Search audio files..."
+          bind:value={cloudSearch}
+        />
+        <div class="fx-picker-list">
+          {#if cloudLoading}
+            <div class="fx-loading">Loading files...</div>
+          {:else}
+            {#each cloudFiles.filter(f => !cloudSearch || f.fileName.toLowerCase().includes(cloudSearch.toLowerCase())) as file}
+              <button class="fx-picker-item" onclick={() => loadFromCloud(file)}>
+                <IconWaveSine size={14} />
+                <span>{file.fileName}</span>
+              </button>
+            {/each}
+            {#if cloudFiles.length === 0}
+              <div class="fx-loading">No audio files found</div>
+            {/if}
+          {/if}
+        </div>
+      </div>
     </div>
   {/if}
 </div>
@@ -1043,6 +1150,36 @@
     min-width: 80px;
     text-align: right;
   }
+  .fx-slowmo {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--text-3);
+    min-width: 120px;
+  }
+  .fx-slowmo .fx-slider { width: 80px; }
+  .fx-slowmo-val {
+    font-size: 11px;
+    font-family: 'Geist Mono', monospace;
+    min-width: 36px;
+    text-align: right;
+    color: var(--text-2);
+  }
+
+  .fx-cloud-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 16px;
+    color: var(--text-2);
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 0.15s;
+  }
+  .fx-cloud-btn:hover { background: var(--border); color: var(--text-1); }
 
   .fx-waveform {
     display: flex;
@@ -1213,5 +1350,70 @@
     color: var(--text-2);
     min-width: 40px;
     text-align: right;
+  }
+
+  .fx-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+  .fx-picker {
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    width: 400px;
+    max-height: 500px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .fx-picker-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    font-weight: 500;
+  }
+  .fx-picker-header .fx-btn-sm { margin-left: auto; }
+  .fx-picker-search {
+    margin: 8px 12px;
+    padding: 8px 12px;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-1);
+    font-size: 13px;
+    outline: none;
+  }
+  .fx-picker-search::placeholder { color: var(--text-3); }
+  .fx-picker-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 12px 12px;
+  }
+  .fx-picker-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    padding: 8px 10px;
+    color: var(--text-1);
+    font-size: 13px;
+    cursor: pointer;
+    border-radius: 6px;
+  }
+  .fx-picker-item:hover { background: var(--border); }
+  .fx-picker-item span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 </style>
