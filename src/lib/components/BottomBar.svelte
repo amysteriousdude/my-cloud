@@ -5,12 +5,12 @@
     IconSun, IconMoon, IconDeviceDesktop, IconLogout, IconCloud,
     IconDots, IconX, IconSettings,
     IconDatabase, IconBrain, IconHistory, IconPlus, IconTrash, IconPlayerStop, IconAdjustments,
-    IconChevronDown,
+    IconChevronDown, IconWaveSine,
   } from '@tabler/icons-svelte';
   import { env } from '$env/dynamic/public';
   const NAME = env.PUBLIC_NAME ?? "Omar";
 
-  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'ai';
+  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'ai' | 'fx';
 
   type BarButton = {
     icon: any;
@@ -103,6 +103,7 @@
     { id: 'apitester',  icon: IconApi,         label: 'API Tester' },
     { id: 'database',  icon: IconDatabase,    label: 'Databases' },
     { id: 'ai',        icon: IconBrain,       label: 'AI' },
+    { id: 'fx',        icon: IconWaveSine,    label: 'FX' },
   ];
 
   // ── State ──────────────────────────────────────────────────────
