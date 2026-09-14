@@ -13,6 +13,7 @@ import {
   downloadFileFromTelegram
 } from '$lib/telegramStorage';
 import { decrypt } from '$lib/crypto';
+import { purgePublicFiles } from '$lib/cfPurge';
 const NAME = process.env.PUBLIC_NAME ?? "Omar";
 import type { Handle } from '@sveltejs/kit';
 import crypto from 'crypto';
@@ -784,6 +785,7 @@ async function handlePut(request: Request, url: URL, registry: Record<string, an
 
   registry[metaFileId] = rec;
   await writeRegistry(registry);
+  purgePublicFiles().catch(() => {});
 
   return new Response(null, {
     status: 201,
@@ -806,6 +808,7 @@ async function handleDelete(url: URL, registry: Record<string, any>) {
         break;
       }
     }
+    purgePublicFiles().catch(() => {});
     if (!deleted) {
       return new Response('Not Found', {
         status: 404,
@@ -850,6 +853,7 @@ async function handleDelete(url: URL, registry: Record<string, any>) {
     });
   }
 
+  purgePublicFiles().catch(() => {});
   await writeRegistry(registry);
   return new Response(null, {
     status: 204,
@@ -906,6 +910,7 @@ async function handleMkcol(url: URL, registry: Record<string, any>) {
   };
 
   await writeRegistry(registry);
+  purgePublicFiles().catch(() => {});
   return new Response(null, {
     status: 201,
     headers: davHeaders(),
@@ -974,6 +979,7 @@ async function handleMove(request: Request, url: URL, registry: Record<string, a
   }
 
   await writeRegistry(registry);
+  purgePublicFiles().catch(() => {});
   return new Response(null, {
     status: 201,
     headers: davHeaders(),
@@ -1020,6 +1026,7 @@ async function handleCopy(request: Request, url: URL, registry: Record<string, a
   if (!destFolder?._regKey) delete registry[newKey].folderId;
 
   await writeRegistry(registry);
+  purgePublicFiles().catch(() => {});
   return new Response(null, {
     status: 201,
     headers: davHeaders(),
