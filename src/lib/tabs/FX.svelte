@@ -982,7 +982,7 @@
             <IconPlus size={13} /> Add
           </button>
           {#if showAddMenu}
-            <div class="fx-add-menu" onclick|stopPropagation>
+            <div class="fx-add-menu" onclick={(e) => e.stopPropagation()}>
               {#each ALL_FX_TYPES as type}
                 <button class="fx-add-item" onclick={() => addEffect(type)}>
                   <span class="fx-add-dot" style="background: {FX_DEFS[type].color}"></span>
