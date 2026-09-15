@@ -23,6 +23,7 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
   }
 
   const name = String(form.get('name') || file.name).trim() || file.name;
+  const folderId = String(form.get('folderId') || '').trim() || undefined;
 
   const registry = await loadVaultRegistry(ctx.key, ctx.index.registryFileId!);
   const raw = await file.arrayBuffer();
@@ -42,7 +43,8 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
     size: file.size,
     createdAt: Date.now(),
     iv: Buffer.from(iv).toString('base64'),
-    chunks
+    chunks,
+    ...(folderId ? { folderId } : {})
   });
 
   registry.updatedAt = Date.now();

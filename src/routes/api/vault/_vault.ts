@@ -23,6 +23,14 @@ export type VaultFileEntry = {
   createdAt: number;
   iv: string;
   chunks: VaultFileChunk[];
+  folderId?: string;
+};
+
+export type VaultFolderEntry = {
+  id: string;
+  name: string;
+  createdAt: number;
+  parentId?: string;
 };
 
 export type VaultIndexPlain = {
@@ -39,6 +47,7 @@ export type VaultIndexPlain = {
 export type VaultRegistryPlain = {
   version: 1;
   files: VaultFileEntry[];
+  folders: VaultFolderEntry[];
   updatedAt: number;
 };
 
@@ -226,7 +235,9 @@ export async function loadVaultIndex(fileId?: string | null): Promise<VaultIndex
 export async function loadVaultRegistry(key: CryptoKey, registryFileId: string): Promise<VaultRegistryPlain> {
   const downloaded = await downloadFileFromTelegram(registryFileId);
   const env = JSON.parse(downloaded.data.toString('utf8')) as VaultEnvelope;
-  return decryptJson<VaultRegistryPlain>(env, key);
+  const reg = await decryptJson<VaultRegistryPlain>(env, key);
+  if (!reg.folders) reg.folders = [];
+  return reg;
 }
 
 export async function saveVaultState(

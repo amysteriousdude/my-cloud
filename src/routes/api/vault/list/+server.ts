@@ -23,7 +23,17 @@ export const GET: RequestHandler = async ({ locals, cookies }) => {
         name: f.name,
         size: f.size,
         createdAt: f.createdAt,
-        chunks: f.chunks?.length || 0
+        chunks: f.chunks?.length || 0,
+        folderId: f.folderId || null
+      })),
+    folders: (registry.folders || [])
+      .slice()
+      .sort((a, b) => a.createdAt - b.createdAt)
+      .map((f) => ({
+        id: f.id,
+        name: f.name,
+        createdAt: f.createdAt,
+        parentId: f.parentId || null
       }))
   }), {
     headers: { 'Content-Type': 'application/json' }
