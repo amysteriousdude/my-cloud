@@ -49,9 +49,13 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 
   registry.updatedAt = Date.now();
 
-  await saveVaultState(ctx.key, ctx.index, registry, {
+  const result = await saveVaultState(ctx.key, ctx.index, registry, {
     previousRegistryMessageId: ctx.index.registryMessageId
   });
+
+  if (result?.indexFileId) {
+    cookies.set('vault_index_file_id', result.indexFileId, { path: '/' });
+  }
 
   return new Response(JSON.stringify({ ok: true }), {
     headers: { 'Content-Type': 'application/json' }

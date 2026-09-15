@@ -35,9 +35,10 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
       registry.folders.push(folder);
       registry.updatedAt = Date.now();
 
-      await saveVaultState(ctx.key, ctx.index, registry, {
+      const result = await saveVaultState(ctx.key, ctx.index, registry, {
         previousRegistryMessageId: ctx.index.registryMessageId
       });
+      if (result?.indexFileId) cookies.set('vault_index_file_id', result.indexFileId, { path: '/' });
 
       return new Response(JSON.stringify({ ok: true, folder }), {
         headers: { 'Content-Type': 'application/json' }
@@ -60,9 +61,10 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
       folder.name = name;
       registry.updatedAt = Date.now();
 
-      await saveVaultState(ctx.key, ctx.index, registry, {
+      const result = await saveVaultState(ctx.key, ctx.index, registry, {
         previousRegistryMessageId: ctx.index.registryMessageId
       });
+      if (result?.indexFileId) cookies.set('vault_index_file_id', result.indexFileId, { path: '/' });
 
       return new Response(JSON.stringify({ ok: true }), {
         headers: { 'Content-Type': 'application/json' }
@@ -109,9 +111,10 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
       registry.folders = registry.folders.filter(f => !toRemove.has(f.id));
       registry.updatedAt = Date.now();
 
-      await saveVaultState(ctx.key, ctx.index, registry, {
+      const result = await saveVaultState(ctx.key, ctx.index, registry, {
         previousRegistryMessageId: ctx.index.registryMessageId
       });
+      if (result?.indexFileId) cookies.set('vault_index_file_id', result.indexFileId, { path: '/' });
 
       return new Response(JSON.stringify({ ok: true }), {
         headers: { 'Content-Type': 'application/json' }
@@ -139,9 +142,10 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 
       registry.updatedAt = Date.now();
 
-      await saveVaultState(ctx.key, ctx.index, registry, {
+      const result = await saveVaultState(ctx.key, ctx.index, registry, {
         previousRegistryMessageId: ctx.index.registryMessageId
       });
+      if (result?.indexFileId) cookies.set('vault_index_file_id', result.indexFileId, { path: '/' });
 
       return new Response(JSON.stringify({ ok: true }), {
         headers: { 'Content-Type': 'application/json' }
