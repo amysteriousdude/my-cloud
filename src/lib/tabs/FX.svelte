@@ -183,6 +183,7 @@
 
   let analyser: AnalyserNode | null = null;
   let waveformData = $state<number[]>(new Array(64).fill(0));
+  let fileInput: HTMLInputElement;
 
   function ensureCtx(): AudioContext {
     if (!ctx) ctx = new AudioContext();
@@ -555,6 +556,31 @@
     }
   }
 
+  function openFilePicker() {
+    fileInput?.click();
+  }
+
+  async function handleFileSelect(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    loading = true;
+    fileName = file.name;
+    try {
+      const c = ensureCtx();
+      const arrayBuf = await file.arrayBuffer();
+      audioBuffer = await c.decodeAudioData(arrayBuf);
+      duration = audioBuffer.duration;
+    } catch (err) {
+      console.error('Failed to decode audio:', err);
+      fileName = '';
+      audioBuffer = null;
+    } finally {
+      loading = false;
+      input.value = '';
+    }
+  }
+
   function play() {
     if (!audioBuffer) return;
     const c = ensureCtx();
@@ -895,6 +921,14 @@
   });
 </script>
 
+<input
+  bind:this={fileInput}
+  type="file"
+  accept="audio/*"
+  style="display: none"
+  onchange={handleFileSelect}
+/>
+
 <div
   class="fx-root"
   ondragover={(e) => { e.preventDefault(); draggedOver = true; }}
@@ -913,11 +947,16 @@
         </div>
         <p class="fx-drop-label">Drop audio here</p>
         <p class="fx-drop-sub">MP3, WAV, OGG, FLAC</p>
-        {#if apiKey}
-          <button class="fx-cloud-btn" onclick={openCloudPicker}>
-            <IconCloud size={15} /> Browse Cloud
+        <div class="fx-drop-btns">
+          <button class="fx-pc-btn" onclick={openFilePicker}>
+            <IconUpload size={15} /> Import from PC
           </button>
-        {/if}
+          {#if apiKey}
+            <button class="fx-cloud-btn" onclick={openCloudPicker}>
+              <IconCloud size={15} /> Browse Cloud
+            </button>
+          {/if}
+        </div>
       {/if}
     </div>
   {:else}
@@ -1141,6 +1180,10 @@
     color: var(--text-3);
     letter-spacing: 0.5px;
   }
+  .fx-drop-btns {
+    display: flex;
+    gap: 8px;
+  }
   .fx-pulse {
     width: 32px;
     height: 32px;
@@ -1171,6 +1214,24 @@
     background: var(--accent);
     color: white;
     border-color: var(--accent);
+    transform: translateY(-1px);
+  }
+  .fx-pc-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 10px;
+    padding: 8px 18px;
+    color: white;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: inherit;
+    transition: all 0.2s ease;
+  }
+  .fx-pc-btn:hover {
+    filter: brightness(1.1);
     transform: translateY(-1px);
   }
 
