@@ -4,10 +4,10 @@
   import {
     IconWaveSine, IconPlayerPlay, IconPlayerPause, IconPlayerStop,
     IconUpload, IconTrash, IconDownload, IconEye, IconEyeOff,
-    IconPlus, IconSettings, IconCloud, IconGauge,
+    IconPlus, IconCloud,
   } from '@tabler/icons-svelte';
 
-  type FXType = 'reverb' | 'delay' | 'eq' | 'compressor' | 'distortion' | 'filter' | 'chorus' | 'limiter' | 'flanger' | 'phaser' | 'tremolo' | 'bitcrusher' | 'saturation';
+  type FXType = 'reverb' | 'delay' | 'eq' | 'compressor' | 'distortion' | 'filter' | 'chorus' | 'limiter' | 'flanger' | 'phaser' | 'tremolo' | 'bitcrusher' | 'saturation' | 'speed';
 
   type FXNode = {
     id: string;
@@ -16,9 +16,20 @@
     params: Record<string, number>;
   };
 
-  const FX_DEFS: Record<FXType, { label: string; params: Record<string, { min: number; max: number; step: number; default: number; unit?: string }> }> = {
+  const FX_DEFS: Record<FXType, { label: string; color: string; icon: string; params: Record<string, { min: number; max: number; step: number; default: number; unit?: string }> }> = {
+    speed: {
+      label: 'Speed',
+      color: '#a78bfa',
+      icon: '~',
+      params: {
+        rate: { min: 0.1, max: 4, step: 0.05, default: 1, unit: 'x' },
+        pitch: { min: -12, max: 12, step: 1, default: 0, unit: 'st' },
+      },
+    },
     reverb: {
       label: 'Reverb',
+      color: '#60a5fa',
+      icon: '::',
       params: {
         decay: { min: 0.1, max: 10, step: 0.1, default: 2, unit: 's' },
         mix: { min: 0, max: 1, step: 0.01, default: 0.3 },
@@ -26,6 +37,8 @@
     },
     delay: {
       label: 'Delay',
+      color: '#f472b6',
+      icon: '..',
       params: {
         time: { min: 0.01, max: 2, step: 0.01, default: 0.3, unit: 's' },
         feedback: { min: 0, max: 0.95, step: 0.01, default: 0.4 },
@@ -34,6 +47,8 @@
     },
     eq: {
       label: 'EQ',
+      color: '#34d399',
+      icon: '~~~',
       params: {
         low: { min: -12, max: 12, step: 0.5, default: 0, unit: 'dB' },
         mid: { min: -12, max: 12, step: 0.5, default: 0, unit: 'dB' },
@@ -42,6 +57,8 @@
     },
     compressor: {
       label: 'Compressor',
+      color: '#fbbf24',
+      icon: '<>',
       params: {
         threshold: { min: -60, max: 0, step: 1, default: -20, unit: 'dB' },
         ratio: { min: 1, max: 20, step: 0.5, default: 4 },
@@ -51,12 +68,16 @@
     },
     distortion: {
       label: 'Distortion',
+      color: '#f87171',
+      icon: '^^',
       params: {
         amount: { min: 0, max: 1, step: 0.01, default: 0.5 },
       },
     },
     filter: {
       label: 'Filter',
+      color: '#818cf8',
+      icon: '\\/',
       params: {
         frequency: { min: 20, max: 20000, step: 1, default: 1000, unit: 'Hz' },
         resonance: { min: 0.1, max: 20, step: 0.1, default: 1 },
@@ -64,6 +85,8 @@
     },
     chorus: {
       label: 'Chorus',
+      color: '#2dd4bf',
+      icon: '~~',
       params: {
         rate: { min: 0.1, max: 10, step: 0.1, default: 1.5, unit: 'Hz' },
         depth: { min: 0, max: 0.01, step: 0.0005, default: 0.002, unit: 's' },
@@ -72,6 +95,8 @@
     },
     limiter: {
       label: 'Limiter',
+      color: '#fb923c',
+      icon: '|',
       params: {
         threshold: { min: -12, max: 0, step: 0.5, default: -1, unit: 'dB' },
         release: { min: 0.01, max: 0.5, step: 0.01, default: 0.01, unit: 's' },
@@ -79,6 +104,8 @@
     },
     flanger: {
       label: 'Flanger',
+      color: '#e879f9',
+      icon: '><',
       params: {
         rate: { min: 0.01, max: 10, step: 0.01, default: 0.5, unit: 'Hz' },
         depth: { min: 0, max: 0.01, step: 0.0005, default: 0.003, unit: 's' },
@@ -88,6 +115,8 @@
     },
     phaser: {
       label: 'Phaser',
+      color: '#c084fc',
+      icon: '/\\',
       params: {
         rate: { min: 0.01, max: 10, step: 0.01, default: 0.5, unit: 'Hz' },
         depth: { min: 0, max: 5000, step: 100, default: 2000, unit: 'Hz' },
@@ -97,6 +126,8 @@
     },
     tremolo: {
       label: 'Tremolo',
+      color: '#fb7185',
+      icon: 'vv',
       params: {
         rate: { min: 0.1, max: 20, step: 0.1, default: 5, unit: 'Hz' },
         depth: { min: 0, max: 1, step: 0.01, default: 0.5 },
@@ -104,6 +135,8 @@
     },
     bitcrusher: {
       label: 'Bit Crusher',
+      color: '#facc15',
+      icon: '##',
       params: {
         bits: { min: 1, max: 16, step: 1, default: 8 },
         mix: { min: 0, max: 1, step: 0.01, default: 0.5 },
@@ -111,6 +144,8 @@
     },
     saturation: {
       label: 'Saturation',
+      color: '#f59e0b',
+      icon: '**',
       params: {
         drive: { min: 0, max: 10, step: 0.1, default: 2 },
         warmth: { min: 0, max: 1, step: 0.01, default: 0.5 },
@@ -136,8 +171,6 @@
   let startOffset = 0;
   let startCtxTime = 0;
 
-  let playbackRate = $state(1.0);
-
   let effects = $state<FXNode[]>([]);
   let showAddMenu = $state(false);
   let draggedOver = $state(false);
@@ -148,9 +181,8 @@
   let cloudLoading = $state(false);
   let cloudSearch = $state('');
 
-  // Analyser for waveform
   let analyser: AnalyserNode | null = null;
-  let waveformData = $state<number[]>(new Array(128).fill(0));
+  let waveformData = $state<number[]>(new Array(64).fill(0));
 
   function ensureCtx(): AudioContext {
     if (!ctx) ctx = new AudioContext();
@@ -192,14 +224,15 @@
     updateParamLive(id, key, value);
   }
 
-  // ── Audio graph ────────────────────────────────────────────────────
-  let lastChainOutput: AudioNode | null = null;
   let chainNodes: AudioNode[] = [];
   let chainGain: GainNode | null = null;
 
   function createFXNode(type: FXType, params: Record<string, number>): AudioNode | null {
     const c = ensureCtx();
     switch (type) {
+      case 'speed': {
+        return null;
+      }
       case 'filter': {
         const node = c.createBiquadFilter();
         node.type = 'lowpass';
@@ -413,16 +446,21 @@
 
   function updateParamLive(id: string, key: string, value: number) {
     const idx = effects.findIndex(e => e.id === id);
-    if (idx < 0 || !chainNodes[idx]) return;
+    if (idx < 0) return;
+    const fx = effects[idx];
+    if (fx.type === 'speed') {
+      if (key === 'rate' && sourceNode && isPlaying) {
+        sourceNode.playbackRate.value = value;
+      }
+      return;
+    }
     const node = chainNodes[idx] as any;
-    const type = effects[idx].type;
+    const type = fx.type;
 
-    // Update live params where possible
     if (type === 'filter') {
       if (key === 'frequency') (node as BiquadFilterNode).frequency.value = value;
       if (key === 'resonance') (node as BiquadFilterNode).Q.value = value;
     } else if (type === 'eq') {
-      // Rebuild eq chain on param change
       rebuildChain();
       return;
     } else if (type === 'compressor' || type === 'limiter') {
@@ -449,15 +487,18 @@
     } else if (type === 'tremolo') {
       if (key === 'rate' && node._lfo) node._lfo.frequency.value = value;
       if (key === 'depth' && node._lfo) {
-        // depth controls lfo gain
         rebuildChain();
         return;
       }
     }
   }
 
+  function getSpeedRate(): number {
+    const speedFx = effects.find(f => f.type === 'speed' && f.enabled);
+    return speedFx ? (speedFx.params.rate ?? 1) : 1;
+  }
+
   function rebuildChain() {
-    // Disconnect old chain
     for (const n of chainNodes) {
       try { n.disconnect(); } catch {}
       const lfo = (n as any)._lfo;
@@ -470,12 +511,12 @@
 
     chainGain = c.createGain();
     analyser = c.createAnalyser();
-    analyser.fftSize = 256;
+    analyser.fftSize = 128;
 
     let lastNode: AudioNode = chainGain;
 
     for (const fx of effects) {
-      if (!fx.enabled) continue;
+      if (!fx.enabled || fx.type === 'speed') continue;
       const node = createFXNode(fx.type, fx.params);
       if (!node) continue;
       lastNode.connect(node);
@@ -483,7 +524,6 @@
       chainNodes.push(node);
     }
 
-    // wet output for effects that have _wet
     const lastFx = chainNodes[chainNodes.length - 1];
     const wetNode = lastFx ? (lastFx as any)._wet : null;
     if (wetNode) {
@@ -499,10 +539,8 @@
     draggedOver = false;
     const file = e.dataTransfer?.files?.[0];
     if (!file) return;
-
     loading = true;
     fileName = file.name;
-
     try {
       const c = ensureCtx();
       const arrayBuf = await file.arrayBuffer();
@@ -533,7 +571,7 @@
 
     sourceNode = c.createBufferSource();
     sourceNode.buffer = audioBuffer;
-    sourceNode.playbackRate.value = playbackRate;
+    sourceNode.playbackRate.value = getSpeedRate();
     rebuildChain();
 
     sourceNode.connect(chainGain!);
@@ -556,16 +594,11 @@
     startTracking();
   }
 
-  function applyPlaybackRate() {
-    if (sourceNode && isPlaying) {
-      sourceNode.playbackRate.value = playbackRate;
-    }
-  }
-
   function startTracking() {
+    const speed = getSpeedRate();
     const tick = () => {
       if (!isPlaying || isPaused) return;
-      currentTime = startOffset + ((ctx?.currentTime ?? 0) - startCtxTime) * playbackRate;
+      currentTime = startOffset + ((ctx?.currentTime ?? 0) - startCtxTime) * speed;
       if (currentTime >= duration) {
         currentTime = duration;
         progress = 100;
@@ -573,7 +606,6 @@
       }
       progress = (currentTime / duration) * 100;
 
-      // Update waveform
       if (analyser) {
         const data = new Uint8Array(analyser.frequencyBinCount);
         analyser.getByteFrequencyData(data);
@@ -617,7 +649,7 @@
 
   function seek(e: MouseEvent) {
     if (!audioBuffer) return;
-    const rect = (e.target as HTMLElement).getBoundingClientRect();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     const wasPlaying = isPlaying;
     if (isPlaying) stop(false);
@@ -629,20 +661,23 @@
 
   async function exportWav() {
     if (!audioBuffer) return;
+    const speedFx = effects.find(f => f.type === 'speed' && f.enabled);
+    const rate = speedFx ? (speedFx.params.rate ?? 1) : 1;
+
+    const newLength = Math.ceil(audioBuffer.length / rate);
     const offCtx = new OfflineAudioContext(
       audioBuffer.numberOfChannels,
-      audioBuffer.length,
+      newLength,
       audioBuffer.sampleRate
     );
 
     const src = offCtx.createBufferSource();
     src.buffer = audioBuffer;
+    src.playbackRate.value = rate;
 
     let lastNode: AudioNode = src;
     for (const fx of effects) {
-      if (!fx.enabled) continue;
-      // Rebuild FX in offline context
-      // (simplified — uses same params)
+      if (!fx.enabled || fx.type === 'speed') continue;
       const node = createOfflineFXNode(offCtx, fx.type, fx.params);
       if (node) {
         lastNode.connect(node);
@@ -728,6 +763,7 @@
           curve[i] = Math.round(x * levels) / levels;
         }
         ws.curve = curve;
+        ws.oversample = 'none';
         return ws;
       }
       case 'saturation': {
@@ -869,30 +905,34 @@
   {#if !audioBuffer}
     <div class="fx-dropzone" class:dragover={draggedOver}>
       {#if loading}
-        <div class="fx-loading">Decoding audio...</div>
+        <div class="fx-pulse"></div>
+        <p class="fx-drop-label">Decoding...</p>
       {:else}
-        <IconWaveSine size={48} stroke={1} />
-        <p>Drop an audio file here</p>
-        <p class="fx-drop-hint">MP3, WAV, OGG, FLAC, etc.</p>
+        <div class="fx-drop-icon">
+          <IconWaveSine size={40} stroke={1.2} />
+        </div>
+        <p class="fx-drop-label">Drop audio here</p>
+        <p class="fx-drop-sub">MP3, WAV, OGG, FLAC</p>
         {#if apiKey}
           <button class="fx-cloud-btn" onclick={openCloudPicker}>
-            <IconCloud size={16} /> Import from Cloud
+            <IconCloud size={15} /> Browse Cloud
           </button>
         {/if}
       {/if}
     </div>
   {:else}
+    <!-- Header -->
     <div class="fx-header">
       <div class="fx-file-info">
-        <IconWaveSine size={20} stroke={1.5} />
+        <div class="fx-file-dot" style="background: var(--accent)"></div>
         <span class="fx-filename">{fileName}</span>
         <span class="fx-duration">{formatTime(duration)}</span>
       </div>
       <div class="fx-header-actions">
-        <button class="fx-btn-sm" onclick={() => { audioBuffer = null; fileName = ''; stop(); effects = []; }} title="Load new file">
+        <button class="fx-btn-ghost" onclick={() => { audioBuffer = null; fileName = ''; stop(); effects = []; }} title="New file">
           <IconUpload size={14} />
         </button>
-        <button class="fx-btn-sm" onclick={exportWav} title="Export WAV">
+        <button class="fx-btn-ghost" onclick={exportWav} title="Export WAV">
           <IconDownload size={14} />
         </button>
       </div>
@@ -900,55 +940,52 @@
 
     <!-- Transport -->
     <div class="fx-transport">
-      <button class="fx-transport-btn" onclick={() => isPlaying ? pause() : play()} disabled={!audioBuffer}>
+      <button class="fx-play-btn" onclick={() => isPlaying ? pause() : play()}>
         {#if isPlaying}
-          <IconPlayerPause size={20} />
+          <IconPlayerPause size={18} />
         {:else}
-          <IconPlayerPlay size={20} />
+          <IconPlayerPlay size={18} style="margin-left: 2px" />
         {/if}
       </button>
-      <button class="fx-transport-btn" onclick={() => stop()} disabled={!audioBuffer}>
-        <IconPlayerStop size={20} />
+      <button class="fx-stop-btn" onclick={() => stop()}>
+        <IconPlayerStop size={16} />
       </button>
       <div class="fx-progress" onclick={seek} role="button" tabindex="-1">
         <div class="fx-progress-fill" style="width: {progress}%"></div>
       </div>
       <span class="fx-time">{formatTime(currentTime)} / {formatTime(duration)}</span>
-      <div class="fx-slowmo">
-        <IconGauge size={14} />
-        <input
-          type="range"
-          class="fx-slider"
-          min="0.1"
-          max="3"
-          step="0.05"
-          bind:value={playbackRate}
-          oninput={applyPlaybackRate}
-        />
-        <span class="fx-slowmo-val">{playbackRate.toFixed(2)}x</span>
-      </div>
     </div>
 
     <!-- Waveform -->
     <div class="fx-waveform">
-      {#each waveformData as v}
-        <div class="fx-wave-bar" style="height: {(v / 255) * 100}%"></div>
-      {/each}
+      <svg class="fx-waveform-svg" viewBox="0 0 {waveformData.length} 100" preserveAspectRatio="none">
+        {#each waveformData as v, i}
+          <rect
+            x={i}
+            y={100 - (v / 255) * 100}
+            width="0.8"
+            height={(v / 255) * 100}
+            fill="var(--accent)"
+            opacity={0.4 + (v / 255) * 0.6}
+            rx="0.4"
+          />
+        {/each}
+      </svg>
     </div>
 
     <!-- FX Chain -->
     <div class="fx-chain">
       <div class="fx-chain-header">
-        <IconSettings size={16} stroke={1.5} />
-        <span>FX Chain</span>
+        <span class="fx-chain-title">Effects</span>
         <div class="fx-add-wrap">
           <button class="fx-add-btn" onclick={() => showAddMenu = !showAddMenu}>
-            <IconPlus size={14} /> Add Effect
+            <IconPlus size={13} /> Add
           </button>
           {#if showAddMenu}
-            <div class="fx-add-menu">
+            <div class="fx-add-menu" onclick|stopPropagation>
               {#each ALL_FX_TYPES as type}
                 <button class="fx-add-item" onclick={() => addEffect(type)}>
+                  <span class="fx-add-dot" style="background: {FX_DEFS[type].color}"></span>
                   {FX_DEFS[type].label}
                 </button>
               {/each}
@@ -958,46 +995,55 @@
       </div>
 
       {#if effects.length === 0}
-        <div class="fx-empty">No effects added. Click "Add Effect" to start.</div>
+        <div class="fx-empty">
+          <span class="fx-empty-icon">~</span>
+          <p>No effects yet</p>
+          <p class="fx-empty-sub">Add effects to shape your sound</p>
+        </div>
       {/if}
 
-      {#each effects as fx (fx.id)}
-        <div class="fx-module" class:disabled={!fx.enabled}>
-          <div class="fx-module-header">
-            <button class="fx-eye-btn" onclick={() => toggleEffect(fx.id)} title={fx.enabled ? 'Disable' : 'Enable'}>
-              {#if fx.enabled}
-                <IconEye size={14} />
-              {:else}
-                <IconEyeOff size={14} />
-              {/if}
-            </button>
-            <span class="fx-module-label">{FX_DEFS[fx.type].label}</span>
-            <button class="fx-remove-btn" onclick={() => removeEffect(fx.id)} title="Remove">
-              <IconTrash size={12} />
-            </button>
-          </div>
-          <div class="fx-params">
-            {#each Object.entries(FX_DEFS[fx.type].params) as [key, def]}
-              <div class="fx-param">
-                <label class="fx-param-label">
-                  {key}
-                  {#if def.unit}<span class="fx-param-unit">{def.unit}</span>{/if}
-                </label>
-                <input
-                  type="range"
-                  class="fx-slider"
-                  min={def.min}
-                  max={def.max}
-                  step={def.step}
-                  value={fx.params[key] ?? def.default}
-                  oninput={(e) => updateParam(fx.id, key, parseFloat((e.target as HTMLInputElement).value))}
-                />
-                <span class="fx-param-value">{(fx.params[key] ?? def.default).toFixed(def.step < 1 ? 2 : 0)}</span>
+      <div class="fx-modules">
+        {#each effects as fx, i (fx.id)}
+          <div class="fx-module" class:disabled={!fx.enabled} style="--fx-color: {FX_DEFS[fx.type].color}">
+            <div class="fx-module-header">
+              <span class="fx-module-index">{i + 1}</span>
+              <span class="fx-module-dot" style="background: {FX_DEFS[fx.type].color}"></span>
+              <span class="fx-module-label">{FX_DEFS[fx.type].label}</span>
+              <div class="fx-module-actions">
+                <button class="fx-mod-btn" onclick={() => toggleEffect(fx.id)} title={fx.enabled ? 'Bypass' : 'Enable'}>
+                  {#if fx.enabled}
+                    <IconEye size={13} />
+                  {:else}
+                    <IconEyeOff size={13} />
+                  {/if}
+                </button>
+                <button class="fx-mod-btn fx-mod-btn-rm" onclick={() => removeEffect(fx.id)} title="Remove">
+                  <IconTrash size={12} />
+                </button>
               </div>
-            {/each}
+            </div>
+            <div class="fx-params">
+              {#each Object.entries(FX_DEFS[fx.type].params) as [key, def]}
+                <div class="fx-param">
+                  <span class="fx-param-label">
+                    {key}
+                  </span>
+                  <input
+                    type="range"
+                    class="fx-slider"
+                    min={def.min}
+                    max={def.max}
+                    step={def.step}
+                    value={fx.params[key] ?? def.default}
+                    oninput={(e) => updateParam(fx.id, key, parseFloat((e.target as HTMLInputElement).value))}
+                  />
+                  <span class="fx-param-value">{(fx.params[key] ?? def.default).toFixed(def.step < 1 ? 2 : 0)}{def.unit ? ` ${def.unit}` : ''}</span>
+                </div>
+              {/each}
+            </div>
           </div>
-        </div>
-      {/each}
+        {/each}
+      </div>
     </div>
   {/if}
 
@@ -1005,9 +1051,11 @@
     <div class="fx-overlay" onclick={() => showCloudPicker = false} role="presentation">
       <div class="fx-picker" onclick={(e) => e.stopPropagation()} role="dialog">
         <div class="fx-picker-header">
-          <IconCloud size={16} />
+          <IconCloud size={15} />
           <span>Import from Cloud</span>
-          <button class="fx-btn-sm" onclick={() => showCloudPicker = false}><IconTrash size={14} /></button>
+          <button class="fx-btn-ghost" onclick={() => showCloudPicker = false}>
+            <IconTrash size={13} />
+          </button>
         </div>
         <input
           class="fx-picker-search"
@@ -1021,7 +1069,7 @@
           {:else}
             {#each cloudFiles.filter(f => !cloudSearch || f.fileName.toLowerCase().includes(cloudSearch.toLowerCase())) as file}
               <button class="fx-picker-item" onclick={() => loadFromCloud(file)}>
-                <IconWaveSine size={14} />
+                <IconWaveSine size={13} />
                 <span>{file.fileName}</span>
               </button>
             {/each}
@@ -1046,44 +1094,110 @@
     overflow-y: auto;
   }
 
+  /* Dropzone */
   .fx-dropzone {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 12px;
+    gap: 16px;
     height: 100%;
-    min-height: 300px;
-    border: 2px dashed var(--border);
-    border-radius: 12px;
-    margin: 20px;
-    color: var(--text-3);
-    transition: border-color 0.2s, background 0.2s;
+    min-height: 320px;
+    margin: 16px;
+    border-radius: 16px;
+    border: 1.5px dashed var(--border);
+    transition: all 0.3s ease;
+    position: relative;
   }
-  .fx-dropzone.dragover, .fx-dropzone:hover {
-    border-color: var(--border-hover);
+  .fx-dropzone.dragover {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 4%, transparent);
+  }
+  .fx-drop-icon {
+    width: 72px;
+    height: 72px;
+    border-radius: 20px;
     background: var(--bg-2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-3);
+    transition: all 0.3s ease;
   }
-  .fx-dropzone p { margin: 0; font-size: 14px; }
-  .fx-drop-hint { font-size: 12px !important; color: var(--text-3); }
-  .fx-loading { font-size: 14px; color: var(--text-2); }
+  .fx-dropzone:hover .fx-drop-icon {
+    background: var(--accent);
+    color: white;
+    transform: scale(1.05);
+  }
+  .fx-drop-label {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-2);
+  }
+  .fx-drop-sub {
+    margin: 0;
+    font-size: 12px;
+    color: var(--text-3);
+    letter-spacing: 0.5px;
+  }
+  .fx-pulse {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: fx-pulse 1.2s ease-in-out infinite;
+  }
+  @keyframes fx-pulse {
+    0%, 100% { transform: scale(0.8); opacity: 0.4; }
+    50% { transform: scale(1.2); opacity: 1; }
+  }
 
+  .fx-cloud-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 8px 18px;
+    color: var(--text-2);
+    cursor: pointer;
+    font-size: 13px;
+    font-family: inherit;
+    transition: all 0.2s ease;
+  }
+  .fx-cloud-btn:hover {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+    transform: translateY(-1px);
+  }
+
+  /* Header */
   .fx-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 16px;
+    padding: 10px 20px;
     border-bottom: 1px solid var(--border);
   }
   .fx-file-info {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
+    min-width: 0;
+  }
+  .fx-file-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
   }
   .fx-filename {
     font-weight: 500;
-    font-size: 14px;
-    max-width: 300px;
+    font-size: 13px;
+    max-width: 280px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1093,125 +1207,123 @@
     color: var(--text-3);
     font-family: 'Geist Mono', monospace;
   }
-  .fx-header-actions { display: flex; gap: 6px; }
-  .fx-btn-sm {
-    background: var(--bg-2);
-    border: 1px solid var(--border);
+  .fx-header-actions { display: flex; gap: 2px; }
+
+  /* Buttons */
+  .fx-btn-ghost {
+    background: none;
+    border: none;
     border-radius: 6px;
     padding: 6px;
-    color: var(--text-2);
+    color: var(--text-3);
     cursor: pointer;
     display: flex;
     align-items: center;
-    transition: background 0.15s;
+    transition: all 0.15s ease;
   }
-  .fx-btn-sm:hover { background: var(--border); color: var(--text-1); }
+  .fx-btn-ghost:hover { background: var(--bg-2); color: var(--text-1); }
 
+  /* Transport */
   .fx-transport {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 10px 16px;
+    padding: 10px 20px;
     border-bottom: 1px solid var(--border);
   }
-  .fx-transport-btn {
-    background: var(--bg-2);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 8px;
-    color: var(--text-1);
+  .fx-play-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: none;
+    color: white;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background 0.15s;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
   }
-  .fx-transport-btn:hover:not(:disabled) { background: var(--border); }
-  .fx-transport-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .fx-play-btn:hover { transform: scale(1.08); filter: brightness(1.1); }
+  .fx-play-btn:active { transform: scale(0.95); }
+
+  .fx-stop-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    color: var(--text-3);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+  }
+  .fx-stop-btn:hover { color: var(--text-1); border-color: var(--text-3); }
+
   .fx-progress {
     flex: 1;
-    height: 6px;
+    height: 4px;
     background: var(--bg-2);
-    border-radius: 3px;
+    border-radius: 2px;
     cursor: pointer;
     position: relative;
     overflow: hidden;
+    transition: height 0.15s ease;
   }
+  .fx-progress:hover { height: 6px; }
   .fx-progress-fill {
     height: 100%;
-    background: var(--accent);
-    border-radius: 3px;
-    transition: width 0.05s linear;
+    background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 70%, white));
+    border-radius: 2px;
+    transition: width 0.08s linear;
   }
   .fx-time {
-    font-size: 12px;
-    color: var(--text-3);
-    font-family: 'Geist Mono', monospace;
-    min-width: 80px;
-    text-align: right;
-  }
-  .fx-slowmo {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    color: var(--text-3);
-    min-width: 120px;
-  }
-  .fx-slowmo .fx-slider { width: 80px; }
-  .fx-slowmo-val {
     font-size: 11px;
+    color: var(--text-3);
     font-family: 'Geist Mono', monospace;
-    min-width: 36px;
+    min-width: 72px;
     text-align: right;
-    color: var(--text-2);
+    flex-shrink: 0;
   }
 
-  .fx-cloud-btn {
+  /* Waveform */
+  .fx-waveform {
+    height: 48px;
+    padding: 0 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-1);
     display: flex;
     align-items: center;
-    gap: 6px;
-    background: var(--bg-2);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 8px 16px;
-    color: var(--text-2);
-    cursor: pointer;
-    font-size: 13px;
-    transition: background 0.15s;
   }
-  .fx-cloud-btn:hover { background: var(--border); color: var(--text-1); }
-
-  .fx-waveform {
-    display: flex;
-    align-items: flex-end;
-    gap: 1px;
-    height: 60px;
-    padding: 8px 16px;
-    border-bottom: 1px solid var(--border);
-    background: var(--bg-2);
-  }
-  .fx-wave-bar {
-    flex: 1;
-    background: var(--accent);
-    border-radius: 1px 1px 0 0;
-    min-height: 2px;
-    opacity: 0.7;
+  .fx-waveform-svg {
+    width: 100%;
+    height: 100%;
   }
 
+  /* FX Chain */
   .fx-chain {
     flex: 1;
-    padding: 16px;
+    padding: 16px 20px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 10px;
+    min-height: 0;
   }
   .fx-chain-header {
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text-2);
+  }
+  .fx-chain-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-3);
   }
   .fx-add-wrap { position: relative; margin-left: auto; }
   .fx-add-btn {
@@ -1220,89 +1332,135 @@
     gap: 4px;
     background: var(--accent);
     border: none;
-    border-radius: 6px;
-    padding: 5px 10px;
-    color: #fff;
+    border-radius: 8px;
+    padding: 5px 12px;
+    color: white;
     font-size: 12px;
     font-weight: 500;
+    font-family: inherit;
     cursor: pointer;
-    transition: opacity 0.15s;
+    transition: all 0.15s ease;
   }
-  .fx-add-btn:hover { opacity: 0.85; }
+  .fx-add-btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
   .fx-add-menu {
     position: absolute;
-    top: 100%;
+    top: calc(100% + 4px);
     right: 0;
-    margin-top: 4px;
-    background: var(--bg-3);
+    background: var(--bg-2);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 10px;
     padding: 4px;
     z-index: 10;
-    min-width: 140px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    min-width: 150px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+    max-height: 320px;
+    overflow-y: auto;
   }
   .fx-add-item {
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 8px;
     width: 100%;
     text-align: left;
     background: none;
     border: none;
-    padding: 6px 10px;
+    padding: 7px 10px;
     color: var(--text-1);
     font-size: 12px;
+    font-family: inherit;
     cursor: pointer;
-    border-radius: 4px;
+    border-radius: 6px;
+    transition: background 0.1s ease;
   }
   .fx-add-item:hover { background: var(--border); }
+  .fx-add-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
 
   .fx-empty {
     text-align: center;
+    padding: 32px 16px;
     color: var(--text-3);
-    font-size: 13px;
-    padding: 24px;
   }
+  .fx-empty-icon {
+    font-size: 28px;
+    opacity: 0.3;
+    display: block;
+    margin-bottom: 8px;
+  }
+  .fx-empty p { margin: 0; font-size: 13px; }
+  .fx-empty-sub { font-size: 11px !important; opacity: 0.6; margin-top: 4px !important; }
 
-  .fx-module {
-    background: var(--bg-2);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    overflow: hidden;
-    transition: opacity 0.15s;
+  /* Modules */
+  .fx-modules {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
   }
-  .fx-module.disabled { opacity: 0.5; }
+  .fx-module {
+    border-radius: 10px;
+    border: 1px solid color-mix(in srgb, var(--fx-color, var(--accent)) 25%, var(--border));
+    background: var(--bg-2);
+    overflow: hidden;
+    transition: all 0.2s ease;
+  }
+  .fx-module:hover {
+    border-color: color-mix(in srgb, var(--fx-color, var(--accent)) 50%, var(--border));
+  }
+  .fx-module.disabled {
+    opacity: 0.4;
+  }
   .fx-module-header {
     display: flex;
     align-items: center;
     gap: 8px;
     padding: 8px 12px;
-    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--fx-color, var(--accent)) 5%, transparent);
   }
-  .fx-eye-btn, .fx-remove-btn {
-    background: none;
-    border: none;
+  .fx-module-index {
+    font-size: 10px;
+    font-family: 'Geist Mono', monospace;
     color: var(--text-3);
-    cursor: pointer;
-    padding: 2px;
-    display: flex;
-    align-items: center;
-    transition: color 0.15s;
+    min-width: 14px;
   }
-  .fx-eye-btn:hover { color: var(--text-1); }
-  .fx-remove-btn:hover { color: var(--red); }
+  .fx-module-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
   .fx-module-label {
     flex: 1;
     font-size: 12px;
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+    color: var(--text-1);
   }
+  .fx-module-actions {
+    display: flex;
+    gap: 2px;
+  }
+  .fx-mod-btn {
+    background: none;
+    border: none;
+    color: var(--text-3);
+    cursor: pointer;
+    padding: 3px;
+    display: flex;
+    align-items: center;
+    border-radius: 4px;
+    transition: all 0.1s ease;
+  }
+  .fx-mod-btn:hover { color: var(--text-1); background: var(--bg-1); }
+  .fx-mod-btn-rm:hover { color: #f87171; }
 
   .fx-params {
     display: flex;
     flex-direction: column;
     gap: 6px;
-    padding: 10px 12px;
+    padding: 8px 12px 10px;
   }
   .fx-param {
     display: flex;
@@ -1312,50 +1470,57 @@
   .fx-param-label {
     font-size: 11px;
     color: var(--text-3);
-    min-width: 70px;
+    min-width: 64px;
     text-transform: capitalize;
-  }
-  .fx-param-unit {
-    font-size: 10px;
-    opacity: 0.6;
   }
   .fx-slider {
     flex: 1;
-    height: 4px;
+    height: 3px;
     -webkit-appearance: none;
     appearance: none;
     background: var(--border);
-    border-radius: 2px;
+    border-radius: 1.5px;
     outline: none;
+    transition: height 0.1s ease;
   }
+  .fx-slider:hover { height: 5px; }
   .fx-slider::-webkit-slider-thumb {
     -webkit-appearance: none;
-    width: 12px;
-    height: 12px;
+    width: 14px;
+    height: 14px;
     border-radius: 50%;
-    background: var(--accent);
+    background: var(--fx-color, var(--accent));
     cursor: pointer;
+    border: 2px solid var(--bg-2);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+    transition: transform 0.1s ease;
+  }
+  .fx-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.15);
   }
   .fx-slider::-moz-range-thumb {
-    width: 12px;
-    height: 12px;
+    width: 14px;
+    height: 14px;
     border-radius: 50%;
-    background: var(--accent);
+    background: var(--fx-color, var(--accent));
     cursor: pointer;
-    border: none;
+    border: 2px solid var(--bg-2);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
   }
   .fx-param-value {
-    font-size: 11px;
+    font-size: 10px;
     font-family: 'Geist Mono', monospace;
-    color: var(--text-2);
-    min-width: 40px;
+    color: var(--text-3);
+    min-width: 52px;
     text-align: right;
   }
 
+  /* Overlay */
   .fx-overlay {
     position: fixed;
     inset: 0;
     background: rgba(0,0,0,0.5);
+    backdrop-filter: blur(4px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1364,32 +1529,37 @@
   .fx-picker {
     background: var(--bg-1);
     border: 1px solid var(--border);
-    border-radius: 12px;
+    border-radius: 14px;
     width: 400px;
-    max-height: 500px;
+    max-height: 480px;
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.3);
   }
   .fx-picker-header {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 12px 16px;
+    padding: 14px 16px;
     border-bottom: 1px solid var(--border);
     font-weight: 500;
+    font-size: 13px;
   }
-  .fx-picker-header .fx-btn-sm { margin-left: auto; }
+  .fx-picker-header .fx-btn-ghost { margin-left: auto; }
   .fx-picker-search {
     margin: 8px 12px;
     padding: 8px 12px;
     background: var(--bg-2);
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: 8px;
     color: var(--text-1);
     font-size: 13px;
+    font-family: inherit;
     outline: none;
+    transition: border-color 0.15s ease;
   }
+  .fx-picker-search:focus { border-color: var(--accent); }
   .fx-picker-search::placeholder { color: var(--text-3); }
   .fx-picker-list {
     flex: 1;
@@ -1407,13 +1577,21 @@
     padding: 8px 10px;
     color: var(--text-1);
     font-size: 13px;
+    font-family: inherit;
     cursor: pointer;
-    border-radius: 6px;
+    border-radius: 8px;
+    transition: background 0.1s ease;
   }
-  .fx-picker-item:hover { background: var(--border); }
+  .fx-picker-item:hover { background: var(--bg-2); }
   .fx-picker-item span {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .fx-loading {
+    text-align: center;
+    padding: 20px;
+    color: var(--text-3);
+    font-size: 13px;
   }
 </style>
