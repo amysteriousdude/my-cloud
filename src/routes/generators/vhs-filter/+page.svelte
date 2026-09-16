@@ -35,6 +35,7 @@
   let sourceImageUrl = $state<string | null>(null);
   let imageLoaded = $state(false);
   let isAnimatedImage = $state(false);
+  let sourceFormat = $state('');
 
   type AnimatedFrame = { image: VideoFrame; duration: number; timestamp: number };
   let animFrames = $state<AnimatedFrame[]>([]);
@@ -126,6 +127,7 @@
   }
 
   function loadImageFromFile(file: File) {
+    sourceFormat = file.type.split('/').pop() || file.name.split('.').pop() || 'png';
     if (file.type === 'image/gif' || file.type === 'image/apng' || file.name.endsWith('.gif') || file.name.endsWith('.apng')) {
       loadAnimatedImage(file);
       return;
@@ -262,6 +264,7 @@
     const input = e.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
+    sourceFormat = file.type.split('/').pop() || file.name.split('.').pop() || 'mp4';
     videoUrl = URL.createObjectURL(file);
     await new Promise<void>((resolve) => {
       const v = document.createElement('video');
@@ -472,6 +475,7 @@
     e.preventDefault();
     const file = e.dataTransfer?.files?.[0];
     if (!file) return;
+    sourceFormat = file.type.split('/').pop() || file.name.split('.').pop() || 'mp4';
     if (file.type.startsWith('video/')) {
       mode = 'video';
       videoUrl = URL.createObjectURL(file);
@@ -531,6 +535,8 @@
 
   function loadFromCloudFile(file: { fileName: string; metaFileId: string }) {
     showCloudPicker = false;
+    const ext = file.fileName.split('.').pop()?.toLowerCase() || '';
+    sourceFormat = ext;
     const isVideo = /\.(mp4|webm|avi|mov|mkv)$/i.test(file.fileName);
     if (isVideo) {
       loadVideoFromUrl(`/api/telegram/getRequestFile?api_key=${apiKey}&meta_file_id=${file.metaFileId}&download=true`);
@@ -541,6 +547,8 @@
 
   function loadImageFromUrl(url: string) {
     mode = 'image';
+    const ext = url.split('?')[0].split('.').pop()?.toLowerCase() || 'png';
+    sourceFormat = ext;
     sourceImageUrl = url;
     const img = new Image();
     img.crossOrigin = 'anonymous';
@@ -556,6 +564,8 @@
 
   async function loadVideoFromUrl(url: string) {
     mode = 'video';
+    const ext = url.split('?')[0].split('.').pop()?.toLowerCase() || 'mp4';
+    sourceFormat = ext;
     videoUrl = url;
     await new Promise<void>((resolve) => {
       const v = document.createElement('video');
@@ -639,6 +649,10 @@
             <button class="seg-btn" class:active={exportFormat==='mp4'} onclick={() => exportFormat='mp4'}>MP4</button>
             <button class="seg-btn" class:active={exportFormat==='webm'} onclick={() => exportFormat='webm'}>WebM</button>
           </div>
+        </div>
+        <div class="ctrl-group">
+          <label>Original</label>
+          <div style="font-size:12px;color:var(--text-2);margin-top:4px;text-transform:uppercase">{sourceFormat || 'unknown'}</div>
         </div>
         <div class="ctrl-group">
           <label>Resolution</label>
