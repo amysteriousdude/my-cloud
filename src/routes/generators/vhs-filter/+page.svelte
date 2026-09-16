@@ -55,11 +55,60 @@
   let exporting = $state(false);
   let exportProgress = $state(0);
   let exportTotal = $state(0);
+  let exportStatus = $state('');
 
   let showCloudPicker = $state(false);
   let cloudFiles = $state<{ fileName: string; metaFileId: string }[]>([]);
   let cloudLoading = $state(false);
   let cloudSearch = $state('');
+
+  let ffmpegLoaded = $state(false);
+  let ffmpeg: any = null;
+  let exportFormat = $state<'mp4' | 'webm'>('mp4');
+  let showVideoExport = $state(false);
+  let videoExportBlob = $state<Blob | null>(null);
+  let videoExportName = $state('vhs-export.mp4');
+
+  async function loadFfmpeg() {
+    if (ffmpegLoaded) return;
+    try {
+      const { FFmpeg } = await import('@ffmpeg/ffmpeg');
+      const { toBlobURL } = await import('@ffmpeg/util');
+      const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
+      ffmpeg = new FFmpeg();
+      await ffmpeg.load({
+        coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+        wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+      });
+      ffmpegLoaded = true;
+    } catch (err: any) {
+      console.error('Failed to load FFmpeg:', err);
+    }
+  }
+
+  async function cloudUpload(blob: Blob, name: string, folderId: string | null) {
+    const chunkSize = 18 * 1024 * 1024;
+    const totalChunks = Math.ceil(blob.size / chunkSize);
+    const chunks: number[] = [];
+    for (let i = 0; i < totalChunks; i++) {
+      const start = i * chunkSize;
+      const end = Math.min(start + chunkSize, blob.size);
+      const chunk = blob.slice(start, end);
+      const formData = new FormData();
+      formData.append('chunk', chunk, `chunk-${i}`);
+      const res = await fetch('/api/telegram/uploadChunk', {
+        method: 'POST', body: formData,
+        headers: { 'X-Api-Key': apiKey, 'X-Chunk-Index': String(i), 'X-File-Name': name },
+      });
+      if (!res.ok) throw new Error('Chunk upload failed');
+      chunks.push(i);
+    }
+    const finRes = await fetch('/api/telegram/finalizeUpload', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Api-Key': apiKey },
+      body: JSON.stringify({ fileName: name, type: blob.type, totalBytes: blob.size, chunks, folderId }),
+    });
+    if (!finRes.ok) throw new Error('Finalize failed');
+  }
 
   let collapseState = $state<Record<string, boolean>>({
     signal: false, geometry: false, noise: false, vhs: false,
@@ -308,68 +357,105 @@
 
   async function exportVideo() {
     if (!videoEl && !isAnimatedImage) return;
+    if (!ffmpeg) await loadFfmpeg();
+    if (!ffmpeg) return;
+
     exporting = true;
     exportProgress = 0;
     const totalFrames = isAnimatedImage ? animFrameCount : videoTotalFrames;
     exportTotal = totalFrames;
+    exportStatus = 'Loading encoder...';
 
     const offCanvas = document.createElement('canvas');
     offCanvas.width = videoW;
     offCanvas.height = videoH;
     const offCtx = offCanvas.getContext('2d')!;
 
-    const stream = offCanvas.captureStream(30);
-    const chunks: Blob[] = [];
-    const recorder = new MediaRecorder(stream, {
-      mimeType: MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
-        ? 'video/webm;codecs=vp9' : 'video/webm',
-      videoBitsPerSecond: 8000000,
-    });
-    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
-    const done = new Promise<void>((resolve) => { recorder.onstop = () => resolve(); });
+    try {
+      try { await ffmpeg.deleteFile('input.mp4'); } catch {}
+      try { await ffmpeg.deleteFile('output.mp4'); } catch {}
+      try { await ffmpeg.deleteFile('output.webm'); } catch {}
 
-    recorder.start();
+      const fps = 30;
 
-    if (isAnimatedImage) {
-      for (let f = 0; f < animFrameCount; f++) {
-        const frame = animFrames[f];
-        offCtx.drawImage(frame.image, 0, 0, videoW, videoH);
-        const imageData = offCtx.getImageData(0, 0, videoW, videoH);
-        applyEffects(imageData.data, videoW, videoH, { ...params, time: frame.timestamp, seed });
-        offCtx.putImageData(imageData, 0, 0);
-        exportProgress = f + 1;
-        await new Promise((r) => setTimeout(r, 0));
+      if (isAnimatedImage) {
+        for (let f = 0; f < animFrameCount; f++) {
+          const frame = animFrames[f];
+          offCtx.drawImage(frame.image, 0, 0, videoW, videoH);
+          const imageData = offCtx.getImageData(0, 0, videoW, videoH);
+          applyEffects(imageData.data, videoW, videoH, { ...params, time: frame.timestamp, seed });
+          offCtx.putImageData(imageData, 0, 0);
+          const frameName = `frame${String(f).padStart(5, '0')}.png`;
+          const dataUrl = offCanvas.toDataURL('image/png');
+          const binary = Uint8Array.from(atob(dataUrl.split(',')[1]), c => c.charCodeAt(0));
+          await ffmpeg.writeFile(frameName, binary);
+          exportProgress = f + 1;
+          await new Promise((r) => setTimeout(r, 0));
+        }
+      } else {
+        videoEl!.currentTime = 0;
+        await new Promise<void>((r) => { videoEl!.onseeked = () => r(); });
+
+        for (let f = 0; f < totalFrames; f++) {
+          offCtx.drawImage(videoEl!, 0, 0, videoW, videoH);
+          const imageData = offCtx.getImageData(0, 0, videoW, videoH);
+          applyEffects(imageData.data, videoW, videoH, { ...params, time: videoEl!.currentTime, seed });
+          offCtx.putImageData(imageData, 0, 0);
+          const frameName = `frame${String(f).padStart(5, '0')}.png`;
+          const dataUrl = offCanvas.toDataURL('image/png');
+          const binary = Uint8Array.from(atob(dataUrl.split(',')[1]), c => c.charCodeAt(0));
+          await ffmpeg.writeFile(frameName, binary);
+
+          await new Promise<void>((r) => {
+            videoEl!.currentTime = f / fps;
+            videoEl!.onseeked = () => r();
+          });
+
+          exportProgress = f + 1;
+          await new Promise((r) => setTimeout(r, 0));
+        }
       }
-    } else {
-      videoEl!.currentTime = 0;
-      await new Promise<void>((r) => { videoEl!.onseeked = () => r(); });
 
-      for (let f = 0; f < totalFrames; f++) {
-        offCtx.drawImage(videoEl!, 0, 0, videoW, videoH);
-        const imageData = offCtx.getImageData(0, 0, videoW, videoH);
-        applyEffects(imageData.data, videoW, videoH, { ...params, time: videoEl!.currentTime, seed });
-        offCtx.putImageData(imageData, 0, 0);
+      exportProgress = Math.round((totalFrames / totalFrames) * 80);
+      exportStatus = 'Encoding video...';
+      await new Promise((r) => setTimeout(r, 0));
 
-        await new Promise<void>((r) => {
-          videoEl!.currentTime = f / 30;
-          videoEl!.onseeked = () => r();
-        });
+      const outFile = `output.${exportFormat}`;
+      const inputArgs = ['-framerate', String(fps), '-i', 'frame%05d.png'];
 
-        exportProgress = f + 1;
-        await new Promise((r) => setTimeout(r, 0));
+      if (exportFormat === 'mp4') {
+        await ffmpeg.exec([
+          ...inputArgs,
+          '-c:v', 'libx264', '-preset', 'fast', '-b:v', '6M',
+          '-pix_fmt', 'yuv420p', '-movflags', '+faststart',
+          outFile,
+        ]);
+      } else {
+        await ffmpeg.exec([
+          ...inputArgs,
+          '-c:v', 'libvpx-vp9', '-b:v', '6M', '-crf', '30',
+          '-pix_fmt', 'yuv420p',
+          outFile,
+        ]);
       }
+
+      exportProgress = 95;
+      await new Promise((r) => setTimeout(r, 0));
+
+      const data = await ffmpeg.readFile(outFile);
+      const blob = new Blob([data], { type: exportFormat === 'mp4' ? 'video/mp4' : 'video/webm' });
+      showVideoExport = false;
+      videoExportBlob = blob;
+      videoExportName = `vhs-export.${exportFormat}`;
+      showSave = true;
+
+      for (let i = 0; i < totalFrames; i++) {
+        try { await ffmpeg.deleteFile(`frame${String(i).padStart(5, '0')}.png`); } catch {}
+      }
+      try { await ffmpeg.deleteFile(outFile); } catch {}
+    } catch (err: any) {
+      console.error('Export failed:', err);
     }
-
-    recorder.stop();
-    await done;
-
-    const blob = new Blob(chunks, { type: 'video/webm' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'vhs-export.webm';
-    a.click();
-    URL.revokeObjectURL(url);
 
     exporting = false;
     if (isAnimatedImage) {
@@ -500,36 +586,75 @@
 
 <SaveDialog
   open={showSave}
-  defaultName="vhs-filter"
+  defaultName={videoExportBlob ? videoExportName.replace(/\.\w+$/, '') : 'vhs-filter'}
+  ext={videoExportBlob ? videoExportName.split('.').pop()! : 'png'}
+  label={videoExportBlob ? 'video' : 'image'}
   {apiKey}
-  onconfirm={(name) => { const a = document.createElement('a'); a.href = canvas.toDataURL('image/png'); a.download = name; a.click(); }}
-  onsave={async (name, folderId) => {
-    const dataUrl = canvas.toDataURL('image/png');
-    const blob = await (await fetch(dataUrl)).blob();
-    const chunkSize = 18 * 1024 * 1024;
-    const totalChunks = Math.ceil(blob.size / chunkSize);
-    const chunks: number[] = [];
-    for (let i = 0; i < totalChunks; i++) {
-      const start = i * chunkSize;
-      const end = Math.min(start + chunkSize, blob.size);
-      const chunk = blob.slice(start, end);
-      const formData = new FormData();
-      formData.append('chunk', chunk, `chunk-${i}`);
-      const res = await fetch('/api/telegram/uploadChunk', {
-        method: 'POST', body: formData,
-        headers: { 'X-Api-Key': apiKey, 'X-Chunk-Index': String(i), 'X-File-Name': name },
-      });
-      if (!res.ok) throw new Error('Chunk upload failed');
-      chunks.push(i);
+  onconfirm={(name) => {
+    if (videoExportBlob) {
+      const url = URL.createObjectURL(videoExportBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      a.click();
+      URL.revokeObjectURL(url);
+    } else {
+      const a = document.createElement('a');
+      a.href = canvas.toDataURL('image/png');
+      a.download = name;
+      a.click();
     }
-    const finRes = await fetch('/api/telegram/finalizeUpload', {
-      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Api-Key': apiKey },
-      body: JSON.stringify({ fileName: name, type: 'image/png', totalBytes: blob.size, chunks, folderId }),
-    });
-    if (!finRes.ok) throw new Error('Finalize failed');
+    videoExportBlob = null;
   }}
-  onclose={() => showSave = false}
+  onsave={async (name, folderId) => {
+    let blob: Blob;
+    if (videoExportBlob) {
+      blob = videoExportBlob;
+    } else {
+      const dataUrl = canvas.toDataURL('image/png');
+      blob = await (await fetch(dataUrl)).blob();
+    }
+    await cloudUpload(blob, name, folderId);
+    videoExportBlob = null;
+  }}
+  onclose={() => { showSave = false; videoExportBlob = null; }}
 />
+
+{#if showVideoExport}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <div class="modal-overlay" onclick={() => showVideoExport = false} role="presentation">
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <div class="modal-picker" onclick={(e) => e.stopPropagation()} role="dialog" style="max-width:360px">
+      <div class="modal-header">
+        <IconVideo size={15} />
+        <span>Export Video</span>
+        <button class="modal-close" onclick={() => showVideoExport = false}><IconX size={14}/></button>
+      </div>
+      <div style="padding:16px 18px;display:flex;flex-direction:column;gap:14px;">
+        <div class="ctrl-group">
+          <label>Format</label>
+          <div class="seg" style="margin-top:4px">
+            <button class="seg-btn" class:active={exportFormat==='mp4'} onclick={() => exportFormat='mp4'}>MP4</button>
+            <button class="seg-btn" class:active={exportFormat==='webm'} onclick={() => exportFormat='webm'}>WebM</button>
+          </div>
+        </div>
+        <div class="ctrl-group">
+          <label>Resolution</label>
+          <div style="font-size:12px;color:var(--text-2);margin-top:4px">{videoW}×{videoH}</div>
+        </div>
+        <div class="ctrl-group">
+          <label>Frames</label>
+          <div style="font-size:12px;color:var(--text-2);margin-top:4px">{isAnimatedImage ? animFrameCount : videoTotalFrames} @ 30fps</div>
+        </div>
+        <button class="action-btn primary" style="width:100%;justify-content:center;margin-top:4px" onclick={exportVideo}>
+          <IconDownload size={14}/> Export
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <div class="page">
   <header class="topbar">
@@ -541,7 +666,7 @@
         <button class="action-btn primary" onclick={() => showSave = true}><IconDownload size={15}/> Save</button>
       {/if}
       {#if mode === 'video' && videoLoaded && !exporting}
-        <button class="action-btn primary" onclick={exportVideo}><IconDownload size={15}/> Export Video</button>
+        <button class="action-btn primary" onclick={() => showVideoExport = true}><IconDownload size={15}/> Export Video</button>
       {/if}
     </div>
   </header>
@@ -567,7 +692,7 @@
       {#if exporting}
         <div class="export-overlay">
           <IconLoader2 size={24} class="spin-icon" />
-          <span>Exporting {exportProgress}/{exportTotal} frames...</span>
+          <span>{exportStatus || `Rendering ${exportProgress}/${exportTotal} frames...`}</span>
           <div class="export-bar"><div class="export-fill" style="width:{(exportProgress/exportTotal)*100}%"></div></div>
         </div>
       {/if}

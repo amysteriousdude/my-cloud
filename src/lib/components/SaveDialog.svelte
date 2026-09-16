@@ -5,6 +5,8 @@
   let {
     open = false,
     defaultName = 'export',
+    ext = 'png',
+    label = 'image',
     apiKey = '',
     onconfirm,
     onsave,
@@ -12,6 +14,8 @@
   }: {
     open?: boolean;
     defaultName?: string;
+    ext?: string;
+    label?: string;
     apiKey?: string;
     onconfirm: (filename: string) => void;
     onsave?: (filename: string, folderId: string | null) => Promise<void>;
@@ -70,7 +74,7 @@
     if (!onsave) return;
     saving = true; saveStatus = 'idle'; errMsg = '';
     try {
-      const name = (filename || defaultName).replace(/\.png$/i, '') + '.png';
+      const name = (filename || defaultName).replace(new RegExp(`\\.${ext}$`, 'i'), '') + '.' + ext;
       await onsave(name, currentId);
       saveStatus = 'ok';
       setTimeout(() => { saveStatus = 'idle'; onclose(); }, 900);
@@ -81,7 +85,7 @@
   }
 
   function download() {
-    const name = (filename || defaultName).replace(/\.png$/i, '') + '.png';
+    const name = (filename || defaultName).replace(new RegExp(`\\.${ext}$`, 'i'), '') + '.' + ext;
     onconfirm(name);
     onclose();
   }
@@ -102,7 +106,7 @@
 
       <!-- Header -->
       <div class="dialog-header">
-        <span>Save image</span>
+        <span>Save {label}</span>
         <button class="close-btn" onclick={onclose}><IconX size={14}/></button>
       </div>
 
@@ -151,7 +155,7 @@
             bind:value={filename}
             placeholder={defaultName}
           />
-          <span class="fname-ext">.png</span>
+          <span class="fname-ext">.{ext}</span>
         </div>
 
         {#if saveStatus === 'err'}
