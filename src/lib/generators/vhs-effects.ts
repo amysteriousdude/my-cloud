@@ -439,6 +439,92 @@ export function interlaceFields(pixels: Uint8ClampedArray, w: number, h: number,
   }
 }
 
+// ── 9. PIXEL DEGRADATION ──────────────────────────────
+
+export function pixelate(pixels: Uint8ClampedArray, w: number, h: number, size: number) {
+  if (size <= 1) return;
+  const s = Math.round(size);
+  for (let by = 0; by < h; by += s) {
+    for (let bx = 0; bx < w; bx += s) {
+      let r = 0, g = 0, b = 0, count = 0;
+      for (let dy = 0; dy < s && by + dy < h; dy++) {
+        for (let dx = 0; dx < s && bx + dx < w; dx++) {
+          const i = ((by + dy) * w + (bx + dx)) * 4;
+          r += pixels[i]; g += pixels[i + 1]; b += pixels[i + 2]; count++;
+        }
+      }
+      r = Math.round(r / count); g = Math.round(g / count); b = Math.round(b / count);
+      for (let dy = 0; dy < s && by + dy < h; dy++) {
+        for (let dx = 0; dx < s && bx + dx < w; dx++) {
+          const i = ((by + dy) * w + (bx + dx)) * 4;
+          pixels[i] = r; pixels[i + 1] = g; pixels[i + 2] = b;
+        }
+      }
+    }
+  }
+}
+
+export function bitcrush(pixels: Uint8ClampedArray, w: number, h: number, bits: number) {
+  if (bits >= 8) return;
+  const levels = Math.pow(2, Math.max(1, Math.round(bits)));
+  const step = 255 / (levels - 1);
+  for (let i = 0; i < pixels.length; i += 4) {
+    pixels[i] = Math.round(Math.round(pixels[i] / step) * step);
+    pixels[i + 1] = Math.round(Math.round(pixels[i + 1] / step) * step);
+    pixels[i + 2] = Math.round(Math.round(pixels[i + 2] / step) * step);
+  }
+}
+
+export function colorQuantize(pixels: Uint8ClampedArray, w: number, h: number, levels: number) {
+  if (levels >= 256) return;
+  const step = 255 / (levels - 1);
+  for (let i = 0; i < pixels.length; i += 4) {
+    pixels[i] = Math.round(Math.round(pixels[i] / step) * step);
+    pixels[i + 1] = Math.round(Math.round(pixels[i + 1] / step) * step);
+    pixels[i + 2] = Math.round(Math.round(pixels[i + 2] / step) * step);
+  }
+}
+
+export function blockNoise(pixels: Uint8ClampedArray, w: number, h: number, amount: number, seed: number) {
+  if (amount === 0) return;
+  const rand = mulberry32(seed + 7777);
+  const blockSize = 8;
+  for (let by = 0; by < h; by += blockSize) {
+    for (let bx = 0; bx < w; bx += blockSize) {
+      if (rand() > amount) continue;
+      const br = (rand() - 0.5) * 80;
+      const bg = (rand() - 0.5) * 80;
+      const bb = (rand() - 0.5) * 80;
+      for (let dy = 0; dy < blockSize && by + dy < h; dy++) {
+        for (let dx = 0; dx < blockSize && bx + dx < w; dx++) {
+          const i = ((by + dy) * w + (bx + dx)) * 4;
+          pixels[i] = clamp(pixels[i] + br);
+          pixels[i + 1] = clamp(pixels[i + 1] + bg);
+          pixels[i + 2] = clamp(pixels[i + 2] + bb);
+        }
+      }
+    }
+  }
+}
+
+export function horizontalTear(pixels: Uint8ClampedArray, w: number, h: number, amount: number, time: number) {
+  if (amount === 0) return;
+  const out = new Uint8ClampedArray(pixels);
+  for (let y = 0; y < h; y++) {
+    const tear = Math.sin(y * 0.1 + time * 5) * amount * 30;
+    if (Math.abs(tear) < 1) continue;
+    const offset = Math.round(tear);
+    for (let x = 0; x < w; x++) {
+      const sx = clamp(x + offset, 0, w - 1);
+      const di = (y * w + x) * 4;
+      const si = (y * w + sx) * 4;
+      pixels[di] = out[si];
+      pixels[di + 1] = out[si + 1];
+      pixels[di + 2] = out[si + 2];
+    }
+  }
+}
+
 // ── PIPELINE ───────────────────────────────────────────
 
 export interface VHSParams {
@@ -472,6 +558,10 @@ export interface VHSParams {
   edgeGlowThreshold: number;
   edgeGlowAmount: number;
   interlaceOffset: number;
+  degradePixelate: number;
+  degradeBitcrush: number;
+  degradeBlockNoise: number;
+  degradeHorizontalTear: number;
   time: number;
   seed: number;
 }
@@ -507,6 +597,10 @@ export const DEFAULT_PARAMS: VHSParams = {
   edgeGlowThreshold: 0.5,
   edgeGlowAmount: 0,
   interlaceOffset: 0,
+  degradePixelate: 1,
+  degradeBitcrush: 8,
+  degradeBlockNoise: 0,
+  degradeHorizontalTear: 0,
   time: 0,
   seed: 1,
 };
@@ -537,4 +631,8 @@ export function applyEffects(pixels: Uint8ClampedArray, w: number, h: number, p:
   scanlines(pixels, w, h, p.scanlineThickness, p.scanlineIntensity, p.scanlineBeam);
   edgeGlow(pixels, w, h, p.edgeGlowThreshold, p.edgeGlowAmount);
   interlaceFields(pixels, w, h, p.interlaceOffset);
+  pixelate(pixels, w, h, p.degradePixelate);
+  bitcrush(pixels, w, h, p.degradeBitcrush);
+  blockNoise(pixels, w, h, p.degradeBlockNoise, p.seed);
+  horizontalTear(pixels, w, h, p.degradeHorizontalTear, p.time);
 }

@@ -34,6 +34,12 @@
   let sourceImage = $state<HTMLImageElement | null>(null);
   let sourceImageUrl = $state<string | null>(null);
   let imageLoaded = $state(false);
+  let isAnimatedImage = $state(false);
+
+  type AnimatedFrame = { image: VideoFrame; duration: number; timestamp: number };
+  let animFrames = $state<AnimatedFrame[]>([]);
+  let animFrameIndex = $state(0);
+  let animFrameCount = $state(0);
 
   let videoEl = $state<HTMLVideoElement | null>(null);
   let videoUrl = $state<string | null>(null);
@@ -57,7 +63,7 @@
 
   let collapseState = $state<Record<string, boolean>>({
     signal: false, geometry: false, noise: false, vhs: false,
-    color: false, scanlines: false, edge: false, web: false, canvas: false, presets: true,
+    color: false, scanlines: false, edge: false, web: false, degrade: false, canvas: false, presets: true,
   });
 
   function toggleSection(key: string) { collapseState[key] = !collapseState[key]; }
@@ -71,18 +77,84 @@
   }
 
   function loadImageFromFile(file: File) {
+    if (file.type === 'image/gif' || file.type === 'image/apng' || file.name.endsWith('.gif') || file.name.endsWith('.apng')) {
+      loadAnimatedImage(file);
+      return;
+    }
     const url = URL.createObjectURL(file);
     sourceImageUrl = url;
     const img = new Image();
     img.onload = () => {
       sourceImage = img;
       imageLoaded = true;
+      isAnimatedImage = false;
       mode = 'image';
       canvas.width = img.naturalWidth || img.width;
       canvas.height = img.naturalHeight || img.height;
       generate();
     };
     img.src = url;
+  }
+
+  async function loadAnimatedImage(file: File) {
+    try {
+      if (typeof ImageDecoder !== 'undefined') {
+        const buffer = await file.arrayBuffer();
+        const decoder = new ImageDecoder({ data: buffer, type: file.type || 'image/gif' });
+        await decoder.decode();
+        const trackInfo = decoder.tracks?.selectedTrack;
+        const count = trackInfo?.frameCount ?? 0;
+        if (count > 1) {
+          animFrames = [];
+          for (let i = 0; i < count; i++) {
+            const result = await decoder.decode({ frameIndex: i });
+            const frame = result.image;
+            const dur = (trackInfo as any)?.frameDuration?.[i] ?? 33333;
+            animFrames.push({ image: frame, duration: dur / 1000000, timestamp: animFrames.reduce((s, f) => s + f.duration, 0) });
+          }
+          animFrameCount = animFrames.length;
+          animFrameIndex = 0;
+          isAnimatedImage = true;
+          imageLoaded = true;
+          mode = 'video';
+          videoW = animFrames[0].image.displayWidth;
+          videoH = animFrames[0].image.displayHeight;
+          videoDuration = animFrames.reduce((s, f) => s + f.duration, 0);
+          videoTotalFrames = animFrames.length;
+          videoLoaded = true;
+          canvas.width = videoW;
+          canvas.height = videoH;
+          drawAnimFrame(0);
+          return;
+        }
+      }
+    } catch {}
+    const url = URL.createObjectURL(file);
+    sourceImageUrl = url;
+    const img = new Image();
+    img.onload = () => {
+      sourceImage = img;
+      imageLoaded = true;
+      isAnimatedImage = false;
+      mode = 'image';
+      canvas.width = img.naturalWidth || img.width;
+      canvas.height = img.naturalHeight || img.height;
+      generate();
+    };
+    img.src = url;
+  }
+
+  function drawAnimFrame(index: number) {
+    if (!canvas || index < 0 || index >= animFrames.length) return;
+    animFrameIndex = index;
+    videoCurrentTime = animFrames.slice(0, index).reduce((s, f) => s + f.duration, 0);
+    videoFrame = index;
+    const ctx = canvas.getContext('2d')!;
+    const frame = animFrames[index];
+    ctx.drawImage(frame.image, 0, 0, videoW, videoH);
+    const imageData = ctx.getImageData(0, 0, videoW, videoH);
+    applyEffects(imageData.data, videoW, videoH, { ...params, time: videoCurrentTime, seed });
+    ctx.putImageData(imageData, 0, 0);
   }
 
   function handleDropFileUpload(e: Event) {
@@ -130,9 +202,11 @@
       params.vhsTapeSpeed + params.vhsHeadSwitching + params.vhsOverwrite + params.vhsChromaBlur +
       params.colorSaturation + params.colorHueShift + params.colorBrightness + params.colorContrast + params.colorFringingOffset +
       params.scanlineThickness + params.scanlineIntensity + params.scanlineBeam +
-      params.edgeGlowThreshold + params.edgeGlowAmount + params.interlaceOffset + time + seed;
-    if (mode === 'image' && imageLoaded) generate();
-    if (mode === 'video' && videoLoaded) generateVideoFrame();
+      params.edgeGlowThreshold + params.edgeGlowAmount + params.interlaceOffset +
+      params.degradePixelate + params.degradeBitcrush + params.degradeBlockNoise + params.degradeHorizontalTear + time + seed;
+    if (mode === 'image' && imageLoaded && !isAnimatedImage) generate();
+    if (mode === 'video' && videoLoaded && !isAnimatedImage) generateVideoFrame();
+    if (isAnimatedImage && animFrames.length > 0) drawAnimFrame(animFrameIndex);
   });
 
   async function handleVideoUpload(e: Event) {
@@ -160,6 +234,16 @@
   }
 
   function togglePlay() {
+    if (isAnimatedImage) {
+      if (videoPlaying) {
+        videoPlaying = false;
+        cancelAnimationFrame(videoAnimFrame);
+      } else {
+        videoPlaying = true;
+        animImageLoop();
+      }
+      return;
+    }
     if (!videoEl) return;
     if (videoPlaying) {
       videoEl.pause();
@@ -173,6 +257,14 @@
   }
 
   let videoAnimFrame = 0;
+
+  function animImageLoop() {
+    if (!videoPlaying || !isAnimatedImage) return;
+    animFrameIndex = (animFrameIndex + 1) % animFrameCount;
+    drawAnimFrame(animFrameIndex);
+    videoAnimFrame = setTimeout(() => { videoAnimFrame = requestAnimationFrame(animImageLoop); }, animFrames[animFrameIndex]?.duration * 1000 ?? 33) as any;
+  }
+
   function videoLoop() {
     if (!videoPlaying || !videoEl) return;
     videoCurrentTime = videoEl.currentTime;
@@ -182,6 +274,11 @@
   }
 
   function seekVideo(offset: number) {
+    if (isAnimatedImage) {
+      const idx = Math.max(0, Math.min(animFrameCount - 1, animFrameIndex + Math.round(offset * 30)));
+      drawAnimFrame(idx);
+      return;
+    }
     if (!videoEl) return;
     videoEl.currentTime = Math.max(0, Math.min(videoDuration, videoEl.currentTime + offset));
     videoCurrentTime = videoEl.currentTime;
@@ -190,6 +287,17 @@
   }
 
   function seekTo(e: Event) {
+    if (isAnimatedImage) {
+      const t = parseFloat((e.target as HTMLInputElement).value);
+      let idx = 0, acc = 0;
+      for (let i = 0; i < animFrameCount; i++) {
+        if (acc + animFrames[i].duration > t) { idx = i; break; }
+        acc += animFrames[i].duration;
+        idx = i;
+      }
+      drawAnimFrame(idx);
+      return;
+    }
     if (!videoEl) return;
     const v = parseFloat((e.target as HTMLInputElement).value);
     videoEl.currentTime = v;
@@ -199,10 +307,11 @@
   }
 
   async function exportVideo() {
-    if (!videoEl) return;
+    if (!videoEl && !isAnimatedImage) return;
     exporting = true;
     exportProgress = 0;
-    exportTotal = videoTotalFrames;
+    const totalFrames = isAnimatedImage ? animFrameCount : videoTotalFrames;
+    exportTotal = totalFrames;
 
     const offCanvas = document.createElement('canvas');
     offCanvas.width = videoW;
@@ -217,27 +326,38 @@
       videoBitsPerSecond: 8000000,
     });
     recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
-
     const done = new Promise<void>((resolve) => { recorder.onstop = () => resolve(); });
-
-    videoEl.currentTime = 0;
-    await new Promise<void>((r) => { videoEl!.onseeked = () => r(); });
 
     recorder.start();
 
-    for (let f = 0; f < videoTotalFrames; f++) {
-      offCtx.drawImage(videoEl!, 0, 0, videoW, videoH);
-      const imageData = offCtx.getImageData(0, 0, videoW, videoH);
-      applyEffects(imageData.data, videoW, videoH, { ...params, time: videoEl!.currentTime, seed });
-      offCtx.putImageData(imageData, 0, 0);
+    if (isAnimatedImage) {
+      for (let f = 0; f < animFrameCount; f++) {
+        const frame = animFrames[f];
+        offCtx.drawImage(frame.image, 0, 0, videoW, videoH);
+        const imageData = offCtx.getImageData(0, 0, videoW, videoH);
+        applyEffects(imageData.data, videoW, videoH, { ...params, time: frame.timestamp, seed });
+        offCtx.putImageData(imageData, 0, 0);
+        exportProgress = f + 1;
+        await new Promise((r) => setTimeout(r, 0));
+      }
+    } else {
+      videoEl!.currentTime = 0;
+      await new Promise<void>((r) => { videoEl!.onseeked = () => r(); });
 
-      await new Promise<void>((r) => {
-        videoEl!.currentTime = f / 30;
-        videoEl!.onseeked = () => r();
-      });
+      for (let f = 0; f < totalFrames; f++) {
+        offCtx.drawImage(videoEl!, 0, 0, videoW, videoH);
+        const imageData = offCtx.getImageData(0, 0, videoW, videoH);
+        applyEffects(imageData.data, videoW, videoH, { ...params, time: videoEl!.currentTime, seed });
+        offCtx.putImageData(imageData, 0, 0);
 
-      exportProgress = f + 1;
-      await new Promise((r) => setTimeout(r, 0));
+        await new Promise<void>((r) => {
+          videoEl!.currentTime = f / 30;
+          videoEl!.onseeked = () => r();
+        });
+
+        exportProgress = f + 1;
+        await new Promise((r) => setTimeout(r, 0));
+      }
     }
 
     recorder.stop();
@@ -252,10 +372,14 @@
     URL.revokeObjectURL(url);
 
     exporting = false;
-    videoEl.currentTime = 0;
-    videoCurrentTime = 0;
-    videoFrame = 0;
-    generateVideoFrame();
+    if (isAnimatedImage) {
+      drawAnimFrame(0);
+    } else {
+      videoEl!.currentTime = 0;
+      videoCurrentTime = 0;
+      videoFrame = 0;
+      generateVideoFrame();
+    }
   }
 
   function handleDrop(e: DragEvent) {
@@ -589,6 +713,18 @@
         </h3>
         {#if !collapseState.web}
           <div class="ctrl-group"><label>Interlace Offset <span class="val">{params.interlaceOffset.toFixed(0)}</span></label><input type="range" bind:value={params.interlaceOffset} min="-4" max="4" step="1"/></div>
+        {/if}
+      </section>
+
+      <section class="ctrl-section">
+        <h3 class="ctrl-title" onclick={() => toggleSection('degrade')} role="button" tabindex="0">
+          Pixel Degradation {collapseState.degrade ? '▸' : '▾'}
+        </h3>
+        {#if !collapseState.degrade}
+          <div class="ctrl-group"><label>Pixelate <span class="val">{params.degradePixelate.toFixed(0)}</span></label><input type="range" bind:value={params.degradePixelate} min="1" max="16" step="1"/></div>
+          <div class="ctrl-group"><label>Bitcrush <span class="val">{params.degradeBitcrush.toFixed(0)} bit</span></label><input type="range" bind:value={params.degradeBitcrush} min="1" max="8" step="1"/></div>
+          <div class="ctrl-group"><label>Block Noise <span class="val">{params.degradeBlockNoise.toFixed(2)}</span></label><input type="range" bind:value={params.degradeBlockNoise} min="0" max="1" step="0.01"/></div>
+          <div class="ctrl-group"><label>Horizontal Tear <span class="val">{params.degradeHorizontalTear.toFixed(2)}</span></label><input type="range" bind:value={params.degradeHorizontalTear} min="0" max="1" step="0.01"/></div>
         {/if}
       </section>
 
