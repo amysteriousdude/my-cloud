@@ -18,6 +18,14 @@
       href: '/generators/technical-difficulties',
     },
     {
+      id: 'vhs-filter',
+      title: 'VHS Filter',
+      desc: 'Apply authentic NTSC/VHS effects to images and video. Full signal, geometry, noise, and color pipeline.',
+      icon: '📼',
+      banner: 'vhs',
+      href: '/generators/vhs-filter',
+    },
+    {
       id: 'patterns',
       title: 'Patterns',
       desc: 'Generate seamless geometric patterns with tiling, symmetry, and color controls.',
