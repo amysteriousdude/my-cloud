@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { IconArrowLeft, IconDownload, IconRefresh, IconUpload, IconVideo, IconPhoto, IconPlayerPlay, IconPlayerPause, IconPlayerSkipBack, IconPlayerSkipForward, IconLoader2 } from '@tabler/icons-svelte';
+  import { IconArrowLeft, IconDownload, IconRefresh, IconUpload, IconVideo, IconPhoto, IconPlayerPlay, IconPlayerPause, IconPlayerSkipBack, IconPlayerSkipForward, IconLoader2, IconCloud, IconX, IconFile } from '@tabler/icons-svelte';
   import SaveDialog from '$lib/components/SaveDialog.svelte';
   import { applyEffects, type VHSParams, DEFAULT_PARAMS } from '$lib/generators/vhs-effects';
   import { PRESETS, applyPreset } from '$lib/generators/vhs-presets';
@@ -50,6 +50,11 @@
   let exportProgress = $state(0);
   let exportTotal = $state(0);
 
+  let showCloudPicker = $state(false);
+  let cloudFiles = $state<{ fileName: string; metaFileId: string }[]>([]);
+  let cloudLoading = $state(false);
+  let cloudSearch = $state('');
+
   let collapseState = $state<Record<string, boolean>>({
     signal: false, geometry: false, noise: false, vhs: false,
     color: false, scanlines: false, edge: false, web: false, canvas: false, presets: true,
@@ -61,17 +66,35 @@
     const input = e.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
+    loadImageFromFile(file);
+    input.value = '';
+  }
+
+  function loadImageFromFile(file: File) {
     const url = URL.createObjectURL(file);
     sourceImageUrl = url;
     const img = new Image();
     img.onload = () => {
       sourceImage = img;
       imageLoaded = true;
-      canvas.width = img.width;
-      canvas.height = img.height;
+      mode = 'image';
+      canvas.width = img.naturalWidth || img.width;
+      canvas.height = img.naturalHeight || img.height;
       generate();
     };
     img.src = url;
+  }
+
+  function handleDropFileUpload(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    if (file.type.startsWith('video/')) {
+      handleVideoUpload(e);
+    } else {
+      loadImageFromFile(file);
+    }
+    input.value = '';
   }
 
   function generate() {
@@ -239,14 +262,7 @@
     e.preventDefault();
     const file = e.dataTransfer?.files?.[0];
     if (!file) return;
-    if (file.type.startsWith('image/')) {
-      mode = 'image';
-      const url = URL.createObjectURL(file);
-      sourceImageUrl = url;
-      const img = new Image();
-      img.onload = () => { sourceImage = img; imageLoaded = true; canvas.width = img.width; canvas.height = img.height; generate(); };
-      img.src = url;
-    } else if (file.type.startsWith('video/')) {
+    if (file.type.startsWith('video/')) {
       mode = 'video';
       videoUrl = URL.createObjectURL(file);
       const v = document.createElement('video');
@@ -257,6 +273,8 @@
         videoEl = v; videoLoaded = true; canvas.width = videoW; canvas.height = videoH;
       };
       v.src = videoUrl!;
+    } else {
+      loadImageFromFile(file);
     }
   }
 
@@ -279,6 +297,73 @@
     a.href = canvas.toDataURL('image/png');
     a.download = 'vhs-filter.png';
     a.click();
+  }
+
+  async function fetchCloudFiles() {
+    if (!apiKey) return;
+    cloudLoading = true;
+    try {
+      const resp = await fetch(`/api/telegram/ls?api_key=${apiKey}`);
+      const data = await resp.json();
+      const allFiles: { fileName: string; metaFileId: string }[] = data.files ?? [];
+      cloudFiles = allFiles.filter(f => /\.(png|jpe?g|gif|apng|webp|avif|bmp|tiff?|svg|mp4|webm|avi|mov|mkv)$/i.test(f.fileName));
+    } catch {
+      cloudFiles = [];
+    } finally {
+      cloudLoading = false;
+    }
+  }
+
+  function openCloudPicker() {
+    showCloudPicker = true;
+    fetchCloudFiles();
+  }
+
+  function loadFromCloudFile(file: { fileName: string; metaFileId: string }) {
+    showCloudPicker = false;
+    const isVideo = /\.(mp4|webm|avi|mov|mkv)$/i.test(file.fileName);
+    if (isVideo) {
+      loadVideoFromUrl(`/api/telegram/getRequestFile?api_key=${apiKey}&meta_file_id=${file.metaFileId}&download=true`);
+    } else {
+      loadImageFromUrl(`/api/telegram/getRequestFile?api_key=${apiKey}&meta_file_id=${file.metaFileId}&download=true`);
+    }
+  }
+
+  function loadImageFromUrl(url: string) {
+    mode = 'image';
+    sourceImageUrl = url;
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      sourceImage = img;
+      imageLoaded = true;
+      canvas.width = img.naturalWidth || img.width;
+      canvas.height = img.naturalHeight || img.height;
+      generate();
+    };
+    img.src = url;
+  }
+
+  async function loadVideoFromUrl(url: string) {
+    mode = 'video';
+    videoUrl = url;
+    await new Promise<void>((resolve) => {
+      const v = document.createElement('video');
+      v.preload = 'auto';
+      v.onloadedmetadata = () => {
+        videoW = v.videoWidth;
+        videoH = v.videoHeight;
+        videoDuration = v.duration;
+        videoTotalFrames = Math.floor(v.duration * 30);
+        videoEl = v;
+        videoLoaded = true;
+        canvas.width = videoW;
+        canvas.height = videoH;
+        v.currentTime = 0;
+        resolve();
+      };
+      v.src = url;
+    });
   }
 </script>
 
@@ -367,7 +452,11 @@
         <div class="drop-hint">
           <IconUpload size={32} stroke={1.2} />
           <span>Drop an image or video here</span>
-          <span class="drop-sub">or use the controls to upload</span>
+          <div class="drop-actions">
+            <label class="drop-btn" for="drop-file-upload"><IconUpload size={13}/> Browse Files</label>
+            <input type="file" id="drop-file-upload" accept="image/*,video/*" onchange={handleDropFileUpload} style="display:none"/>
+            <button class="drop-btn" onclick={openCloudPicker}><IconCloud size={13}/> Import from Cloud</button>
+          </div>
         </div>
       {/if}
     </div>
@@ -391,6 +480,9 @@
             <input type="file" id="vid-upload" accept="video/*" onchange={handleVideoUpload} style="display:none"/>
           </div>
         {/if}
+        <div class="ctrl-group" style="margin-top:4px">
+          <button class="upload-btn cloud-btn" onclick={openCloudPicker}><IconCloud size={13}/> Import from Cloud</button>
+        </div>
       </section>
 
       <section class="ctrl-section">
@@ -515,6 +607,34 @@
   </div>
 </div>
 
+{#if showCloudPicker}
+  <div class="modal-overlay" onclick={() => showCloudPicker = false} role="presentation">
+    <div class="modal-picker" onclick={(e) => e.stopPropagation()} role="dialog">
+      <div class="modal-header">
+        <IconCloud size={15} />
+        <span>Import from Cloud</span>
+        <button class="modal-close" onclick={() => showCloudPicker = false}><IconX size={14}/></button>
+      </div>
+      <input class="modal-search" type="text" placeholder="Search files..." bind:value={cloudSearch} />
+      <div class="modal-list">
+        {#if cloudLoading}
+          <div class="modal-empty">Loading files...</div>
+        {:else}
+          {#each cloudFiles.filter(f => !cloudSearch || f.fileName.toLowerCase().includes(cloudSearch.toLowerCase())) as file}
+            <button class="modal-item" onclick={() => loadFromCloudFile(file)}>
+              <IconFile size={13} />
+              <span>{file.fileName}</span>
+            </button>
+          {/each}
+          {#if cloudFiles.length === 0}
+            <div class="modal-empty">No image or video files found</div>
+          {/if}
+        {/if}
+      </div>
+    </div>
+  </div>
+{/if}
+
 <style>
   :global(*,*::before,*::after){box-sizing:border-box;margin:0;}
   :global(body){background:var(--bg-1,#080808);font-family:'Geist',sans-serif;color:var(--text-1,#e2e2e2);}
@@ -565,5 +685,21 @@
   .preset-grid{display:flex;flex-wrap:wrap;gap:5px;}
   .preset-btn{padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-3);color:var(--text-2);font-size:11px;font-family:'Geist',sans-serif;cursor:pointer;transition:.13s;}
   .preset-btn:hover{border-color:var(--accent);color:var(--text-1);}
+  .drop-actions{display:flex;gap:8px;margin-top:4px;}
+  .drop-btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg-2);color:var(--text-2);font-size:12px;font-family:'Geist',sans-serif;cursor:pointer;transition:.13s;}
+  .drop-btn:hover{border-color:var(--accent);color:var(--text-1);}
+  .cloud-btn{border-style:dashed;width:100%;justify-content:center;}
+  .modal-overlay{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;}
+  .modal-picker{background:var(--bg-2);border:1px solid var(--border);border-radius:14px;width:90%;max-width:420px;max-height:70vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.4);overflow:hidden;}
+  .modal-header{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--border);font-size:13px;font-weight:500;color:var(--text-1);}
+  .modal-header span{flex:1;}
+  .modal-close{background:none;border:none;color:var(--text-3);cursor:pointer;padding:4px;display:flex;}
+  .modal-close:hover{color:var(--text-1);}
+  .modal-search{margin:8px 14px;padding:7px 12px;border-radius:8px;background:var(--bg-1);border:1px solid var(--border);color:var(--text-1);font-size:13px;font-family:'Geist',sans-serif;outline:none;}
+  .modal-search:focus{border-color:var(--border-hover);}
+  .modal-list{overflow-y:auto;padding:4px 8px 12px;display:flex;flex-direction:column;gap:2px;}
+  .modal-item{display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:none;border:none;padding:7px 10px;color:var(--text-1);font-size:12px;font-family:'Geist',sans-serif;cursor:pointer;border-radius:6px;}
+  .modal-item:hover{background:var(--bg-3);}
+  .modal-empty{padding:16px;text-align:center;color:var(--text-3);font-size:12px;}
   @media(max-width:700px){.layout{flex-direction:column;}.controls{width:100%;border-left:none;border-top:1px solid var(--border);}.topbar-title{display:none;}}
 </style>
