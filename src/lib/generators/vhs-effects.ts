@@ -345,7 +345,7 @@ export function hueShift(pixels: Uint8ClampedArray, w: number, h: number, degree
 
 export function brightness(pixels: Uint8ClampedArray, w: number, h: number, amount: number) {
   if (amount === 0) return;
-  const offset = amount * 255;
+  const offset = amount * 100;
   for (let i = 0; i < pixels.length; i += 4) {
     pixels[i] = clamp(pixels[i] + offset);
     pixels[i + 1] = clamp(pixels[i + 1] + offset);
@@ -355,7 +355,8 @@ export function brightness(pixels: Uint8ClampedArray, w: number, h: number, amou
 
 export function contrast(pixels: Uint8ClampedArray, w: number, h: number, amount: number) {
   if (amount === 1) return;
-  const f = (259 * (amount * 255 + 255)) / (255 * (259 - amount * 255));
+  const c = (amount - 1) * 255;
+  const f = (259 * (c + 255)) / (255 * (259 - c));
   for (let i = 0; i < pixels.length; i += 4) {
     pixels[i] = clamp(f * (pixels[i] - 128) + 128);
     pixels[i + 1] = clamp(f * (pixels[i + 1] - 128) + 128);
