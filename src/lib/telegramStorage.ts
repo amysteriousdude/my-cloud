@@ -419,7 +419,7 @@ export async function setFilePublicity(metaFileId: string, isPublic: boolean): P
     const registry = await readRegistry(true) ?? {};
     if (!registry[metaFileId]) return false;
     registry[metaFileId].public = isPublic;
-    if (isPublic && !registry[metaFileId].publicSlug) {
+    if (isPublic) {
       registry[metaFileId].publicSlug = normalizePublicPath(walkFilePath(registry[metaFileId], registry));
     }
     await writeRegistryInternal(registry);
@@ -683,7 +683,7 @@ export async function getPublicFileByPath(fullPath: string): Promise<FileRecord 
     const allFiles = Object.values(registry).filter((r: any) => !r?._type) as FileRecord[];
     for (const file of allFiles) {
       if (!isFilePublic(file, registry)) continue;
-      const slug = file.publicSlug || normalizePublicPath(walkFilePath(file, registry));
+      const slug = normalizePublicPath(walkFilePath(file, registry));
       if (slug) {
         // Keep newest by time
         const existing = _slugCache.get(slug);

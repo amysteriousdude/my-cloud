@@ -87,10 +87,7 @@ export async function computeSlug(metaFileId: string): Promise<string | null> {
     const rec = registry[metaFileId];
     if (!rec || rec._type === 'folder') return null;
 
-    // Use cached slug if available
-    if (rec.publicSlug) return rec.publicSlug;
-
-    // Walk folder tree
+    // Always walk folder tree for current path (publicSlug may be stale)
     const parts = [rec.fileName];
     let folderId = rec.folderId || null;
     const seen = new Set<string>();
