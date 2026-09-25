@@ -119,6 +119,7 @@
   let navHovered = false;
   let navHoverTimeout: ReturnType<typeof setTimeout> | null = null;
   let showModelPopup = $state(false);
+  let showProviderPopup = $state(false);
 
   let mainTabIds = $state<Tab[]>(['files', 'generators', 'translator', 'draw']);
   let mainTabs = $derived(ALL_TABS.filter(t => mainTabIds.includes(t.id)));
@@ -371,7 +372,7 @@
     const target = e.target as HTMLElement;
     if (!target.closest('.bb-more-overlay') && !target.closest('.bb-more-btn')) showMore = false;
     if (!target.closest('.bb-user-panel') && !target.closest('.bb-avatar-item')) showUser = false;
-    if (!target.closest('.bb-model-picker')) showModelPopup = false;
+    if (!target.closest('.bb-model-picker')) { showModelPopup = false; showProviderPopup = false; }
   }
 
   function handleOutsideTouch(e: TouchEvent) {
@@ -579,22 +580,29 @@
 
   <div class="bb-sep"></div>
 
-  <!-- AI Provider pills -->
+  <!-- AI Provider dropdown -->
   {#if hasProviders}
-    <div class="bb-ai-providers">
-      {#each config!.aiChat!.providers! as pill}
-        <button
-          class="bb-ai-pill"
-          class:active={pill.active}
-          style={pill.color ? `--pill-color: ${pill.color}` : ''}
-          onclick={pill.onClick}
-        >
-          {#if pill.icon}
-            <pill.icon size={14} stroke={1.5}/>
-          {/if}
-          <span>{pill.label}</span>
-        </button>
-      {/each}
+    {@const activeProv = config!.aiChat!.providers!.find(p => p.active) ?? config!.aiChat!.providers![0]}
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="bb-model-picker" style={activeProv?.color ? `--model-accent:${activeProv.color}` : ''} onclick={(e) => { e.stopPropagation(); showProviderPopup = !showProviderPopup; showModelPopup = false; }}>
+      <span class="bb-model-dot"></span>
+      <button class="bb-model-btn">
+        <span>{activeProv?.label ?? 'Provider'}</span>
+        <svg class="bb-model-chevron" class:open={showProviderPopup} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      {#if showProviderPopup}
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div class="bb-model-popup" class:pos-top={position === 'top'} onclick={(e) => e.stopPropagation()}>
+          <div class="bb-model-popup-header">Provider</div>
+          <div class="bb-model-popup-list">
+            {#each config!.aiChat!.providers! as prov}
+              <button class="bb-model-opt" class:active={prov.active} onclick={() => { prov.onClick?.(); showProviderPopup = false; }}>
+                <span class="bb-model-opt-name">{prov.label}</span>
+              </button>
+            {/each}
+          </div>
+        </div>
+      {/if}
     </div>
     <div class="bb-sep"></div>
   {/if}
@@ -828,6 +836,7 @@
   .bb {
     position: fixed; z-index: 200;
     display: flex; align-items: center; gap: 0;
+    width: max-content;
     max-width: calc(100vw - 32px);
     background: color-mix(in srgb, var(--bg-2) 85%, transparent);
     backdrop-filter: blur(20px) saturate(1.4);
@@ -916,10 +925,10 @@
   .bb-avatar-item:hover .bb-avatar-circle { box-shadow: 0 2px 8px rgba(99,102,241,.5); }
 
   /* ── Input section ────────────────────────────────────────────── */
-  .bb-input-section { display: flex; align-items: center; flex: 1; min-width: 150px; }
+  .bb-input-section { display: flex; align-items: center; flex: 1; }
 
   .bb-textarea {
-    width: 100%; min-width: 200px; max-width: 500px;
+    width: 100%;
     background: transparent; border: none; outline: none;
     color: var(--text-1); font-size: 13px; font-family: 'Geist', sans-serif;
     padding: 6px 8px; resize: none; line-height: 1.4;
