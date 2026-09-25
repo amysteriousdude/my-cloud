@@ -836,7 +836,7 @@
   .bb {
     position: fixed; z-index: 200;
     display: flex; align-items: center; gap: 0;
-    width: max-content;
+    width: auto;
     max-width: calc(100vw - 32px);
     background: color-mix(in srgb, var(--bg-2) 85%, transparent);
     backdrop-filter: blur(20px) saturate(1.4);
@@ -889,29 +889,6 @@
     transition: max-width .28s cubic-bezier(.16,1,.3,1), opacity .2s ease;
   }
   .bb-nav-tabs.expanded { max-width: 500px; opacity: 1; }
-
-  /* AI mode: nav tabs float above bar instead of expanding inline */
-  .bb.full-width .bb-nav-section { position: static; }
-  .bb.full-width .bb-nav-tabs {
-    position: absolute;
-    bottom: calc(100% + 8px);
-    left: 10px;
-    max-width: 0;
-    background: color-mix(in srgb, var(--bg-2) 95%, transparent);
-    backdrop-filter: blur(20px) saturate(1.4);
-    border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-    border-radius: 14px;
-    padding: 0 4px;
-    box-shadow: 0 8px 32px rgba(0,0,0,.4);
-    z-index: 250;
-    gap: 0;
-  }
-  .bb.full-width .bb-nav-tabs .bb-sep { display: none; }
-  .bb.full-width .bb-nav-tabs.expanded {
-    max-width: 500px;
-    padding: 4px 6px;
-    gap: 2px;
-  }
 
   .bb-sep {
     width: 1px; height: 24px;
