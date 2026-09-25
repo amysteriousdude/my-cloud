@@ -158,7 +158,7 @@
   function onBarNavEnter() {
     navHovered = true;
     if (navHoverTimeout) { clearTimeout(navHoverTimeout); navHoverTimeout = null; }
-    navExpanded = true;
+    if (!config?.aiChat) navExpanded = true;
   }
 
   function onBarNavLeave(_e: MouseEvent) {
@@ -362,7 +362,7 @@
 
   $effect(() => {
     if (config?.aiChat) {
-      if (!navHovered) navExpanded = false;
+      navExpanded = false;
     } else if (!hasCustomUtility) {
       navExpanded = true;
     }
