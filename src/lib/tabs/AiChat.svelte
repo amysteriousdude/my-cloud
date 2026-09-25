@@ -1039,100 +1039,95 @@
 </script>
 
 <div class="ai-root">
-  <!-- History sidebar -->
-  {#if showHistory}
-    <div class="ai-history-panel">
-      <div class="ai-history-header">
-        <span>History</span>
-        <button class="ai-history-close" onclick={() => showHistory = false}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
-      </div>
-      <div class="ai-history-list">
-        {#if loadingHistory}
-          <div class="ai-history-empty">Loading...</div>
-        {:else if chatHistory.length === 0}
-          <div class="ai-history-empty">No saved chats yet</div>
-        {:else}
-          {#each chatHistory as chat, idx (chat.id + '-' + idx)}
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div class="ai-history-item" class:active={currentChatId === chat.id} onclick={() => loadChat(chat)}>
-              <div class="ai-history-title">{chat.title}</div>
-              <div class="ai-history-meta">{new Date(chat.updatedAt).toLocaleDateString()} &middot; {chat.messages.length} msgs</div>
-              <button class="ai-history-delete" onclick={(e) => { e.stopPropagation(); deleteChat(chat.id); }}>
-                <IconTrash size={12} />
-              </button>
-            </div>
-          {/each}
-        {/if}
+  <!-- Header -->
+  <header class="ai-header">
+    <div class="ai-header-left">
+      <button class="ai-header-btn" onclick={newChat} title="New chat"><IconPlus size={15}/></button>
+      <button class="ai-header-btn" class:active={showHistory} onclick={() => { showHistory = !showHistory; if (showHistory) loadHistory(); }} title="History"><IconHistory size={15}/></button>
+      <div class="ai-header-sep"></div>
+      <div class="ai-header-model" title={selectedModel}>
+        <span class="ai-header-model-dot" style="background:{selectedProvider.color}"></span>
+        <span class="ai-header-model-name">{loadingModels ? 'Loading…' : (models.find(m => m.id === selectedModel) ? getDisplayName(models.find(m => m.id === selectedModel)!) : 'Select model')}</span>
+        <span class="ai-header-model-prov">{selectedProvider.label}</span>
       </div>
     </div>
-  {/if}
+    <div class="ai-header-right">
+      <div class="ai-header-status" class:streaming={isStreaming}>
+        <span class="ai-header-status-dot"></span>
+        {isStreaming ? 'Generating' : 'Ready'}
+      </div>
+      <div class="ai-header-sep"></div>
+      <button class="ai-header-btn" class:active={showExtras} onclick={() => showExtras = !showExtras} title="Settings"><IconAdjustments size={15}/></button>
+      {#if messages.length > 0}
+        <button class="ai-header-btn danger" onclick={clearChat} title="Clear chat"><IconTrash size={15}/></button>
+      {/if}
+    </div>
+  </header>
 
-  <!-- Extras panel -->
-  {#if showExtras}
-    <div class="ai-extras-overlay" onclick={() => showExtras = false}>
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div class="ai-extras-panel" onclick={(e) => e.stopPropagation()}>
-        <div class="ai-extras-header">
-          <span>Settings</span>
-          <button class="ai-extras-close" onclick={() => showExtras = false}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+  <!-- Body: sidebar + messages -->
+  <div class="ai-body">
+    <!-- History sidebar (persistent) -->
+    {#if showHistory}
+      <aside class="ai-sidebar">
+        <div class="ai-sidebar-header">
+          <span>Chats</span>
+          <button class="ai-sidebar-close" onclick={() => showHistory = false}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
-        <div class="ai-extras-body">
-          <div class="ai-extras-group">
-            <label class="ai-extras-label">System Prompt</label>
-            <textarea class="ai-extras-textarea" placeholder="Optional system prompt..." value={systemPrompt} oninput={(e) => { systemPrompt = (e.target as HTMLTextAreaElement).value; systemPromptVersion++; }} rows={2}></textarea>
-          </div>
-          <div class="ai-extras-divider"></div>
-          <div class="ai-extras-group">
-            <label class="ai-extras-label">Temperature <span class="ai-extras-val">{temperature.toFixed(1)}</span></label>
-            <input type="range" class="ai-extras-range" min="0" max="2" step="0.1" bind:value={temperature} />
-          </div>
-          <div class="ai-extras-group">
-            <label class="ai-extras-label">Top P <span class="ai-extras-val">{topP.toFixed(1)}</span></label>
-            <input type="range" class="ai-extras-range" min="0" max="1" step="0.05" bind:value={topP} />
-          </div>
-          <div class="ai-extras-group">
-            <label class="ai-extras-label">Max Tokens</label>
-            <input type="number" class="ai-extras-number" min="256" max="128000" step="256" bind:value={maxTokens} />
-          </div>
-          <div class="ai-extras-divider"></div>
-          <div class="ai-extras-toggle-row">
-            <span>Streaming</span>
-            <button class="ai-extras-toggle" class:active={streaming} onclick={() => streaming = !streaming}>
-              <span class="ai-extras-toggle-thumb"></span>
-            </button>
-          </div>
-          <div class="ai-extras-toggle-row">
-            <span>🌐 Internet</span>
-            <button class="ai-extras-toggle" class:active={webSearch} onclick={() => webSearch = !webSearch}>
-              <span class="ai-extras-toggle-thumb"></span>
-            </button>
-          </div>
-          <div class="ai-extras-toggle-row">
-            <span>Reasoning</span>
-            <button class="ai-extras-toggle" class:active={reasoning} onclick={() => reasoning = !reasoning}>
-              <span class="ai-extras-toggle-thumb"></span>
-            </button>
-          </div>
+        <button class="ai-sidebar-new" onclick={newChat}>
+          <IconPlus size={13} /> New chat
+        </button>
+        <div class="ai-sidebar-list">
+          {#if loadingHistory}
+            <div class="ai-sidebar-empty">Loading...</div>
+          {:else if chatHistory.length === 0}
+            <div class="ai-sidebar-empty">No saved chats yet</div>
+          {:else}
+            {#each chatHistory as chat, idx (chat.id + '-' + idx)}
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <div class="ai-sidebar-item" class:active={currentChatId === chat.id} onclick={() => loadChat(chat)}>
+                <div class="ai-sidebar-item-title">{chat.title}</div>
+                <div class="ai-sidebar-item-meta">{new Date(chat.updatedAt).toLocaleDateString()} · {chat.messages.length} msgs</div>
+                <button class="ai-sidebar-item-delete" onclick={(e) => { e.stopPropagation(); deleteChat(chat.id); }}>
+                  <IconTrash size={11} />
+                </button>
+              </div>
+            {/each}
+          {/if}
         </div>
-      </div>
-    </div>
-  {/if}
+      </aside>
+    {/if}
 
-  <!-- Messages -->
-  <div class="ai-messages" bind:this={messagesContainer} onscroll={onMessagesScroll}>
-    {#if messages.length === 0}
-      <div class="ai-empty">
-        <div class="ai-empty-icon">
-          <IconBrain size={40} stroke={1.2} />
+    <!-- Messages -->
+    <div class="ai-messages" bind:this={messagesContainer} onscroll={onMessagesScroll}>
+      {#if messages.length === 0}
+        <div class="ai-empty">
+          <div class="ai-empty-icon">
+            <IconBrain size={36} stroke={1.2} />
+          </div>
+          <p class="ai-empty-title">How can I help?</p>
+          <p class="ai-empty-sub">Ask anything — I can search the web, write code, analyze files, and more.</p>
+          <div class="ai-prompts">
+            <button class="ai-prompt-card" onclick={() => { input = 'Explain quantum computing in simple terms'; sendMessage(); }}>
+              <span class="ai-prompt-icon">💡</span>
+              <span class="ai-prompt-text">Explain quantum computing</span>
+            </button>
+            <button class="ai-prompt-card" onclick={() => { input = 'Write a Python script to sort a CSV file by column'; sendMessage(); }}>
+              <span class="ai-prompt-icon">🐍</span>
+              <span class="ai-prompt-text">Write a Python script</span>
+            </button>
+            <button class="ai-prompt-card" onclick={() => { input = 'Summarize the latest news in AI this week'; sendMessage(); }}>
+              <span class="ai-prompt-icon">🌐</span>
+              <span class="ai-prompt-text">Search the web</span>
+            </button>
+            <button class="ai-prompt-card" onclick={() => { input = 'Help me debug this JavaScript error'; sendMessage(); }}>
+              <span class="ai-prompt-icon">🐛</span>
+              <span class="ai-prompt-text">Help me debug</span>
+            </button>
+          </div>
         </div>
-        <p class="ai-empty-title">Start a conversation</p>
-        <p class="ai-empty-sub">Choose a provider and model, then type your message</p>
-      </div>
-    {:else}
+      {:else}
       {#each messages as msg, idx (idx)}
           {#if msg.role === 'user'}
             {@const rtl = isRtl(msg.content)}
@@ -1203,11 +1198,65 @@
     {/if}
   </div>
 
-  <!-- Back to top -->
-  {#if showBackToTop}
-    <button class="back-to-top" onclick={scrollToTop} title="Back to top">
-      <IconArrowUp size={18} />
-    </button>
+    <!-- Back to top -->
+    {#if showBackToTop}
+      <button class="back-to-top" onclick={scrollToTop} title="Back to top">
+        <IconArrowUp size={18} />
+      </button>
+    {/if}
+  </div><!-- /.ai-body -->
+
+  <!-- Extras panel -->
+  {#if showExtras}
+    <div class="ai-extras-overlay" onclick={() => showExtras = false}>
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div class="ai-extras-panel" onclick={(e) => e.stopPropagation()}>
+        <div class="ai-extras-header">
+          <span>Settings</span>
+          <button class="ai-extras-close" onclick={() => showExtras = false}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div class="ai-extras-body">
+          <div class="ai-extras-group">
+            <label class="ai-extras-label">System Prompt</label>
+            <textarea class="ai-extras-textarea" placeholder="Optional system prompt..." value={systemPrompt} oninput={(e) => { systemPrompt = (e.target as HTMLTextAreaElement).value; systemPromptVersion++; }} rows={2}></textarea>
+          </div>
+          <div class="ai-extras-divider"></div>
+          <div class="ai-extras-group">
+            <label class="ai-extras-label">Temperature <span class="ai-extras-val">{temperature.toFixed(1)}</span></label>
+            <input type="range" class="ai-extras-range" min="0" max="2" step="0.1" bind:value={temperature} />
+          </div>
+          <div class="ai-extras-group">
+            <label class="ai-extras-label">Top P <span class="ai-extras-val">{topP.toFixed(1)}</span></label>
+            <input type="range" class="ai-extras-range" min="0" max="1" step="0.05" bind:value={topP} />
+          </div>
+          <div class="ai-extras-group">
+            <label class="ai-extras-label">Max Tokens</label>
+            <input type="number" class="ai-extras-number" min="256" max="128000" step="256" bind:value={maxTokens} />
+          </div>
+          <div class="ai-extras-divider"></div>
+          <div class="ai-extras-toggle-row">
+            <span>Streaming</span>
+            <button class="ai-extras-toggle" class:active={streaming} onclick={() => streaming = !streaming}>
+              <span class="ai-extras-toggle-thumb"></span>
+            </button>
+          </div>
+          <div class="ai-extras-toggle-row">
+            <span>🌐 Internet</span>
+            <button class="ai-extras-toggle" class:active={webSearch} onclick={() => webSearch = !webSearch}>
+              <span class="ai-extras-toggle-thumb"></span>
+            </button>
+          </div>
+          <div class="ai-extras-toggle-row">
+            <span>Reasoning</span>
+            <button class="ai-extras-toggle" class:active={reasoning} onclick={() => reasoning = !reasoning}>
+              <span class="ai-extras-toggle-thumb"></span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   {/if}
 </div>
 
@@ -1247,17 +1296,122 @@
     to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
   }
 
+  /* ── Header ──────────────────────────────────────────────── */
+  .ai-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 14px; height: 48px; flex-shrink: 0;
+    background: color-mix(in srgb, var(--md-surface) 70%, transparent);
+    border-bottom: 1px solid var(--md-border);
+    gap: 8px;
+  }
+  .ai-header-left, .ai-header-right { display: flex; align-items: center; gap: 4px; }
+  .ai-header-btn {
+    display: flex; align-items: center; justify-content: center;
+    width: 32px; height: 32px; border-radius: 8px;
+    border: none; background: transparent;
+    color: var(--md-text-3); cursor: pointer; transition: all .12s;
+  }
+  .ai-header-btn:hover { color: var(--md-text); background: rgba(255,255,255,.06); }
+  .ai-header-btn.active { color: var(--md-accent); background: rgba(124,108,255,.1); }
+  .ai-header-btn.danger:hover { color: var(--md-error); background: rgba(255,107,107,.08); }
+  .ai-header-sep { width: 1px; height: 18px; background: var(--md-border); margin: 0 4px; flex-shrink: 0; }
+  .ai-header-model {
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 10px; border-radius: 8px;
+    background: rgba(255,255,255,.03); border: 1px solid var(--md-border);
+    max-width: 260px; min-width: 0;
+  }
+  .ai-header-model-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .ai-header-model-name {
+    font-size: 12px; font-weight: 500; color: var(--md-text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .ai-header-model-prov {
+    font-size: 10px; color: var(--md-text-3); text-transform: uppercase;
+    letter-spacing: .4px; font-weight: 600; flex-shrink: 0;
+  }
+  .ai-header-status {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 11px; color: var(--md-text-3); font-weight: 500;
+    padding: 4px 8px; border-radius: 6px;
+  }
+  .ai-header-status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--md-success); flex-shrink: 0; }
+  .ai-header-status.streaming { color: var(--md-accent); background: rgba(124,108,255,.08); }
+  .ai-header-status.streaming .ai-header-status-dot { background: var(--md-accent); animation: statusPulse 1s ease-in-out infinite; }
+  @keyframes statusPulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
+
+  /* ── Body (sidebar + messages) ───────────────────────────── */
+  .ai-body { display: flex; flex: 1; min-height: 0; position: relative; }
+
+  /* ── Sidebar ─────────────────────────────────────────────── */
+  .ai-sidebar {
+    width: 240px; flex-shrink: 0;
+    display: flex; flex-direction: column;
+    background: color-mix(in srgb, var(--md-surface) 50%, transparent);
+    border-right: 1px solid var(--md-border);
+    overflow: hidden;
+    animation: sidebarIn .2s cubic-bezier(.16,1,.3,1);
+  }
+  @keyframes sidebarIn { from { width: 0; opacity: 0; } to { width: 240px; opacity: 1; } }
+  .ai-sidebar-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 14px 8px; font-size: 11px; font-weight: 600;
+    color: var(--md-text-3); text-transform: uppercase; letter-spacing: .5px;
+    flex-shrink: 0;
+  }
+  .ai-sidebar-close {
+    background: none; border: none; color: var(--md-text-3);
+    cursor: pointer; padding: 3px; border-radius: 5px;
+    display: flex; transition: .12s;
+  }
+  .ai-sidebar-close:hover { color: var(--md-text); background: rgba(255,255,255,.06); }
+  .ai-sidebar-new {
+    display: flex; align-items: center; gap: 6px;
+    margin: 0 10px 8px; padding: 7px 10px;
+    border-radius: 8px; border: 1px dashed var(--md-border);
+    background: transparent; color: var(--md-text-2);
+    font-size: 12px; font-family: 'Geist', sans-serif;
+    cursor: pointer; transition: .12s; flex-shrink: 0;
+  }
+  .ai-sidebar-new:hover { border-color: var(--md-accent); color: var(--md-accent); background: rgba(124,108,255,.05); }
+  .ai-sidebar-list { flex: 1; overflow-y: auto; padding: 0 8px 10px; display: flex; flex-direction: column; gap: 2px; }
+  .ai-sidebar-empty { padding: 16px 8px; text-align: center; font-size: 12px; color: var(--md-text-3); }
+  .ai-sidebar-item {
+    position: relative; padding: 9px 10px; border-radius: 8px;
+    cursor: pointer; transition: background .1s;
+    border: 1px solid transparent;
+  }
+  .ai-sidebar-item:hover { background: rgba(255,255,255,.04); }
+  .ai-sidebar-item.active { background: rgba(124,108,255,.08); border-color: rgba(124,108,255,.15); }
+  .ai-sidebar-item-title {
+    font-size: 12px; font-weight: 500; color: var(--md-text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    padding-right: 20px;
+  }
+  .ai-sidebar-item-meta { font-size: 10px; color: var(--md-text-3); margin-top: 2px; }
+  .ai-sidebar-item-delete {
+    position: absolute; top: 8px; right: 6px;
+    background: none; border: none; color: var(--md-text-3);
+    cursor: pointer; padding: 3px; border-radius: 4px;
+    display: flex; opacity: 0; transition: .12s;
+  }
+  .ai-sidebar-item:hover .ai-sidebar-item-delete { opacity: 1; }
+  .ai-sidebar-item-delete:hover { color: var(--md-error); background: rgba(255,107,107,.1); }
+  .ai-sidebar-list::-webkit-scrollbar { width: 4px; }
+  .ai-sidebar-list::-webkit-scrollbar-thumb { background: var(--md-border); border-radius: 2px; }
+
   /* ── Messages Container ──────────────────────────────────── */
   .ai-messages {
     flex: 1; overflow-y: auto; padding: 24px 24px 40px;
     display: flex; flex-direction: column; gap: 16px;
     scroll-behavior: smooth;
+    position: relative;
   }
 
   .ai-empty {
     display: flex; flex-direction: column; align-items: center;
-    justify-content: center; flex: 1; gap: 12px;
-    opacity: .7;
+    justify-content: center; flex: 1; gap: 10px;
+    opacity: .85;
   }
   .ai-empty-icon {
     width: 64px; height: 64px; border-radius: 18px;
@@ -1265,9 +1419,28 @@
     display: flex; align-items: center; justify-content: center;
     color: var(--md-accent);
     border: 1px solid rgba(124,108,255,.15);
+    margin-bottom: 4px;
   }
-  .ai-empty-title { margin: 0; font-size: 16px; font-weight: 600; color: var(--md-text); letter-spacing: -.02em; }
-  .ai-empty-sub { margin: 0; font-size: 12px; color: var(--md-text-3); }
+  .ai-empty-title { margin: 0; font-size: 18px; font-weight: 600; color: var(--md-text); letter-spacing: -.02em; }
+  .ai-empty-sub { margin: 0; font-size: 13px; color: var(--md-text-3); text-align: center; max-width: 360px; line-height: 1.5; }
+
+  .ai-prompts {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 200px));
+    gap: 8px; margin-top: 16px;
+  }
+  .ai-prompt-card {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 12px; border-radius: 10px;
+    background: rgba(255,255,255,.03); border: 1px solid var(--md-border);
+    color: var(--md-text-2); font-size: 12px; font-family: 'Geist', sans-serif;
+    cursor: pointer; transition: all .15s; text-align: left;
+  }
+  .ai-prompt-card:hover {
+    border-color: rgba(124,108,255,.3); background: rgba(124,108,255,.05);
+    color: var(--md-text); transform: translateY(-1px);
+  }
+  .ai-prompt-icon { font-size: 16px; flex-shrink: 0; }
+  .ai-prompt-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   /* ── User Message ────────────────────────────────────────── */
   .msg-user-wrap { display: flex; justify-content: flex-end; padding: 0 24px; }
@@ -1637,45 +1810,6 @@
   .back-to-top:hover { color: var(--md-text); border-color: rgba(255,255,255,.15); transform: translateY(-2px); }
   @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
-  /* ── History Panel ───────────────────────────────────────── */
-  .ai-history-panel {
-    position: absolute; top: 0; left: 0; bottom: 0;
-    width: 260px; background: var(--md-surface); border-right: 1px solid var(--md-border);
-    display: flex; flex-direction: column; z-index: 10;
-    border-radius: 20px 0 0 20px;
-  }
-  .ai-history-header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 14px 16px; border-bottom: 1px solid var(--md-border);
-    font-size: 13px; font-weight: 600; color: var(--md-text);
-  }
-  .ai-history-close {
-    background: none; border: none; color: var(--md-text-3); cursor: pointer;
-    padding: 4px; border-radius: 6px; display: flex; align-items: center; justify-content: center;
-  }
-  .ai-history-close:hover { color: var(--md-text); background: rgba(255,255,255,.06); }
-  .ai-history-list { flex: 1; overflow-y: auto; padding: 8px; }
-  .ai-history-empty { text-align: center; color: var(--md-text-3); font-size: 12px; padding: 24px; }
-  .ai-history-item {
-    display: flex; flex-direction: column; gap: 3px;
-    width: 100%; text-align: left; padding: 10px 12px; border-radius: 10px;
-    border: none; background: transparent;
-    color: var(--md-text); font-family: 'Geist', sans-serif; cursor: pointer;
-    transition: all .12s; position: relative;
-  }
-  .ai-history-item:hover { background: rgba(255,255,255,.04); }
-  .ai-history-item.active { background: rgba(124,108,255,.08); }
-  .ai-history-title { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 20px; }
-  .ai-history-meta { font-size: 11px; color: var(--md-text-3); }
-  .ai-history-delete {
-    position: absolute; top: 10px; right: 10px;
-    background: none; border: none; color: var(--md-text-3); cursor: pointer;
-    padding: 2px; border-radius: 4px; opacity: 0; transition: opacity .12s;
-    display: flex; align-items: center; justify-content: center;
-  }
-  .ai-history-item:hover .ai-history-delete { opacity: 1; }
-  .ai-history-delete:hover { color: var(--md-error); background: rgba(255,107,107,.08); }
-
   /* ── Extras Panel ──────────────────────────────────────── */
   .ai-extras-overlay {
     position: absolute; inset: 0; z-index: 20;
@@ -1764,10 +1898,17 @@
       from { opacity: 0; transform: translateY(12px) scale(.98); }
       to { opacity: 1; transform: translateY(0) scale(1); }
     }
+    .ai-header { padding: 0 8px; height: 44px; }
+    .ai-header-model { max-width: 140px; }
+    .ai-header-model-prov { display: none; }
+    .ai-header-status { display: none; }
     .ai-messages { padding: 16px 14px 80px; }
     .msg-user-wrap { padding: 0 14px; }
     .msg-assistant-card { padding: 18px 16px; border-radius: 14px; }
     .msg-user-bubble { max-width: 90%; }
-    .ai-history-panel { width: 220px; border-radius: 16px 0 0 16px; }
+    .ai-sidebar { position: absolute; top: 44px; left: 0; bottom: 0; z-index: 15; width: 240px; background: var(--md-surface); }
+    .ai-prompts { grid-template-columns: 1fr; width: 100%; max-width: 280px; }
+    .ai-empty-title { font-size: 16px; }
+    .ai-empty-sub { font-size: 12px; }
   }
 </style>

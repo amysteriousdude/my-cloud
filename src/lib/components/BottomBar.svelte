@@ -828,11 +828,13 @@
   .bb {
     position: fixed; z-index: 200;
     display: flex; align-items: center; gap: 0;
+    width: max-content;
+    max-width: calc(100vw - 32px);
     background: color-mix(in srgb, var(--bg-2) 85%, transparent);
     backdrop-filter: blur(20px) saturate(1.4);
     border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
     box-shadow: 0 8px 32px rgba(0,0,0,.35), inset 0 1px 0 color-mix(in srgb, var(--bg-1) 30%, transparent);
-    transition: all .24s cubic-bezier(.16,1,.3,1);
+    transition: box-shadow .2s ease, opacity .2s ease;
     user-select: none; padding: 6px 10px;
     transform-origin: center bottom;
     gap: 2px;
@@ -843,17 +845,17 @@
   .bb.repositioning { opacity: .7; cursor: grabbing; }
 
   /* Position variants */
-  .bb.pos-bottom { bottom: 16px; left: 50%; transform: translateX(-50%) scale(.98); border-radius: 999px; }
+  .bb.pos-bottom { bottom: 16px; left: 50%; transform: translateX(-50%) scale(.98); border-radius: 999px; transition: transform .18s cubic-bezier(.16,1,.3,1), box-shadow .2s ease; }
   .bb.pos-bottom:hover { transform: translateX(-50%) scale(1); }
   .bb.pos-bottom.full-width { left: 50%; transform: translateX(-50%); border-radius: 16px; max-width: min(920px, calc(100vw - 32px)); padding: 8px 14px; width: 100%; }
   .bb.pos-bottom.full-width:hover { transform: translateX(-50%); }
-  .bb.pos-top { top: 16px; left: 50%; transform: translateX(-50%) scale(.98); border-radius: 999px; }
+  .bb.pos-top { top: 16px; left: 50%; transform: translateX(-50%) scale(.98); border-radius: 999px; transition: transform .18s cubic-bezier(.16,1,.3,1), box-shadow .2s ease; }
   .bb.pos-top:hover { transform: translateX(-50%) scale(1); }
   .bb.pos-top.full-width { left: 50%; transform: translateX(-50%); border-radius: 16px; max-width: min(920px, calc(100vw - 32px)); padding: 8px 14px; width: 100%; }
   .bb.pos-top.full-width:hover { transform: translateX(-50%); }
-  .bb.pos-left { left: 16px; top: 50%; transform: translateY(-50%) scale(.98); border-radius: 999px; flex-direction: column; }
+  .bb.pos-left { left: 16px; top: 50%; transform: translateY(-50%) scale(.98); border-radius: 999px; flex-direction: column; transition: transform .18s cubic-bezier(.16,1,.3,1), box-shadow .2s ease; }
   .bb.pos-left:hover { transform: translateY(-50%) scale(1); }
-  .bb.pos-right { right: 16px; top: 50%; transform: translateY(-50%) scale(.98); border-radius: 999px; flex-direction: column; }
+  .bb.pos-right { right: 16px; top: 50%; transform: translateY(-50%) scale(.98); border-radius: 999px; flex-direction: column; transition: transform .18s cubic-bezier(.16,1,.3,1), box-shadow .2s ease; }
   .bb.pos-right:hover { transform: translateY(-50%) scale(1); }
 
   /* ── Nav section (cloud + expandable tabs) ────────────────────── */
