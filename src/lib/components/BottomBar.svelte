@@ -578,8 +578,9 @@
     </div>
   </div>
 
+  <!-- AI controls (retract when nav expands) -->
+  <div class="bb-ai-controls" class:retracted={navExpanded && hasAiChat}>
   <div class="bb-sep"></div>
-
   <!-- AI Provider dropdown -->
   {#if hasProviders}
     {@const activeProv = config!.aiChat!.providers!.find(p => p.active) ?? config!.aiChat!.providers![0]}
@@ -706,6 +707,7 @@
     </div>
     <div class="bb-sep"></div>
   {/if}
+  </div><!-- /.bb-ai-controls -->
 
   <!-- User avatar -->
   {#if user}
@@ -889,6 +891,19 @@
     transition: max-width .28s cubic-bezier(.16,1,.3,1), opacity .2s ease;
   }
   .bb-nav-tabs.expanded { max-width: 500px; opacity: 1; }
+
+  /* ── AI controls wrapper (retracts when nav expands) ──────────── */
+  .bb-ai-controls {
+    display: flex; align-items: center; gap: 2px;
+    max-width: 800px; overflow: hidden;
+    opacity: 1;
+    transition: max-width .3s cubic-bezier(.16,1,.3,1), opacity .2s ease .05s;
+  }
+  .bb-ai-controls.retracted {
+    max-width: 0;
+    opacity: 0;
+    transition: max-width .3s cubic-bezier(.16,1,.3,1), opacity .15s ease;
+  }
 
   .bb-sep {
     width: 1px; height: 24px;
