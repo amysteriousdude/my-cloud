@@ -348,7 +348,7 @@
   function resizeTextarea() {
     if (!textareaEl) return;
     textareaEl.style.height = 'auto';
-    textareaEl.style.height = Math.min(textareaEl.scrollHeight, 100) + 'px';
+    textareaEl.style.height = Math.min(textareaEl.scrollHeight, 80) + 'px';
   }
 
   $effect(() => {
@@ -925,14 +925,14 @@
   .bb-avatar-item:hover .bb-avatar-circle { box-shadow: 0 2px 8px rgba(99,102,241,.5); }
 
   /* ── Input section ────────────────────────────────────────────── */
-  .bb-input-section { display: flex; align-items: center; flex: 1; }
+  .bb-input-section { display: flex; align-items: center; }
 
   .bb-textarea {
-    width: 100%;
+    width: 280px; flex-shrink: 0;
     background: transparent; border: none; outline: none;
     color: var(--text-1); font-size: 13px; font-family: 'Geist', sans-serif;
     padding: 6px 8px; resize: none; line-height: 1.4;
-    max-height: 100px; overflow-y: auto;
+    max-height: 80px; overflow-y: auto;
   }
   .bb-textarea::placeholder { color: var(--text-3); }
   .bb-textarea:disabled { opacity: .5; }
@@ -1091,7 +1091,7 @@
     .bb-item-label { font-size: 9px; }
     .bb-pill-tip { opacity: 0; pointer-events: none; transition: opacity .15s; }
     .bb-pill-tip.touch-visible { opacity: 1; }
-    .bb-textarea { min-width: 120px; max-width: 200px; }
+    .bb-textarea { width: 160px; }
     .bb-mobile-nav-toggle { display: flex; }
     .bb-ai-providers { max-width: 160px; }
   }
