@@ -828,7 +828,6 @@
   .bb {
     position: fixed; z-index: 200;
     display: flex; align-items: center; gap: 0;
-    width: max-content;
     max-width: calc(100vw - 32px);
     background: color-mix(in srgb, var(--bg-2) 85%, transparent);
     backdrop-filter: blur(20px) saturate(1.4);
