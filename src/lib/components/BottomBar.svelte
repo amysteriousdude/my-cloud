@@ -119,7 +119,6 @@
   let navHovered = false;
   let navHoverTimeout: ReturnType<typeof setTimeout> | null = null;
   let showModelPopup = $state(false);
-  let showProviderPopup = $state(false);
 
   let mainTabIds = $state<Tab[]>(['files', 'generators', 'translator', 'draw']);
   let mainTabs = $derived(ALL_TABS.filter(t => mainTabIds.includes(t.id)));
@@ -348,7 +347,7 @@
   function resizeTextarea() {
     if (!textareaEl) return;
     textareaEl.style.height = 'auto';
-    textareaEl.style.height = Math.min(textareaEl.scrollHeight, 80) + 'px';
+    textareaEl.style.height = Math.min(textareaEl.scrollHeight, 100) + 'px';
   }
 
   $effect(() => {
@@ -372,7 +371,7 @@
     const target = e.target as HTMLElement;
     if (!target.closest('.bb-more-overlay') && !target.closest('.bb-more-btn')) showMore = false;
     if (!target.closest('.bb-user-panel') && !target.closest('.bb-avatar-item')) showUser = false;
-    if (!target.closest('.bb-model-picker')) { showModelPopup = false; showProviderPopup = false; }
+    if (!target.closest('.bb-model-picker')) showModelPopup = false;
   }
 
   function handleOutsideTouch(e: TouchEvent) {
@@ -578,32 +577,24 @@
     </div>
   </div>
 
-  <!-- AI controls (retract when nav expands) -->
-  <div class="bb-ai-controls" class:retracted={navExpanded && hasAiChat}>
   <div class="bb-sep"></div>
-  <!-- AI Provider dropdown -->
+
+  <!-- AI Provider pills -->
   {#if hasProviders}
-    {@const activeProv = config!.aiChat!.providers!.find(p => p.active) ?? config!.aiChat!.providers![0]}
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="bb-model-picker" style={activeProv?.color ? `--model-accent:${activeProv.color}` : ''} onclick={(e) => { e.stopPropagation(); showProviderPopup = !showProviderPopup; showModelPopup = false; }}>
-      <span class="bb-model-dot"></span>
-      <button class="bb-model-btn">
-        <span>{activeProv?.label ?? 'Provider'}</span>
-        <svg class="bb-model-chevron" class:open={showProviderPopup} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
-      </button>
-      {#if showProviderPopup}
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div class="bb-model-popup" class:pos-top={position === 'top'} onclick={(e) => e.stopPropagation()}>
-          <div class="bb-model-popup-header">Provider</div>
-          <div class="bb-model-popup-list">
-            {#each config!.aiChat!.providers! as prov}
-              <button class="bb-model-opt" class:active={prov.active} onclick={() => { prov.onClick?.(); showProviderPopup = false; }}>
-                <span class="bb-model-opt-name">{prov.label}</span>
-              </button>
-            {/each}
-          </div>
-        </div>
-      {/if}
+    <div class="bb-ai-providers">
+      {#each config!.aiChat!.providers! as pill}
+        <button
+          class="bb-ai-pill"
+          class:active={pill.active}
+          style={pill.color ? `--pill-color: ${pill.color}` : ''}
+          onclick={pill.onClick}
+        >
+          {#if pill.icon}
+            <pill.icon size={14} stroke={1.5}/>
+          {/if}
+          <span>{pill.label}</span>
+        </button>
+      {/each}
     </div>
     <div class="bb-sep"></div>
   {/if}
@@ -707,7 +698,6 @@
     </div>
     <div class="bb-sep"></div>
   {/if}
-  </div><!-- /.bb-ai-controls -->
 
   <!-- User avatar -->
   {#if user}
@@ -838,13 +828,11 @@
   .bb {
     position: fixed; z-index: 200;
     display: flex; align-items: center; gap: 0;
-    width: auto;
-    max-width: calc(100vw - 32px);
     background: color-mix(in srgb, var(--bg-2) 85%, transparent);
     backdrop-filter: blur(20px) saturate(1.4);
     border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
     box-shadow: 0 8px 32px rgba(0,0,0,.35), inset 0 1px 0 color-mix(in srgb, var(--bg-1) 30%, transparent);
-    transition: box-shadow .2s ease, opacity .2s ease;
+    transition: all .24s cubic-bezier(.16,1,.3,1);
     user-select: none; padding: 6px 10px;
     transform-origin: center bottom;
     gap: 2px;
@@ -855,17 +843,17 @@
   .bb.repositioning { opacity: .7; cursor: grabbing; }
 
   /* Position variants */
-  .bb.pos-bottom { bottom: 16px; left: 50%; transform: translateX(-50%) scale(.98); border-radius: 999px; transition: transform .18s cubic-bezier(.16,1,.3,1), box-shadow .2s ease; }
+  .bb.pos-bottom { bottom: 16px; left: 50%; transform: translateX(-50%) scale(.98); border-radius: 999px; }
   .bb.pos-bottom:hover { transform: translateX(-50%) scale(1); }
   .bb.pos-bottom.full-width { left: 50%; transform: translateX(-50%); border-radius: 16px; max-width: min(920px, calc(100vw - 32px)); padding: 8px 14px; width: 100%; }
   .bb.pos-bottom.full-width:hover { transform: translateX(-50%); }
-  .bb.pos-top { top: 16px; left: 50%; transform: translateX(-50%) scale(.98); border-radius: 999px; transition: transform .18s cubic-bezier(.16,1,.3,1), box-shadow .2s ease; }
+  .bb.pos-top { top: 16px; left: 50%; transform: translateX(-50%) scale(.98); border-radius: 999px; }
   .bb.pos-top:hover { transform: translateX(-50%) scale(1); }
   .bb.pos-top.full-width { left: 50%; transform: translateX(-50%); border-radius: 16px; max-width: min(920px, calc(100vw - 32px)); padding: 8px 14px; width: 100%; }
   .bb.pos-top.full-width:hover { transform: translateX(-50%); }
-  .bb.pos-left { left: 16px; top: 50%; transform: translateY(-50%) scale(.98); border-radius: 999px; flex-direction: column; transition: transform .18s cubic-bezier(.16,1,.3,1), box-shadow .2s ease; }
+  .bb.pos-left { left: 16px; top: 50%; transform: translateY(-50%) scale(.98); border-radius: 999px; flex-direction: column; }
   .bb.pos-left:hover { transform: translateY(-50%) scale(1); }
-  .bb.pos-right { right: 16px; top: 50%; transform: translateY(-50%) scale(.98); border-radius: 999px; flex-direction: column; transition: transform .18s cubic-bezier(.16,1,.3,1), box-shadow .2s ease; }
+  .bb.pos-right { right: 16px; top: 50%; transform: translateY(-50%) scale(.98); border-radius: 999px; flex-direction: column; }
   .bb.pos-right:hover { transform: translateY(-50%) scale(1); }
 
   /* ── Nav section (cloud + expandable tabs) ────────────────────── */
@@ -891,19 +879,6 @@
     transition: max-width .28s cubic-bezier(.16,1,.3,1), opacity .2s ease;
   }
   .bb-nav-tabs.expanded { max-width: 500px; opacity: 1; }
-
-  /* ── AI controls wrapper (retracts when nav expands) ──────────── */
-  .bb-ai-controls {
-    display: flex; align-items: center; gap: 2px;
-    max-width: 800px; overflow: hidden;
-    opacity: 1;
-    transition: max-width .3s cubic-bezier(.16,1,.3,1), opacity .2s ease .05s;
-  }
-  .bb-ai-controls.retracted {
-    max-width: 0;
-    opacity: 0;
-    transition: max-width .3s cubic-bezier(.16,1,.3,1), opacity .15s ease;
-  }
 
   .bb-sep {
     width: 1px; height: 24px;
@@ -940,14 +915,14 @@
   .bb-avatar-item:hover .bb-avatar-circle { box-shadow: 0 2px 8px rgba(99,102,241,.5); }
 
   /* ── Input section ────────────────────────────────────────────── */
-  .bb-input-section { display: flex; align-items: center; }
+  .bb-input-section { display: flex; align-items: center; flex: 1; min-width: 150px; }
 
   .bb-textarea {
-    width: 280px; flex-shrink: 0;
+    width: 100%; min-width: 200px; max-width: 500px;
     background: transparent; border: none; outline: none;
     color: var(--text-1); font-size: 13px; font-family: 'Geist', sans-serif;
     padding: 6px 8px; resize: none; line-height: 1.4;
-    max-height: 80px; overflow-y: auto;
+    max-height: 100px; overflow-y: auto;
   }
   .bb-textarea::placeholder { color: var(--text-3); }
   .bb-textarea:disabled { opacity: .5; }
@@ -1078,7 +1053,7 @@
   .bb-action-btn.primary:active { transform: scale(.95); }
   .bb-action-btn.primary:disabled { background: var(--accent); opacity: .5; box-shadow: none; transform: none; }
   .bb-action-btn.danger { color: var(--red); }
-  .bb-action-btn.danger:hover { background: rgba(248,113,113,.12); color: #f87171; transform: scale(1.08); }
+  .bb-action-btn.danger:hover { background: rgba(248,113,113,.12); color: #f87171; }
 
   .bb-spinner {
     width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.3);
@@ -1106,7 +1081,7 @@
     .bb-item-label { font-size: 9px; }
     .bb-pill-tip { opacity: 0; pointer-events: none; transition: opacity .15s; }
     .bb-pill-tip.touch-visible { opacity: 1; }
-    .bb-textarea { width: 160px; }
+    .bb-textarea { min-width: 120px; max-width: 200px; }
     .bb-mobile-nav-toggle { display: flex; }
     .bb-ai-providers { max-width: 160px; }
   }
