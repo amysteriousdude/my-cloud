@@ -1,7 +1,7 @@
 <!-- hello there, tf u doing on my code???? -->
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { IconRefresh, IconHistory, IconCopy, IconCheck, IconArrowLeft } from '@tabler/icons-svelte';
+  import { IconRefresh, IconHistory, IconCopy, IconCheck, IconArrowLeft, IconDownload } from '@tabler/icons-svelte';
   import RobloxIcon from '$lib/components/icons/RobloxIcon.svelte';
 
   type HistoryEntry = { version: string; platform: string; channel: string; at: string };
@@ -28,6 +28,7 @@
   let channel = $state('LIVE');
   let version = $state<string | null>(null);
   let versionNumber = $state<string | null>(null);
+  let download = $state<string | null>(null);
   let error = $state<string | null>(null);
   let loading = $state(false);
   let lastChecked = $state<string | null>(null);
@@ -46,6 +47,11 @@
         }
         version = data.clientVersionUpload ?? data.activeVersion ?? null;
         versionNumber = data.version ?? null;
+        if (version) {
+          if (platform === 'mac') download = `https://setup.rbxcdn.com/mac/${version}-Roblox.dmg`;
+          else if (platform === 'studio') download = `https://setup.rbxcdn.com/${version}-RobloxStudioInstaller.exe`;
+          else download = `https://setup.rbxcdn.com/${version}-RobloxPlayerInstaller.exe`;
+        } else download = null;
       } else {
         const res = await fetch(`/api/roblox/store?platform=${platform}`);
         const data = await res.json();
@@ -54,6 +60,7 @@
         }
         version = data.version ?? null;
         versionNumber = data.updated ? `updated ${new Date(data.updated).toLocaleDateString()}` : null;
+        download = data.download ?? null;
       }
       lastChecked = new Date().toLocaleTimeString();
 
@@ -68,6 +75,7 @@
     } catch (e: any) {
       version = null;
       versionNumber = null;
+      download = null;
       error = e?.message ?? 'fetch failed';
     }
     loading = false;
@@ -157,9 +165,16 @@
                 <div class="util-version-num">version {versionNumber}</div>
               {/if}
             </div>
-            <button class="util-copy" onclick={copyVersion} title="Copy">
-              {#if copied}<IconCheck size={16} />{:else}<IconCopy size={16} />{/if}
-            </button>
+            <div class="util-actions">
+              {#if download}
+                <a class="util-copy util-dl" href={download} target="_blank" rel="noreferrer" title={platform === 'ios' ? 'Open in App Store' : 'Download'}>
+                  <IconDownload size={16} />
+                </a>
+              {/if}
+              <button class="util-copy" onclick={copyVersion} title="Copy">
+                {#if copied}<IconCheck size={16} />{:else}<IconCopy size={16} />{/if}
+              </button>
+            </div>
           </div>
         {/if}
         {#if lastChecked}
@@ -239,6 +254,8 @@
   .util-version-num { font-size: 12px; color: var(--text-3); margin-top: 4px; }
   .util-copy { background: none; border: 1px solid var(--border); color: var(--text-2); width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
   .util-copy:hover { color: var(--green); border-color: var(--green-border); }
+  .util-actions { display: flex; gap: 8px; flex-shrink: 0; }
+  .util-dl { text-decoration: none; }
   .util-checked { font-size: 11px; color: var(--text-3); margin-top: 10px; }
   .util-loading, .util-empty { color: var(--text-3); font-size: 13px; }
   .util-error { color: var(--red); font-size: 13px; }
