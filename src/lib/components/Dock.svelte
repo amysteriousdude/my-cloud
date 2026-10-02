@@ -7,8 +7,7 @@
     IconDots, IconX, IconSettings,
     IconDatabase, IconWaveSine,
   } from '@tabler/icons-svelte';
-  import RobloxIcon from '$lib/components/icons/RobloxIcon.svelte';
-  import { env } from '$env/dynamic/public';
+    import { env } from '$env/dynamic/public';
   const NAME = env.PUBLIC_NAME ?? "Omar";
 
   type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'fx' | 'utility';
@@ -52,7 +51,7 @@
     { id: 'apitester',  icon: IconApi,         label: 'API Tester' },
     { id: 'database',  icon: IconDatabase,    label: 'Databases' },
     { id: 'fx',        icon: IconWaveSine,    label: 'FX' },
-    { id: 'utility',   icon: RobloxIcon,      label: 'Utilities' },
+    { id: 'utility',   icon: IconSettings,    label: 'Utilities' },
   ];
 
   let position = $state<'bottom'|'top'|'left'|'right'>('bottom');

@@ -17,9 +17,9 @@
     IconDatabase,
     IconBrain,
     IconWaveSine,
+    IconSettings,
   } from '@tabler/icons-svelte';
-  import RobloxIcon from '$lib/components/icons/RobloxIcon.svelte';
-  import { env } from '$env/dynamic/public';
+    import { env } from '$env/dynamic/public';
   const NAME = env.PUBLIC_NAME ?? "Omar";
 
   type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'ai' | 'fx' | 'utility';
@@ -85,7 +85,7 @@
     { id: 'database', icon: IconDatabase,            label: 'Databases' },
     { id: 'ai',       icon: IconBrain,               label: 'AI' },
     { id: 'fx',       icon: IconWaveSine,             label: 'FX' },
-    { id: 'utility',  icon: RobloxIcon,                label: 'Utilities' },
+    { id: 'utility',  icon: IconSettings,          label: 'Utilities' },
   ];
   const PRIMARY_TABS: Tab[] = ['files', 'draw', 'stats', 'notes', 'vault'];
   const secondaryIds: Tab[] = ['generators', 'downloader', 'console', 'dictionary', 'translator', 'apitester', 'database', 'ai', 'fx', 'utility'];
