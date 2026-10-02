@@ -1,3 +1,4 @@
+<!-- hello there, tf u doing on my code???? -->
 <!-- src/lib/tabs/Files.svelte -->
 <script lang="ts">
   import PreviewModal from "$lib/components/PreviewModal.svelte";
@@ -106,30 +107,25 @@
     toasts.success('ShareX creds URL copied!');
   }
 
-  // Auth state
   let tokenInput = $state("");
   let tokenError = $state("");
   let tokenLoading = $state(false);
 
-  // ── Sync state ──────────────────────────────────────────────────────────────
   let files     = $state<FileRecord[]>([]);
-  let folders   = $state<FolderRecord[]>([]);  // declared here, not below
-  // Track which metaFileIds we already have so diffs are O(n)
+  let folders   = $state<FolderRecord[]>([]);
   let _fileIndex = new Map<string, FileRecord>();
   let _folderIndex = new Map<string, FolderRecord>();
 
-  // Initial load = true (shows skeleton), background refresh = false (silent)
   let filesLoading  = $state(true);
-  let hasLoadedOnce = $state(false);  // track if we've loaded data at least once
-  let syncing       = $state(false);  // subtle background indicator
+  let hasLoadedOnce = $state(false);
+  let syncing       = $state(false);
   let lastSyncAt    = 0;
   let syncTimer: ReturnType<typeof setInterval> | null = null;
   let skeletonTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // Upload queue — supports multiple concurrent uploads
   type UploadJob = { id: string; name: string; progress: number; done: boolean; error: string | null };
   let uploadJobs = $state<UploadJob[]>([]);
-  let uploading = $state(false);  // kept for toolbar button disabled state
+  let uploading = $state(false);
 
   let searchQuery = $state("");
   let selectedTags = $state<Set<string>>(new Set());
@@ -138,8 +134,7 @@
   let renamingFileId = $state<string | null>(null);
   let renameFileValue = $state("");
 
-  // Folder state
-  let currentFolderId = $state<string | undefined>(undefined); // undefined = root
+  let currentFolderId = $state<string | undefined>(undefined);
   let renamingFolderId = $state<string | null>(null);
   let renameFolderValue = $state("");
   let creatingFolder = $state(false);
@@ -151,22 +146,18 @@
   let showDeleteConfirm = $state(false);
   let folderToDeleteId = $state<string | null>(null);
 
-  // Clear selection on folder change
   $effect(() => {
-    // Access currentFolderId to track it
     let _ = currentFolderId;
     selectedIds = new Set();
   });
 
-  // Preview
   let preview = $state<FileRecord | null>(null);
 
-  // ── QR popover ────────────────────────────────────────────────────────────
   let qrAnchor  = $state<{ x: number; y: number; above: boolean } | null>(null);
   let qrUrl     = $state<string | null>(null);
   let qrDataUrl = $state<string | null>(null);
   let qrCopied  = $state(false);
-  let qrMobile  = $state(false); // full-screen on mobile
+  let qrMobile  = $state(false);
   let qrHideTimer: ReturnType<typeof setTimeout> | null = null;
   let qrShowTimer: ReturnType<typeof setTimeout> | null = null;
   let qrLongPressTimer: ReturnType<typeof setTimeout> | null = null;
@@ -178,7 +169,6 @@
     const { default: QRCode } = await import("qrcode");
     const dataUrl = await QRCode.toDataURL(url, { width: 200, margin: 2, color: { dark: "#ffffff", light: "#1a1a1a" } });
     qrCache.set(url, dataUrl);
-    // Always set — race condition fix: don't check qrUrl
     qrDataUrl = dataUrl;
   }
 
@@ -187,12 +177,10 @@
     const popoverW = 220;
     const margin   = 12;
     const above    = rect.top - popoverH - margin > 0;
-    // Clamp X so popover never goes off left/right edge
     const x = Math.min(
       Math.max(rect.left + rect.width / 2, popoverW / 2 + margin),
       window.innerWidth - popoverW / 2 - margin
     );
-    // Y: if above, anchor to button top; if below, anchor to button bottom
     const y = above ? rect.top : rect.bottom;
     qrUrl    = url;
     qrAnchor = { x, y, above };
@@ -229,7 +217,6 @@
     if (qrHideTimer) { clearTimeout(qrHideTimer); qrHideTimer = null; }
   }
 
-  // Mobile long-press
   function onQrTouchStart(e: TouchEvent, url: string) {
     if (qrLongPressTimer) clearTimeout(qrLongPressTimer);
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -258,7 +245,6 @@
   let previewUrl = $state<string | null>(null);
   let previewLoading = $state(false);
 
-  // UI state
   let dragActive = $state(false);
   let viewMode = $state<"list" | "grid">("list");
   let sortBy = $state<"name" | "size" | "date" | "type">("date");
@@ -284,12 +270,11 @@
   let dragGhost = $state<{ name: string; type: string; count: number } | null>(null);
   let dragGhostX = $state(0);
   let dragGhostY = $state(0);
-  let dragExternalCount = $state(0); // files dragged from OS
+  let dragExternalCount = $state(0);
 
   const BASE = "";
   const CHUNK_SIZE = 18 * 1024 * 1024;
 
-  // Sort & filter
   let allTags = $derived(() => {
     const tagMap = new Map<string, number>();
     for (const f of files) {
@@ -302,7 +287,6 @@
 
   let processedFiles = $derived.by(() => {
     let arr = isSearching ? [...files] : files.filter(f => (f.folderId ?? undefined) === currentFolderId);
-    // Filter by type
     if (filterType !== "all") {
       arr = arr.filter((f) => {
         if (filterType === "image") return f.type.startsWith("image/");
@@ -323,16 +307,13 @@
         return true;
       });
     }
-    // Filter by tags
     if (selectedTags.size > 0) {
       arr = arr.filter(f => {
         const fileTags = f.tags ?? [];
         return [...selectedTags].some(t => fileTags.includes(t));
       });
     }
-    // Sort
     arr.sort((a, b) => {
-      // Favorites always first
       if (a.favorite && !b.favorite) return -1;
       if (!a.favorite && b.favorite) return 1;
       let cmp = 0;
@@ -357,7 +338,6 @@
       currentFolders.every((f) => selectedIds.has(f.folderId))
   );
 
-  // Auth
   async function submitToken() {
     tokenError = "";
     tokenLoading = true;
@@ -384,10 +364,7 @@
     window.location.reload();
   }
 
-  // ── Smart sync ───────────────────────────────────────────────────────────────
-  // First call shows skeleton; subsequent calls diff and patch silently.
   async function loadFiles(q = "", { silent = false } = {}) {
-    // Clear any pending skeleton timer
     if (skeletonTimer) {
       clearTimeout(skeletonTimer);
       skeletonTimer = null;
@@ -395,13 +372,12 @@
 
     const isFirst = !hasLoadedOnce;
 
-    // Only show skeleton if this is first load and not silent
     if (isFirst && !silent) {
       skeletonTimer = setTimeout(() => {
         if (files.length === 0 && folders.length === 0) {
           filesLoading = true;
         }
-      }, 150); // Small delay to prevent flash on fast responses
+      }, 150);
     } else if (!isFirst) {
       syncing = true;
     }
@@ -416,29 +392,24 @@
       const newFiles:   FileRecord[]   = d.files   ?? [];
       const newFolders: FolderRecord[] = d.folders ?? [];
 
-      // Clear skeleton timer since we got data
       if (skeletonTimer) {
         clearTimeout(skeletonTimer);
         skeletonTimer = null;
       }
 
-      // ── Diff files ─────────────────────────────────────────────────────────
       const newFileMap = new Map(newFiles.map(f => [f.metaFileId, f]));
       const oldFileMap = new Map(files.map(f => [f.metaFileId, f]));
 
       let changed = false;
-      // Add / update
       for (const [id, nf] of newFileMap) {
         const of_ = oldFileMap.get(id);
         if (!of_ || JSON.stringify(of_) !== JSON.stringify(nf)) changed = true;
       }
-      // Remove
       for (const id of oldFileMap.keys()) {
         if (!newFileMap.has(id)) changed = true;
       }
       if (changed) files = newFiles;
 
-      // ── Diff folders ───────────────────────────────────────────────────────
       const newFolderMap = new Map(newFolders.map(f => [f.folderId, f]));
       const oldFolderMap = new Map(folders.map(f => [f.folderId, f]));
       let fchanged = false;
@@ -459,7 +430,6 @@
     }
   }
 
-  // Background poll — every 5s to catch external changes
   function startBackgroundSync() {
     if (syncTimer) clearInterval(syncTimer);
     syncTimer = setInterval(() => {
@@ -469,7 +439,6 @@
     }, 5_000);
   }
 
-  // Optimistic helpers — update local state immediately, sync in background
   function optimisticUpdateFile(metaFileId: string, patch: Partial<FileRecord>) {
     files = files.map(f => f.metaFileId === metaFileId ? { ...f, ...patch } : f);
   }
@@ -495,11 +464,9 @@
     files = files.filter(f => !f.folderId || !toRemove.has(f.folderId));
   }
 
-  // ── Folder operations ─────────────────────────────────────────────────────
   async function createFolder() {
     const name = newFolderName.trim() || "New Folder";
     newFolderName = ""; creatingFolder = false;
-    // Optimistic: show immediately with temp id
     const tempId = 'tmp:' + Date.now();
     const tempFolder: FolderRecord = {
       _type: 'folder', folderId: tempId, name,
@@ -515,7 +482,6 @@
       });
       const d = await res.json();
       if (d.folder) {
-        // Replace temp with real
         folders = folders.map(f => f.folderId === tempId ? d.folder : f);
       } else {
         folders = folders.filter(f => f.folderId !== tempId);
@@ -578,7 +544,6 @@
     const success = await uploadFile(fileObj);
     if (success) {
       await loadFiles(searchQuery);
-      // The new file should be the one named new_file.txt in the current folder
       const newFile = processedFiles.find(f => f.fileName === "new_file.txt" && (f.folderId ?? null) === (currentFolderId ?? null));
       if (newFile) {
         renamingFileId = newFile.metaFileId;
@@ -587,7 +552,6 @@
     }
   }
 
-  // Breadcrumb path for current folder
   function getFolderPath(folderId: string | undefined): FolderRecord[] {
     if (!folderId) return [];
     const path: FolderRecord[] = [];
@@ -599,14 +563,12 @@
     return path;
   }
 
-  // Files/folders visible in current view
   let currentFolders = $derived(
     searchQuery.trim()
       ? folders.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase()))
       : folders.filter(f => (f.parentId ?? undefined) === currentFolderId)
   );
 
-  // Reconstruct full path for public links
   function getFullFilePath(item: FileRecord | FolderRecord): string {
     const isFolder = '_type' in item && item._type === 'folder';
     const name = isFolder ? (item as FolderRecord).name : (item as FileRecord).fileName;
@@ -621,16 +583,13 @@
     return segments.join('/');
   }
 
-  // When searching, also show files from all folders
   let isSearching = $derived(searchQuery.trim().length > 0);
   let currentPath = $derived(getFolderPath(currentFolderId));
 
-  // Upload utilities
   async function uploadFilesList(fileList: FileList | File[]) {
     const arr = Array.from(fileList as any);
     for (const file of arr) {
       const ok = await uploadFile(file as File);
-      // If a single upload fails, stop the batch so errors are visible.
       if (!ok) break;
     }
   }
@@ -695,7 +654,6 @@
       const final = await finalRes.json();
       if (final.error) throw new Error(final.error);
       patchJob({ progress: 100, done: true });
-      // Silent refresh — don't blank the list
       loadFiles(searchQuery, { silent: true });
       setTimeout(() => { uploadJobs = uploadJobs.filter(j => j.id !== jobId); }, 3000);
       return true;
@@ -719,7 +677,6 @@
       if (item.kind === 'file') {
         const file = item.getAsFile();
         if (!file) continue;
-        // Give pasted images a sensible name since they come as unnamed blobs
         if (file.name === 'image.png' || !file.name) {
           const named = new File([file], `pasted_image_${Date.now()}.png`, { type: file.type });
           uploadFile(named);
@@ -790,16 +747,14 @@
 
   function openContextMenu(e: MouseEvent, target: any) {
     e.preventDefault();
-    e.stopPropagation(); // Prevent bubble
+    e.stopPropagation();
     
-    // Set active ID for context menu highlighting (instead of auto-selecting)
     if (target) {
       contextActiveId = target._type === 'folder' ? target.folderId : target.metaFileId;
     } else {
       contextActiveId = null;
     }
 
-    // Force close old context menu if any to allow "re-right-click"
     const { clientX, clientY } = e;
     contextMenu = null;
     setTimeout(() => {
@@ -880,7 +835,6 @@
     clipboard = null;
   }
 
-  // Rename — optimistic
   async function renameFile(metaFileId: string, newName: string) {
     if (!newName.trim()) { renamingFileId = null; return; }
     const oldFile = files.find(f => f.metaFileId === metaFileId);
@@ -922,7 +876,6 @@
     }
   }
 
-  // Folder Actions
   async function toggleFolderFavorite(folder: FolderRecord) {
     optimisticUpdateFolder(folder.folderId, { favorite: !folder.favorite });
     try {
@@ -956,13 +909,11 @@
     let size = 0;
     const items = files.filter(f => f.folderId === folderId);
     for (const f of items) size += f.totalBytes;
-    // Recursive size
     const subFolders = folders.filter(f => f.parentId === folderId);
     for (const sub of subFolders) size += getFolderSize(sub.folderId);
     return size;
   }
 
-  // Tags
   async function updateTags(file: FileRecord, tags: string[]) {
     await fetch(`${BASE}/api/telegram/fileTags`, {
       method: "POST",
@@ -976,7 +927,6 @@
     await loadFiles(searchQuery);
   }
 
-  // Favorite — optimistic
   async function toggleFavorite(file: FileRecord) {
     optimisticUpdateFile(file.metaFileId, { favorite: !file.favorite });
     try {
@@ -988,20 +938,17 @@
     } catch { optimisticUpdateFile(file.metaFileId, { favorite: file.favorite }); }
   }
 
-  // Preview
   function isPreviewable(type: string) {
     if (type.startsWith('image/')) return true;
     if (type.startsWith('video/')) return true;
     if (type.startsWith('audio/')) return true;
     if (type === 'application/pdf') return true;
-    // Text/code files — open in Monaco editor
     if (type.startsWith('text/')) return true;
     if (type === 'application/json') return true;
     if (type === 'application/javascript') return true;
     if (type === 'application/typescript') return true;
     if (type === 'application/xml') return true;
     if (type.includes('json') || type.includes('+xml') || type.includes('text')) return true;
-    // Fonts
     if (type.startsWith('font/') || type === 'application/font-woff' ||
         type === 'application/x-font-ttf' || type === 'application/x-font-otf') return true;
     return false;
@@ -1022,7 +969,6 @@
   }
 
   async function openPreview(file: FileRecord) {
-    // Also open text files by extension even if mime type is generic octet-stream
     if (!isPreviewable(file.type) && !isTextLikeFile(file) && !isFontFile(file)) {
       window.open(
         `${BASE}/api/telegram/getRequestFile?api_key=${apiKey}&meta_file_id=${file.metaFileId}&download=true`,
@@ -1055,7 +1001,6 @@
     previewUrl = null;
   }
 
-  // Selection
   function handleFileClick(e: MouseEvent, id: string, forceToggle = false) {
     e.stopPropagation();
     if (e.ctrlKey || e.metaKey || forceToggle) {
@@ -1084,12 +1029,10 @@
     }
   }
 
-  // Bulk
   async function confirmBulkDelete() {
     const folderIdSet = new Set(folders.map(f => f.folderId));
     const fileIds   = [...selectedIds].filter(id => !folderIdSet.has(id));
     const folderIds = [...selectedIds].filter(id => folderIdSet.has(id));
-    // Optimistic: remove from view immediately
     for (const id of fileIds)   optimisticRemoveFile(id);
     for (const id of folderIds) optimisticRemoveFolder(id);
     selectedIds = new Set();
@@ -1129,13 +1072,11 @@
     const entries: Record<string, Uint8Array> = {};
     const folderIdSet = new Set(folders.map(f => f.folderId));
 
-    // Collect all selected file IDs, including files inside selected folders
     const allFileIds = new Set<string>();
     for (const id of selectedIds) {
       if (!folderIdSet.has(id)) {
         allFileIds.add(id);
       } else {
-        // Add all files recursively inside this folder
         const addFolderFiles = (fid: string) => {
           files.filter(f => f.folderId === fid).forEach(f => allFileIds.add(f.metaFileId));
           folders.filter(f => f.parentId === fid).forEach(f => addFolderFiles(f.folderId));
@@ -1151,7 +1092,6 @@
         `${BASE}/api/telegram/getRequestFile?api_key=${apiKey}&meta_file_id=${id}`,
       );
       const buf = await res.arrayBuffer();
-      // Preserve folder path inside zip
       const folder = file.folderId ? folders.find(f => f.folderId === file.folderId) : null;
       const zipPath = folder ? `${folder.name}/${file.fileName}` : file.fileName;
       entries[zipPath] = new Uint8Array(buf);
@@ -1167,7 +1107,6 @@
     selectedIds = new Set();
   }
 
-  // Drag & drop upload (with fix)
   function handleDragOver(e: DragEvent) {
     e.preventDefault();
     dragActive = true;
@@ -1190,11 +1129,9 @@
     dragActive = false;
     const fl = e.dataTransfer?.files;
     if (!fl || fl.length === 0) return;
-    // Upload all dropped files, one after another
     uploadFilesList(fl);
   }
 
-  // Drag reorder
   function reorderDragStart(idx: number) {
     dragSrcIdx = idx;
     const file = processedFiles[idx];
@@ -1215,7 +1152,6 @@
     dragOverIdx = null;
   }
 
-  // Search — debounced, triggers silent sync only if query changed meaningfully
   let searchTimeout: any;
   let _lastQuery = '';
   function onSearch(e: Event) {
@@ -1240,7 +1176,6 @@
     selectedTags = new Set();
   }
 
-  // Helpers
   function isTextLikeFile(file: FileRecord) {
     const ext = file.fileName.split('.').pop()?.toLowerCase() ?? '';
     return file.type.startsWith('text/') || file.type.includes('json') ||
@@ -1311,7 +1246,6 @@
       }
     }
 
-    // Action for auto-focus and selection
     function selectOnMount(node: HTMLInputElement) {
       setTimeout(() => {
         node.focus();
@@ -1319,7 +1253,6 @@
       }, 0);
     }
 
-  // Watch for refreshNonce changes from parent (silent background sync)
   $effect(() => {
     const nonce = refreshNonce;
     if (nonce !== undefined && nonce > 0 && hasLoadedOnce) {
@@ -1415,7 +1348,6 @@
             const fl = (e.target as HTMLInputElement).files;
             if (fl && fl.length > 0) {
               uploadFilesList(fl);
-              // reset input so selecting same files again still triggers change
               (e.target as HTMLInputElement).value = "";
             }
           }}

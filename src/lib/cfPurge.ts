@@ -1,7 +1,4 @@
-// src/lib/cfPurge.ts
-// Automatic Cloudflare cache purging after file mutations.
-// Requires CF_API_TOKEN and CF_ZONE_ID env vars.
-// All functions are non-blocking (fire-and-forget) and silently no-op if unconfigured.
+// hello there, tf u doing on my code????
 
 const CF_API_TOKEN = process.env.CF_API_TOKEN || '';
 const CF_ZONE_ID = process.env.CF_ZONE_ID || '';
@@ -11,8 +8,6 @@ const BASE_URL = process.env.PUBLIC_BASE_URL || 'https://cloud.omarplayz.eu.org'
 function configured(): boolean {
   return !!(CF_API_TOKEN && CF_ZONE_ID);
 }
-
-// ── Low-level purge ────────────────────────────────────────────────────────
 
 async function postPurge(body: Record<string, any>): Promise<void> {
   if (!configured()) return;
@@ -53,8 +48,6 @@ export async function purgeAll(): Promise<void> {
   await postPurge({ purge_everything: true });
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────
-
 export function publicUrl(slug: string): string {
   return `${BASE_URL}/public/${slug}`;
 }
@@ -74,8 +67,6 @@ export async function purgePublicFiles(): Promise<void> {
   await purgePrefixes([`${BASE_URL.replace(/^https?:\/\//, '')}/public/`]);
 }
 
-// ── Registry-aware slug lookup ─────────────────────────────────────────────
-
 /**
  * Compute the public slug for a registry entry by walking up the folder tree.
  * Returns null if the file has no folder hierarchy.
@@ -87,7 +78,6 @@ export async function computeSlug(metaFileId: string): Promise<string | null> {
     const rec = registry[metaFileId];
     if (!rec || rec._type === 'folder') return null;
 
-    // Always walk folder tree for current path (publicSlug may be stale)
     const parts = [rec.fileName];
     let folderId = rec.folderId || null;
     const seen = new Set<string>();

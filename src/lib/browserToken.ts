@@ -1,4 +1,4 @@
-// src/lib/browserToken.ts
+// hello there, tf u doing on my code????
 import crypto from 'crypto';
 
 const SECRET = () => (typeof process !== 'undefined' && process.env?.BROWSER_SESSION_SECRET) || '';

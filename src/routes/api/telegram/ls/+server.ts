@@ -1,3 +1,4 @@
+// hello there, tf u doing on my code????
 import type { RequestHandler } from './$types';
 import { getRecordByApiKey, readRegistry } from '$lib/telegramStorage';
 

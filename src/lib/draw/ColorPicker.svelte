@@ -1,3 +1,4 @@
+<!-- hello there, tf u doing on my code???? -->
 <script lang="ts">
   let { value = $bindable("#000000") }: { value: string } = $props();
 
@@ -9,7 +10,6 @@
   let hueEl: HTMLDivElement;
   let hexInput = $state(value);
 
-  // Sync from hex → HSL
   function hexToHsl(hex: string) {
     const r = parseInt(hex.slice(1, 3), 16) / 255;
     const g = parseInt(hex.slice(3, 5), 16) / 255;
@@ -47,7 +47,6 @@
     hexInput = value;
   }
 
-  // ── Wheel interaction ───────────────────────────────────────
   function wheelPointerDown(e: PointerEvent) {
     draggingWheel = true;
     wheelEl.setPointerCapture(e.pointerId);
@@ -71,7 +70,6 @@
     updateFromHsl();
   }
 
-  // ── Hue bar interaction ─────────────────────────────────────
   function huePointerDown(e: PointerEvent) {
     draggingHue = true;
     hueEl.setPointerCapture(e.pointerId);
@@ -88,7 +86,6 @@
     updateFromHsl();
   }
 
-  // ── Hex input ───────────────────────────────────────────────
   function onHexChange() {
     if (/^#[0-9a-fA-F]{6}$/.test(hexInput)) {
       value = hexInput;
@@ -96,7 +93,6 @@
     }
   }
 
-  // ── Quick swatches ──────────────────────────────────────────
   const SWATCHES = [
     "#000000","#333333","#666666","#999999","#cccccc","#ffffff",
     "#ff0000","#ff4400","#ff8800","#ffcc00","#ffff00","#ccff00",
@@ -106,7 +102,6 @@
     "#66ccff","#6699ff","#9966ff","#cc66ff","#ff66cc","#ff6699",
   ];
 
-  // ── Recent colors ───────────────────────────────────────────
   let recentColors = $state<string[]>([]);
 
   function addToRecent(c: string) {

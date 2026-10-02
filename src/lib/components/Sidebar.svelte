@@ -1,3 +1,4 @@
+<!-- hello there, tf u doing on my code???? -->
 <!-- src/lib/components/Sidebar.svelte -->
 <script lang="ts">
     import {
@@ -17,10 +18,11 @@
     IconBrain,
     IconWaveSine,
   } from '@tabler/icons-svelte';
+  import RobloxIcon from '$lib/components/icons/RobloxIcon.svelte';
   import { env } from '$env/dynamic/public';
   const NAME = env.PUBLIC_NAME ?? "Omar";
 
-  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'ai' | 'fx';
+  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'ai' | 'fx' | 'utility';
 
   let {
     user,
@@ -44,7 +46,6 @@
     ontabchange: (t: Tab) => void;
   } = $props();
 
-  // Desktop expand/lock
   let expanded = $state(false);
   let locked   = $state(false);
   let isExpanded = $derived(expanded || locked);
@@ -54,7 +55,6 @@
     expanded = locked;
   }
 
-  // Mobile sheet
   let sheetOpen = $state(false);
   let touchStartY = $state(0);
 
@@ -63,8 +63,8 @@
   }
   function onTouchEnd(e: TouchEvent) {
     const dy = touchStartY - e.changedTouches[0].clientY;
-    if (dy > 40) sheetOpen = true;   // swipe up
-    if (dy < -40) sheetOpen = false; // swipe down
+    if (dy > 40) sheetOpen = true;
+    if (dy < -40) sheetOpen = false;
   }
 
   $effect(() => {
@@ -85,10 +85,10 @@
     { id: 'database', icon: IconDatabase,            label: 'Databases' },
     { id: 'ai',       icon: IconBrain,               label: 'AI' },
     { id: 'fx',       icon: IconWaveSine,             label: 'FX' },
+    { id: 'utility',  icon: RobloxIcon,                label: 'Utilities' },
   ];
-  // Mobile: primary tabs shown in bottom bar, secondary in sheet
   const PRIMARY_TABS: Tab[] = ['files', 'draw', 'stats', 'notes', 'vault'];
-  const secondaryIds: Tab[] = ['generators', 'downloader', 'console', 'dictionary', 'translator', 'apitester', 'database', 'ai', 'fx'];
+  const secondaryIds: Tab[] = ['generators', 'downloader', 'console', 'dictionary', 'translator', 'apitester', 'database', 'ai', 'fx', 'utility'];
   const secondaryTabs = TABS.filter(t => secondaryIds.includes(t.id));
   const primaryTabs = TABS.filter(t => PRIMARY_TABS.includes(t.id));
 

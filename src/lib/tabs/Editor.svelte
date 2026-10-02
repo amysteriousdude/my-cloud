@@ -1,3 +1,4 @@
+<!-- hello there, tf u doing on my code???? -->
 <!-- src/lib/tabs/Editor.svelte -->
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
@@ -33,7 +34,6 @@
   }
 
   async function loadFromCDN() {
-    // CSS
     if (!document.getElementById("tui-css")) {
       const link = document.createElement("link");
       link.id = "tui-css"; link.rel = "stylesheet";
@@ -41,7 +41,6 @@
       document.head.appendChild(link);
     }
 
-    // Deps in order — fabric 1.6.7 is required by TOAST UI, NOT v5
     if (!(window as any).fabric)
       await loadScript("https://cdnjs.cloudflare.com/ajax/libs/fabric.js/1.6.7/fabric.min.js");
 

@@ -1,3 +1,4 @@
+// hello there, tf u doing on my code????
 import type { SongState, Track, Pattern, NoteEvent, MixerChannel, EffectType } from "./engine";
 import { noteToFreq, uid } from "./engine";
 
@@ -36,10 +37,8 @@ export class AudioEngine {
   private onBeatChange: ((beat: number) => void) | null = null;
   private onEnd: (() => void) | null = null;
 
-  // Per-track audio routing
   private trackStates: Map<string, TrackAudioState> = new Map();
 
-  // Look-ahead scheduler config
   private readonly LOOK_AHEAD_SEC = 0.1;
   private readonly SCHEDULE_INTERVAL_MS = 25;
 
@@ -132,12 +131,9 @@ export class AudioEngine {
     if (this.masterGain) this.masterGain.gain.value = v;
   }
 
-  // ── Per-track audio routing ──────────────────────────────────────────
-
   private rebuildTrackAudio() {
     if (!this.ctx || !this.masterGain) return;
 
-    // Disconnect old track states
     for (const [, ts] of this.trackStates) {
       try { ts.gainNode.disconnect(); } catch {}
       try { ts.panNode.disconnect(); } catch {}
@@ -151,7 +147,7 @@ export class AudioEngine {
 
     for (let i = 0; i < this.song.tracks.length; i++) {
       const track = this.song.tracks[i];
-      const ch = this.song.mixerChannels[i + 1]; // +1 because index 0 is Master
+      const ch = this.song.mixerChannels[i + 1];
 
       const gainNode = this.ctx.createGain();
       gainNode.gain.value = ch?.volume ?? 0.7;
@@ -159,7 +155,6 @@ export class AudioEngine {
       const panNode = this.ctx.createStereoPanner();
       panNode.pan.value = ch?.pan ?? 0;
 
-      // Chain: gain -> pan -> effects -> masterGain
       gainNode.connect(panNode);
 
       let lastNode: AudioNode = panNode;
@@ -194,7 +189,6 @@ export class AudioEngine {
         return node;
       }
       case "eq": {
-        // Simple 3-band EQ using 3 filters in series
         const low = this.ctx.createBiquadFilter();
         low.type = "lowshelf";
         low.frequency.value = 320;
@@ -210,7 +204,7 @@ export class AudioEngine {
         high.gain.value = params.high ?? 0;
         low.connect(mid);
         mid.connect(high);
-        return low; // return first node, but chain is low->mid->high
+        return low;
       }
       case "compressor": {
         const node = this.ctx.createDynamicsCompressor();
@@ -229,7 +223,6 @@ export class AudioEngine {
         wet.gain.value = params.mix ?? 0.3;
         const dry = this.ctx.createGain();
         dry.gain.value = 1 - (params.mix ?? 0.3);
-        // Simple delay: input -> dry -> output, input -> delay -> feedback -> delay, delay -> wet -> output
         const merger = this.ctx.createGain();
         dry.connect(merger);
         wet.connect(merger);
@@ -309,10 +302,8 @@ export class AudioEngine {
 
   updateTrackMute(trackId: string, muted: boolean) {
     const ts = this.trackStates.get(trackId);
-    if (ts) ts.gainNode.gain.value = muted ? 0 : 0.7; // Will be overridden by mixer
+    if (ts) ts.gainNode.gain.value = muted ? 0 : 0.7;
   }
-
-  // ── Note playback ────────────────────────────────────────────────────
 
   playNote(note: number, velocity: number = 0.7, duration: number = 0.3, synthType: string = "sawtooth", trackId?: string) {
     if (!this.ctx) return;
@@ -338,7 +329,6 @@ export class AudioEngine {
     osc.connect(filter);
     filter.connect(gain);
 
-    // Connect to track channel if available, otherwise master
     if (trackId && this.trackStates.has(trackId)) {
       gain.connect(this.trackStates.get(trackId)!.gainNode);
     } else if (this.masterGain) {
@@ -372,7 +362,6 @@ export class AudioEngine {
 
     source.connect(gain);
 
-    // Connect to track channel if available, otherwise master
     if (trackId && this.trackStates.has(trackId)) {
       gain.connect(this.trackStates.get(trackId)!.gainNode);
     } else if (this.masterGain) {
@@ -388,8 +377,6 @@ export class AudioEngine {
     }
     this.voices.clear();
   }
-
-  // ── Look-ahead scheduler ─────────────────────────────────────────────
 
   private scheduleNotesUpTo(lookAheadBeat: number) {
     if (!this.ctx || !this.song) return;
@@ -412,14 +399,12 @@ export class AudioEngine {
           for (const note of pattern.notes) {
             const noteBeat = barStartBeat + note.startBeat;
 
-            // Only schedule notes we haven't scheduled yet, within look-ahead window
             if (noteBeat <= lastBeat || noteBeat > lookAheadBeat) continue;
-            if (noteBeat < this._currentBeat - 0.1) continue; // Skip notes that are already past
+            if (noteBeat < this._currentBeat - 0.1) continue;
 
             const noteTime = this._startCtxTime + (noteBeat - this._startBeat) / beatsPerSec;
             const durTime = note.durationBeats / beatsPerSec;
 
-            // Don't schedule notes in the past
             if (noteTime < this.ctx.currentTime - 0.05) continue;
 
             if (track.instrument === "drums") {
@@ -431,7 +416,6 @@ export class AudioEngine {
         }
       }
 
-      // Update last scheduled beat for this track
       if (ts) ts.lastScheduledBeat = lookAheadBeat;
     }
   }
@@ -503,8 +487,6 @@ export class AudioEngine {
     return drums[(note - 36) % drums.length] ?? "kick";
   }
 
-  // ── Song transport ───────────────────────────────────────────────────
-
   playSong(song: SongState, fromBeat: number = 0) {
     if (!this.ctx) return;
     if (this.ctx.state === "suspended") this.ctx.resume();
@@ -516,14 +498,12 @@ export class AudioEngine {
     this._startCtxTime = this.ctx.currentTime;
     this._currentBeat = fromBeat;
 
-    // Reset lastScheduledBeat for all tracks
     for (const [, ts] of this.trackStates) {
       ts.lastScheduledBeat = fromBeat - 1;
     }
 
     const beatsPerSec = song.bpm / 60;
 
-    // Start look-ahead scheduler
     this.lookAheadInterval = setInterval(() => {
       if (!this._isPlaying || !this.ctx) return;
       const elapsed = this.ctx.currentTime - this._startCtxTime;
@@ -532,11 +512,9 @@ export class AudioEngine {
       this.scheduleNotesUpTo(lookAheadBeat);
     }, this.SCHEDULE_INTERVAL_MS);
 
-    // Schedule initial batch
     const beatsPerSecInit = song.bpm / 60;
     this.scheduleNotesUpTo(this._startBeat + this.LOOK_AHEAD_SEC * beatsPerSecInit);
 
-    // Animation frame for UI updates
     const tick = () => {
       if (!this._isPlaying || !this.ctx) return;
       const elapsed = this.ctx.currentTime - this._startCtxTime;

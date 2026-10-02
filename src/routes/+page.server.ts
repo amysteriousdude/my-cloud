@@ -1,4 +1,4 @@
-// src/routes/+page.server.ts
+// hello there, tf u doing on my code????
 import type { PageServerLoad } from './$types';
 import { decrypt } from '$lib/crypto';
 import { getRecordByApiKey } from '$lib/telegramStorage';

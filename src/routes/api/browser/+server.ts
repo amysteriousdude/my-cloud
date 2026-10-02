@@ -1,4 +1,4 @@
-// src/routes/api/browser/+server.ts
+// hello there, tf u doing on my code????
 import type { RequestHandler } from './$types';
 import { decrypt } from '$lib/crypto';
 import { getRecordByApiKey } from '$lib/telegramStorage';
@@ -10,12 +10,10 @@ function normalizeUrl(raw: string) {
   if (!raw) return '';
   let url = raw.trim();
 
-  // add protocol if missing
   if (!/^https?:\/\//i.test(url)) {
     url = `https://${url}`;
   }
 
-  // remove trailing slash
   url = url.replace(/\/+$/, '');
 
   return url;
@@ -34,7 +32,6 @@ async function _auth(request: Request, cookies: any) {
   return getRecordByApiKey(key);
 }
 
-// GET /api/browser — check if Colab session alive
 export const GET: RequestHandler = async ({ request, cookies }) => {
 
   const rec = await _auth(request, cookies);

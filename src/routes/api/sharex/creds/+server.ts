@@ -1,4 +1,4 @@
-// src/routes/api/sharex/creds/+server.ts
+// hello there, tf u doing on my code????
 import type { RequestHandler } from './$types';
 import { decrypt } from '$lib/crypto';
 import { getRecordByApiKey } from '$lib/telegramStorage';

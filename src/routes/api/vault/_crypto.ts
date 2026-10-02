@@ -1,3 +1,4 @@
+// hello there, tf u doing on my code????
 export async function deriveKey(password: string, salt: Uint8Array) {
   const enc = new TextEncoder();
   const baseKey = await crypto.subtle.importKey(

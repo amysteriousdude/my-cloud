@@ -1,4 +1,4 @@
-// src/routes/api/telegram/folderOps/+server.ts
+// hello there, tf u doing on my code????
 import type { RequestHandler } from './$types';
 import { getRecordByApiKey, readRegistry, writeRegistry } from '$lib/telegramStorage';
 import { purgePublicFiles } from '$lib/cfPurge';

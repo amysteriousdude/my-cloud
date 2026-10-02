@@ -1,3 +1,4 @@
+<!-- hello there, tf u doing on my code???? -->
 <script lang="ts">
   import {
     IconFiles, IconSparkles, IconPencil, IconChartBar, IconNote,
@@ -6,10 +7,11 @@
     IconDots, IconX, IconSettings,
     IconDatabase, IconWaveSine,
   } from '@tabler/icons-svelte';
+  import RobloxIcon from '$lib/components/icons/RobloxIcon.svelte';
   import { env } from '$env/dynamic/public';
   const NAME = env.PUBLIC_NAME ?? "Omar";
 
-  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'fx';
+  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'fx' | 'utility';
 
   let {
     user,
@@ -50,9 +52,9 @@
     { id: 'apitester',  icon: IconApi,         label: 'API Tester' },
     { id: 'database',  icon: IconDatabase,    label: 'Databases' },
     { id: 'fx',        icon: IconWaveSine,    label: 'FX' },
+    { id: 'utility',   icon: RobloxIcon,      label: 'Utilities' },
   ];
 
-  // ── State ──────────────────────────────────────────────────────
   let position = $state<'bottom'|'top'|'left'|'right'>('bottom');
   let showMore = $state(false);
   let showUser = $state(false);
@@ -65,7 +67,6 @@
   let mainTabIds = $state<Tab[]>(['files', 'generators', 'translator', 'draw']);
   let mainTabs = $derived(ALL_TABS.filter(t => mainTabIds.includes(t.id)));
 
-  // ── Hover tooltip state ────────────────────────────────────────
   let hoverTabId = $state<string | null>(null);
   let hoverX = $state(0);
   let hoverY = $state(0);
@@ -83,7 +84,6 @@
 
   function onItemLeave() { hoverTabId = null; }
 
-  // ── Long-press tooltip (mobile) ──────────────────────────────
   let longPressTooltipTab = $state<string | null>(null);
   let tooltipLongPressTimer: ReturnType<typeof setTimeout> | null = null;
   let longPressTouching = $state(false);
@@ -113,7 +113,6 @@
     if (tooltipLongPressTimer) { clearTimeout(tooltipLongPressTimer); tooltipLongPressTimer = null; }
   }
 
-  // ── Load / Save ────────────────────────────────────────────────
   function loadState() {
     try {
       const pos = localStorage.getItem('dock-position');
@@ -132,7 +131,6 @@
     localStorage.setItem('dock-main-tabs', JSON.stringify(mainTabIds));
   }
 
-  // ── Drag reorder ───────────────────────────────────────────────
   function onDragStart(e: DragEvent, idx: number) {
     dragIdx = idx;
     if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
@@ -191,7 +189,6 @@
     moreDragOverIdx = -1;
   }
 
-  // ── Reposition dock ────────────────────────────────────────────
   let longPressTimer: ReturnType<typeof setTimeout> | null = null;
   let isDraggingDock = $state(false);
   let dockDragX = $state(0);
@@ -235,7 +232,6 @@
     cancelDockDrag();
   }
 
-  // ── Helpers ────────────────────────────────────────────────────
   function fmtBytes(b: number) {
     if (b < 1024) return `${b} B`;
     if (b < 1024 ** 2) return `${(b / 1024).toFixed(1)} KB`;

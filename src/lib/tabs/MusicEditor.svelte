@@ -1,3 +1,4 @@
+<!-- hello there, tf u doing on my code???? -->
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import {
@@ -19,12 +20,10 @@
 
   let { apiKey }: { apiKey: string } = $props();
 
-  // ── Engine ────────────────────────────────────────────────────────────
   let engine = new AudioEngine();
   let song = $state<SongState>(createDefaultSong());
   let audioReady = $state(false);
 
-  // ── UI State ──────────────────────────────────────────────────────────
   let view = $state<"timeline" | "pianoroll" | "mixer" | "plugins">("timeline");
   // svelte-ignore state_referenced_locally
   let selectedPatternId = $state<string | null>(song.patterns[0]?.id ?? null);
@@ -61,14 +60,12 @@
   let visCanvas: HTMLCanvasElement | null = null;
   let visAnimFrame = 0;
 
-  // ── Derived ──────────────────────────────────────────────────────────
   let currentBeat = $derived(engine.currentBeat);
   let isPlaying = $derived(engine.isPlaying);
   let selectedPattern = $derived(song.patterns.find(p => p.id === selectedPatternId));
   let currentBar = $derived(Math.floor(currentBeat / BEATS_PER_BAR));
   let currentBeatInBar = $derived(currentBeat % BEATS_PER_BAR);
 
-  // ── Init ──────────────────────────────────────────────────────────────
   async function initAudio() {
     await engine.init();
     engine.setSong(song);
@@ -87,7 +84,6 @@
     engine.setSong(song);
   }
 
-  // ── Visualizer ────────────────────────────────────────────────────────
   function startVisualizer() {
     if (!visCanvas) return;
     const ctx = visCanvas.getContext("2d");
@@ -103,7 +99,6 @@
 
       const data = analyserData;
       if (!data || !isPlaying) {
-        // Draw idle bars
         for (let i = 0; i < BAR_COUNT; i++) {
           const h = 2 + Math.sin(Date.now() / 800 + i * 0.3) * 2;
           const hue = (i / BAR_COUNT) * 60 + 260;
@@ -133,7 +128,6 @@
     return () => cancelAnimationFrame(visAnimFrame);
   });
 
-  // ── Transport ─────────────────────────────────────────────────────────
   async function play() {
     if (!audioReady) await initAudio();
     engine.playSong(song);
@@ -162,7 +156,6 @@
     if (engine.ctx) engine["_startCtxTime"] = engine.ctx.currentTime;
   }
 
-  // ── Pattern operations ────────────────────────────────────────────────
   function addPattern() {
     const p: Pattern = {
       id: uid(),
@@ -198,7 +191,6 @@
     updateEngineSong();
   }
 
-  // ── Note operations ───────────────────────────────────────────────────
   function addNote(beat: number, note: number, velocity: number = 0.7, duration: number = 0.5) {
     if (!selectedPattern) return;
     const n: NoteEvent = {
@@ -238,7 +230,6 @@
     updateEngineSong();
   }
 
-  // ── Track operations ──────────────────────────────────────────────────
   function addTrack(instrument: "synth" | "drums" | "sampler" = "synth") {
     const colors = ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899"];
     song.tracks = [...song.tracks, {
@@ -309,7 +300,6 @@
     if (ch) { ch.solo = !ch.solo; song.mixerChannels = [...song.mixerChannels]; }
   }
 
-  // ── Pattern assignment to tracks ─────────────────────────────────────
   function addPatternToTrack(trackIdx: number, patternId: string) {
     const track = song.tracks[trackIdx];
     if (!track) return;
@@ -329,7 +319,6 @@
     updateEngineSong();
   }
 
-  // ── Import audio ──────────────────────────────────────────────────────
   let fileInputEl: HTMLInputElement | null = null;
   let pluginFileInputEl: HTMLInputElement | null = null;
 
@@ -370,7 +359,6 @@
     updateEngineSong();
   }
 
-  // ── Export ────────────────────────────────────────────────────────────
   let exporting = $state(false);
   let exportProgress = $state(0);
 
@@ -437,7 +425,6 @@
     return arrayBuffer;
   }
 
-  // ── Save/Load ─────────────────────────────────────────────────────────
   function saveToCloud() {
     showSaveDialog = true;
   }
@@ -483,7 +470,6 @@
 
   let importProjectEl: HTMLInputElement | null = null;
 
-  // ── Plugin system ─────────────────────────────────────────────────────
   type Plugin = {
     id: string;
     name: string;
@@ -533,7 +519,6 @@
     if (selectedPluginId === id) selectedPluginId = null;
   }
 
-  // ── Keyboard ──────────────────────────────────────────────────────────
   let heldNotes = new Set<number>();
 
   function onKeydown(e: KeyboardEvent) {

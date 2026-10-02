@@ -1,3 +1,4 @@
+// hello there, tf u doing on my code????
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
 const CHAT_ID = process.env.TELEGRAM_BACKUP_CHAT_ID!;
 

@@ -1,3 +1,4 @@
+// hello there, tf u doing on my code????
 import { json } from "@sveltejs/kit";
 import telegramStorage from "$lib/telegramStorage";
 import { purgeByMetaFileId } from '$lib/cfPurge';
@@ -14,7 +15,6 @@ export const PATCH = async ({ request }) => {
   const newName = decodeURIComponent(encodedNewName);
 
   try {
-    // Purge old URL BEFORE rename (fire-and-forget)
     purgeByMetaFileId(metaFileId).catch(() => {});
 
     const success = await telegramStorage.renameFile(metaFileId, newName);

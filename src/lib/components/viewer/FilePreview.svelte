@@ -1,3 +1,4 @@
+<!-- hello there, tf u doing on my code???? -->
 <!-- src/lib/components/viewer/FilePreview.svelte -->
 <script lang="ts">
   import WasmLoader from './WasmLoader.svelte';
@@ -26,7 +27,6 @@
 
   let fileKind = $derived(kind(file.type));
 
-  // Text content for text previews
   let textContent = $state<string | null>(null);
   let textLoading = $state(false);
 
@@ -44,10 +44,8 @@
     if (fileKind === 'text' && url) loadText();
   });
 
-  // pdf.js
   let pdfBlobUrls: Record<string, string> | null = $state(null);
 
-  // Archive listing
   let archiveEntries = $state<string[]>([]);
   let archiveLoading = $state(false);
 </script>

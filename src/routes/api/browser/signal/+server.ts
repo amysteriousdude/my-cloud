@@ -1,4 +1,4 @@
-// src/routes/api/browser/signal/+server.ts
+// hello there, tf u doing on my code????
 import type { RequestHandler } from './$types';
 import { decrypt } from '$lib/crypto';
 import { getRecordByApiKey } from '$lib/telegramStorage';
@@ -24,7 +24,7 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
   const body = await request.json() as any;
   const { token, offer, input } = body;
 
-  if (!token || !validateToken(token, false))  // non-consuming — same token reused until 20s refresh
+  if (!token || !validateToken(token, false))
     return new Response(JSON.stringify({ error: 'Invalid or expired token' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
 
   const url = SESSION_URL();
@@ -40,7 +40,6 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(15_000),
     });
-    // Always return valid JSON
     let data: any;
     try { data = await r.json(); }
     catch { data = { error: `Colab returned non-JSON (status ${r.status})` }; }

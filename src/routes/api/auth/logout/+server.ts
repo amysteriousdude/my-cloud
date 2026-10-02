@@ -1,4 +1,4 @@
-// src/routes/api/auth/logout/+server.ts
+// hello there, tf u doing on my code????
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ cookies }) => {

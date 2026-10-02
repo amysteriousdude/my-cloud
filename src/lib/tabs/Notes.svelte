@@ -1,3 +1,4 @@
+<!-- hello there, tf u doing on my code???? -->
 <script lang="ts">
   import { onMount } from "svelte";
   import { marked } from "marked";
@@ -52,7 +53,6 @@
 
   let selectedNote = $derived(notes.find(n => n.id === selectedNoteId) ?? null);
 
-  // ── Slash commands ──────────────────────────────────────────────
   const SLASH_COMMANDS = [
     { id: "heading", label: "Heading", icon: "##", insert: "## " },
     { id: "bold", label: "Bold", icon: "**", insert: "**bold**" },
@@ -110,32 +110,24 @@
     });
     // Inline code
     html = html.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
-    // Checkboxes
     html = html.replace(/^- \[x\]\s+(.+)$/gm, '<div class="todo-item done"><span class="todo-check">✓</span><span class="todo-text">$1</span></div>');
     html = html.replace(/^- \[ \]\s+(.+)$/gm, '<div class="todo-item"><span class="todo-check">○</span><span class="todo-text">$1</span></div>');
-    // Callouts
     html = renderCallouts(html);
-    // Wiki links
     html = renderWikiLinks(html);
-    // Headings with IDs for outline
     html = html.replace(/^(#{1,6})\s+(.+)$/gm, (_, hashes, title) => {
       const id = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
       return `<h${hashes.length} id="${id}">${title}</h${hashes.length}>`;
     });
-    // Regular markdown
     html = marked.parse(html) as string;
-    // Restore code blocks
     codeBlocks.forEach((block, i) => { html = html.replace(`%%CODEBLOCK_${i}%%`, block); });
     return html;
   }
 
-  // ── Backlinks ──────────────────────────────────────────────────
   let backlinks = $derived(() => {
     if (!selectedNote) return [];
     return notes.filter(n => n.links.includes(selectedNote.title));
   });
 
-  // ── Outline ────────────────────────────────────────────────────
   let outline = $derived(() => {
     if (!selectedNote) return [];
     const matches = selectedNote.content.match(/^(#{1,4})\s+(.+)$/gm) ?? [];
@@ -147,7 +139,6 @@
     });
   });
 
-  // ── Word count ─────────────────────────────────────────────────
   let wordCount = $derived(() => {
     if (!selectedNote) return 0;
     return selectedNote.content.trim().split(/\s+/).filter(Boolean).length;
@@ -155,24 +146,20 @@
 
   let readingTime = $derived(() => Math.max(1, Math.ceil(wordCount() / 200)));
 
-  // ── Extract links ──────────────────────────────────────────────
   function extractLinks(content: string): string[] {
     return (content.match(/\[\[([^\]]+)\]\]/g) ?? []).map(m => m.slice(2, -2));
   }
 
-  // ── Extract tags ───────────────────────────────────────────────
   function extractTags(content: string): string[] {
     return [...new Set((content.match(/#([a-zA-Z0-9_]+)/g) ?? []).map(m => m.slice(1)))];
   }
 
-  // ── All unique tags ────────────────────────────────────────────
   let allTags = $derived(() => {
     const tagSet = new Set<string>();
     for (const n of notes) for (const t of n.tags) tagSet.add(t);
     return [...tagSet].sort();
   });
 
-  // ── Filtered notes ─────────────────────────────────────────────
   let filteredNotes = $derived(() => {
     let result = notes;
     if (selectedFolderId) result = result.filter(n => n.folderId === selectedFolderId);
@@ -189,7 +176,6 @@
     return [...pinned, ...unpinned].sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
   });
 
-  // ── Note CRUD ──────────────────────────────────────────────────
   function createNote() {
     const title = "Untitled Note";
     const note: Note = {
@@ -227,7 +213,6 @@
     saveNoteToCloud(note);
   }
 
-  // ── Folders ────────────────────────────────────────────────────
   function createFolder() {
     const name = "New Folder";
     folders = [...folders, { id: `folder_${Date.now()}`, name, icon: "📁", collapsed: false }];
@@ -252,7 +237,6 @@
     if (f) { f.collapsed = !f.collapsed; folders = [...folders]; }
   }
 
-  // ── Slash menu ─────────────────────────────────────────────────
   function handleEditorKeydown(e: KeyboardEvent) {
     if (e.key === "/") {
       const rect = editorEl?.getBoundingClientRect();
@@ -290,14 +274,12 @@
     }, 10);
   }
 
-  // ── Copy ID ────────────────────────────────────────────────────
   function copyNoteId(id: string) {
     navigator.clipboard.writeText(`[[${notes.find(n => n.id === id)?.title || id}]]`);
     copiedId = id;
     setTimeout(() => { copiedId = null; }, 1500);
   }
 
-  // ── Import/Export ──────────────────────────────────────────────
   function importMd() {
     const input = document.createElement("input");
     input.type = "file"; input.accept = ".md,.markdown,.txt"; input.multiple = true;
@@ -334,7 +316,6 @@
     a.href = URL.createObjectURL(blob); a.download = "notes_export.json"; a.click();
   }
 
-  // ── Cloud sync ─────────────────────────────────────────────────
   async function saveNoteToCloud(note: Note) {
     try {
       const fd = new FormData();
@@ -391,7 +372,6 @@
     loading = false;
   }
 
-  // ── Graph data ─────────────────────────────────────────────────
   let graphNodes = $derived(() => notes.map((n, i) => ({
     id: n.id, title: n.title,
     x: 250 + Math.cos(i * 2.399) * 160 + Math.random() * 20,

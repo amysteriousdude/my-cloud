@@ -1,5 +1,4 @@
-// src/routes/api/sharex/raw/[metaFileId]/+server.ts
-// Serves a public file by metaFileId directly — no path resolution needed.
+// hello there, tf u doing on my code????
 import type { RequestHandler } from './$types';
 import { readRegistry, downloadFileFromTelegram } from '$lib/telegramStorage';
 import axios from 'axios';

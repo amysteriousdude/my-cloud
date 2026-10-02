@@ -1,3 +1,4 @@
+// hello there, tf u doing on my code????
 import type { RequestHandler } from './$types';
 import { readRegistry } from '$lib/telegramStorage';
 import axios from 'axios';

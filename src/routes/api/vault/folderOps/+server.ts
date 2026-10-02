@@ -1,3 +1,4 @@
+// hello there, tf u doing on my code????
 import type { RequestHandler } from './$types';
 import { getVaultContext, loadVaultRegistry, saveVaultState, randomUUID } from '../_vault';
 
@@ -78,7 +79,6 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
         return new Response('Missing folderId', { status: 400 });
       }
 
-      // Collect all child folder IDs recursively
       const toRemove = new Set<string>();
       function collectChildren(parentId: string) {
         for (const f of registry.folders) {
@@ -91,7 +91,6 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
       collectChildren(folderId);
       toRemove.add(folderId);
 
-      // Remove files in those folders (delete their chunks from Telegram)
       for (const file of registry.files) {
         if (file.folderId && toRemove.has(file.folderId)) {
           for (const chunk of file.chunks) {

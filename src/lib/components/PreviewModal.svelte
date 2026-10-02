@@ -1,3 +1,4 @@
+<!-- hello there, tf u doing on my code???? -->
 <!-- src/lib/components/PreviewModal.svelte -->
 <script lang="ts">
   import {
@@ -145,7 +146,6 @@
   let aSeeking = $state(false);
   let aSeekVal = $state(0);
   let aPct = $derived(aDur ? (aCur / aDur) * 100 : 0);
-  // metadata
   let metaTitle = $state<string>('');
   let metaArtist = $state<string>('');
   let metaAlbum = $state<string>('');
@@ -164,7 +164,6 @@
   });
 
   async function loadAudioMeta(url: string, fileName: string) {
-    // default from filename
     const bare = fileName.replace(/\.[^.]+$/, '');
     const parts = bare.split(' - ');
     metaTitle  = parts.length >= 2 ? parts.slice(1).join(' - ').trim() : bare;

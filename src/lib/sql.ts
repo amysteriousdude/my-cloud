@@ -1,4 +1,4 @@
-// src/lib/sql.ts — sql.js WASM loader and helpers
+// hello there, tf u doing on my code????
 import initSqlJs, { type Database, type SqlJsStatic } from 'sql.js';
 
 export type { Database };

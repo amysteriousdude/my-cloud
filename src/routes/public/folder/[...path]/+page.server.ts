@@ -1,3 +1,4 @@
+// hello there, tf u doing on my code????
 import type { PageServerLoad } from './$types';
 import { getPublicFolderByPath } from '$lib/telegramStorage';
 import { error } from '@sveltejs/kit';

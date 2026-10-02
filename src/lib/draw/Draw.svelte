@@ -1,3 +1,4 @@
+<!-- hello there, tf u doing on my code???? -->
 <script lang="ts">
   import { onMount } from "svelte";
   import {
@@ -15,13 +16,11 @@
 
   let { apiKey, fullscreen = false }: { apiKey: string; fullscreen?: boolean } = $props();
 
-  // ── Canvas ──────────────────────────────────────────────────────────
   let svgEl: SVGSVGElement = $state() as SVGSVGElement;
   let canvasWrap: HTMLDivElement = $state() as HTMLDivElement;
   let w = $state(1200);
   let h = $state(800);
 
-  // ── Zoom / Pan / Rotation ──────────────────────────────────────────
   let zoom = $state(1);
   let panX = $state(0);
   let panY = $state(0);
@@ -32,7 +31,6 @@
   const MIN_ZOOM = 0.05;
   const MAX_ZOOM = 32;
 
-  // ── Cursor ──────────────────────────────────────────────────────────
   let cursorX = $state(0);
   let cursorY = $state(0);
   let cursorScreenX = $state(0);
@@ -40,7 +38,6 @@
   let pressure = $state(0.5);
   let hovering = $state(false);
 
-  // ── Tools ───────────────────────────────────────────────────────────
   type ToolGroup = "pointer" | "draw" | "shape" | "misc";
   const TOOL_GROUPS: { group: ToolGroup; tools: { id: Tool; label: string; key: string }[] }[] = [
     { group: "pointer", tools: [
@@ -70,7 +67,6 @@
 
   let tool = $state<Tool>("brush");
 
-  // ── Brush settings ──────────────────────────────────────────────────
   let activePresetIdx = $state(0);
   let activePreset = $derived(BRUSH_PRESETS[activePresetIdx]);
   let lineWidth = $state(4);
@@ -89,7 +85,6 @@
   let fontStyle = $state("normal");
   let textAlign = $state<"left" | "center" | "right">("left");
 
-  // ── Inline text editor state ────────────────────────────────────────
   let textEditing = $state(false);
   let textEditX = $state(0);
   let textEditY = $state(0);
@@ -122,7 +117,6 @@
     else tool = "brush";
   }
 
-  // ── Colors ──────────────────────────────────────────────────────────
   let fgColor = $state("#000000");
   let bgColor2 = $state("#ffffff");
   let recentColors = $state<string[]>([
@@ -137,7 +131,6 @@
     bgColor2 = tmp;
   }
 
-  // ── Layers ──────────────────────────────────────────────────────────
   let layers = $state<Layer[]>([
     { id: "bg", name: "Background", visible: true, opacity: 100, strokes: [], blendMode: "normal", fill: 100 },
   ]);
@@ -174,7 +167,6 @@
     layers = [...layers];
   }
 
-  // ── Canvas settings ─────────────────────────────────────────────────
   let settings = $state<CanvasSettings>({
     showGrid: false,
     gridSize: 50,
@@ -184,7 +176,6 @@
     canvasRotation: 0,
   });
 
-  // ── History ─────────────────────────────────────────────────────────
   let undoStack = $state<HistoryEntry[]>([]);
   let redoStack = $state<HistoryEntry[]>([]);
   const MAX_HISTORY = 100;
@@ -240,7 +231,6 @@
     layers = [...layers];
   }
 
-  // ── Image import ────────────────────────────────────────────────────
   let fileInputEl: HTMLInputElement | null = null;
 
   function importImage() {
@@ -287,7 +277,6 @@
     reader.readAsDataURL(file);
   }
 
-  // ── Canvas resize dialog ────────────────────────────────────────────
   let showResizeDialog = $state(false);
   let resizeW = $state(1200);
   let resizeH = $state(800);
@@ -328,7 +317,6 @@
     layers = [...layers];
   }
 
-  // ── Save-to-cloud dialog ────────────────────────────────────────────
   let showSaveDialog = $state(false);
   let saveFolder = $state("");
   let saveFileName = $state("drawing.png");
@@ -346,7 +334,6 @@
     await saveToCloud();
   }
 
-  // ── Selection ─────────────────────────────────────────────────────
   let selectedIds = $state<Set<string>>(new Set());
   let selectDragStart = $state<{x:number;y:number} | null>(null);
   let selectDragOffsets = $state<Map<string,{dx:number;dy:number}>>(new Map());
@@ -355,13 +342,11 @@
   let selectionVersion = $state(0);
   let hasSelection = $derived(selectionVersion > 0 && selectedIds.size > 0);
 
-  // ── Transform handles ──────────────────────────────────────────────
   let showTransformControls = $state(true);
   let transformHandle = $state<string | null>(null);
   let transformStart = $state<{mx:number;my:number;bbox:{x:number;y:number;w:number;h:number};rotation:number}>({mx:0,my:0,bbox:{x:0,y:0,w:0,h:0},rotation:0});
   let selectionRotation = $state(0);
 
-  // ── Strokes ─────────────────────────────────────────────────────────
   let drawing = $state(false);
   let currentStroke = $state<Stroke | null>(null);
   let currentPoints = $state<Point[]>([]);
@@ -374,7 +359,6 @@
     return layers[activeLayerIdx] ?? layers[0];
   }
 
-  // ── SVG coords ──────────────────────────────────────────────────────
   function svgPoint(e: PointerEvent): Point {
     const rect = svgEl.getBoundingClientRect();
     return {
@@ -391,7 +375,6 @@
     return { ...pt, x: Math.round(pt.x / g) * g, y: Math.round(pt.y / g) * g };
   }
 
-  // ── Pointer handlers ────────────────────────────────────────────────
   function pointerDown(e: PointerEvent) {
     if (e.button !== 0) return;
     if (spaceHeld || tool === "move") {
@@ -400,7 +383,6 @@
       return;
     }
 
-    // ── Transform handle interaction (MOVE tool only) ──
     if (hasSelection && showTransformControls && tool === "move") {
       const handleHit = hitTestTransformHandle(e);
       if (handleHit) {
@@ -537,7 +519,6 @@
       return;
     }
 
-    // ── Transform handle drag ──
     if (transformHandle) {
       const dx = (e.clientX - transformStart.mx) / zoom;
       const dy = (e.clientY - transformStart.my) / zoom;
@@ -559,7 +540,6 @@
         transformStart.mx = e.clientX;
         transformStart.my = e.clientY;
       } else {
-        // Resize handle
         let newX = sb.x, newY = sb.y, newW = sb.w, newH = sb.h;
         if (transformHandle.includes("e")) { newW = Math.max(1, sb.w + dx); }
         if (transformHandle.includes("w")) { newX = sb.x + dx; newW = Math.max(1, sb.w - dx); }
@@ -571,7 +551,6 @@
           else if (transformHandle === "e" || transformHandle === "w") { newH = newW / aspect; newY = sb.y + (sb.h - newH) / 2; }
           else { const avg = (Math.abs(dx) + Math.abs(dy)) / 2; newW = sb.w + (dx > 0 ? avg : -avg); newH = newW / aspect; newX = transformHandle.includes("w") ? sb.x + sb.w - newW : sb.x; newY = transformHandle.includes("n") ? sb.y + sb.h - newH : sb.y; }
         }
-        // Move strokes to new bbox position
         const moveDx = newX - sb.x;
         const moveDy = newY - sb.y;
         if (moveDx !== 0 || moveDy !== 0) moveStrokes(moveDx, moveDy);
@@ -715,7 +694,6 @@
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); commitText(); }
   }
 
-  // ── Eyedropper ──────────────────────────────────────────────────────
   function pickColor(e: PointerEvent) {
     if (!svgEl) return;
     const rect = svgEl.getBoundingClientRect();
@@ -734,7 +712,6 @@
     img.src = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(renderSvgString(true))));
   }
 
-  // ── Render stroke to SVG ────────────────────────────────────────────
   function renderStroke(s: Stroke, isPreview: boolean): string {
     const op = isPreview ? 0.5 : s.opacity;
     const artFilter = s.tool === "chalk" ? ' filter="url(#chalk-filter)"' : "";
@@ -837,7 +814,6 @@
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}"><defs>${defs}</defs>${bg}${inner}</svg>`;
   }
 
-  // ── Save / Download ─────────────────────────────────────────────────
   let saving = $state(false);
   let saveError = $state<string | null>(null);
   let saveName = $state("drawing.png");
@@ -898,7 +874,6 @@
     a.click();
   }
 
-  // ── Zoom ────────────────────────────────────────────────────────────
   function zoomAt(delta: number, cx?: number, cy?: number) {
     const old = zoom;
     zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom * (1 + delta)));
@@ -934,7 +909,6 @@
     }
   }
 
-  // ── Helpers ─────────────────────────────────────────────────────────
   function uid(): string { return Date.now().toString(36) + Math.random().toString(36).slice(2, 5); }
 
   function getStrokeBBox(s: Stroke): { x: number; y: number; w: number; h: number } | null {
@@ -956,7 +930,6 @@
     return { x: minX - hw, y: minY - hw, w: maxX - minX + s.baseWidth, h: maxY - minY + s.baseWidth };
   }
 
-  // ── Selection properties ──────────────────────────────────────────
   let lockAspect = $state(true);
   let selectionAspect = $state(1);
 
@@ -1023,7 +996,6 @@
     layers = [...layers];
   }
 
-  // ── Transform handle positions ────────────────────────────────────
   function getTransformHandles(bbox: {x:number;y:number;w:number;h:number}) {
     const cx = bbox.x + bbox.w / 2;
     const cy = bbox.y + bbox.h / 2;
@@ -1153,7 +1125,6 @@
     }
   }
 
-  // ── Keyboard ────────────────────────────────────────────────────────
   function onkeydown(e: KeyboardEvent) {
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
     if (e.key === " ") { e.preventDefault(); spaceHeld = true; return; }
@@ -1234,7 +1205,6 @@
     if (e.key === "Shift") shiftHeld = false;
   }
 
-  // ── Init ────────────────────────────────────────────────────────────
   onMount(() => {
     if (!canvasWrap) return;
     const ro = new ResizeObserver(() => { fitToScreen(); });
@@ -1243,7 +1213,6 @@
     return () => ro.disconnect();
   });
 
-  // ── UI panels ───────────────────────────────────────────────────────
   let rightPanel = $state<"brush" | "color" | "layers" | "selection" | "history" | "channels" | "paths">("brush");
   let topPanelTab = $state<"history" | "color" | "brush">("color");
   let bottomPanelTab = $state<"layers" | "channels" | "paths">("layers");
@@ -1253,10 +1222,8 @@
     brushCategory === "all" ? BRUSH_PRESETS : BRUSH_PRESETS.filter(p => p.category === brushCategory)
   );
 
-  // Grid ruler ticks
   let rulerTickStep = $derived(zoom > 2 ? 25 : zoom > 0.8 ? 50 : 100);
 
-  // ── Menu state ──────────────────────────────────────────────────────
   let openMenu = $state<string | null>(null);
 
   function menuAction(action: string) {
@@ -1309,7 +1276,6 @@
     }
   }
 
-  // ── Ruler actions ───────────────────────────────────────────────────
   function rulerHAction(canvas: HTMLCanvasElement, params: { zoom: number; panX: number; w: number }) {
     function draw(p = params) {
       const ctx = canvas.getContext("2d");

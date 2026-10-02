@@ -1,4 +1,4 @@
-// src/routes/api/discord/callback/+server.ts
+// hello there, tf u doing on my code????
 import type { RequestHandler } from './$types';
 import { generateApiKeyForDiscordId } from '$lib/telegramStorage';
 import { env } from '$env/dynamic/private';

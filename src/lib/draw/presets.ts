@@ -1,7 +1,7 @@
+// hello there, tf u doing on my code????
 import type { BrushPreset } from "./types";
 
 export const BRUSH_PRESETS: BrushPreset[] = [
-  // ── Basic ──────────────────────────────────────────────────
   {
     name: "Hard Round", icon: "●", category: "basic",
     size: 4, hardness: 100, opacity: 100, smoothing: 0.3, taper: 0,
@@ -18,7 +18,6 @@ export const BRUSH_PRESETS: BrushPreset[] = [
     pressureSize: true, pressureOpacity: true, brushAngle: 0, spacing: 0, scatter: 0, minSize: 4,
   },
 
-  // ── Paint ──────────────────────────────────────────────────
   {
     name: "Oil Paint", icon: "🖌", category: "paint",
     size: 12, hardness: 70, opacity: 90, smoothing: 0.4, taper: 0.2,
@@ -35,7 +34,6 @@ export const BRUSH_PRESETS: BrushPreset[] = [
     pressureSize: true, pressureOpacity: false, brushAngle: -45, spacing: 0, scatter: 0, minSize: 2,
   },
 
-  // ── Ink ────────────────────────────────────────────────────
   {
     name: "Fine Liner", icon: "🖊", category: "ink",
     size: 2, hardness: 100, opacity: 100, smoothing: 0.6, taper: 0.5,
@@ -57,7 +55,6 @@ export const BRUSH_PRESETS: BrushPreset[] = [
     pressureSize: true, pressureOpacity: false, brushAngle: -60, spacing: 0, scatter: 0, minSize: 1,
   },
 
-  // ── Sketch ─────────────────────────────────────────────────
   {
     name: "HB Pencil", icon: "✏", category: "sketch",
     size: 3, hardness: 60, opacity: 70, smoothing: 0.25, taper: 0.4,
@@ -79,7 +76,6 @@ export const BRUSH_PRESETS: BrushPreset[] = [
     pressureSize: false, pressureOpacity: true, brushAngle: 0, spacing: 0, scatter: 2, minSize: 5,
   },
 
-  // ── Special ────────────────────────────────────────────────
   {
     name: "Eraser Soft", icon: "◯", category: "special",
     size: 30, hardness: 20, opacity: 100, smoothing: 0.5, taper: 0,

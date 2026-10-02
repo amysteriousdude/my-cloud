@@ -1,4 +1,4 @@
-// src/routes/api/auth/login/+server.ts
+// hello there, tf u doing on my code????
 import type { RequestHandler } from './$types';
 import { getRecordByApiKey, readIndex } from '$lib/telegramStorage';
 import { encrypt } from '$lib/crypto';
@@ -37,7 +37,7 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
     secure: true,
     sameSite: 'strict',
     path: '/',
-    maxAge: 60 * 60 * 24 * 30 // 30 days
+    maxAge: 60 * 60 * 24 * 30
   });
 
   return new Response(JSON.stringify({

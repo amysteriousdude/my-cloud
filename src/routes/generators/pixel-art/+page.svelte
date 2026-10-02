@@ -1,3 +1,4 @@
+<!-- hello there, tf u doing on my code???? -->
 <!-- src/routes/generators/pixel-art/+page.svelte -->
 <script lang="ts">
   import { onMount } from 'svelte';
@@ -159,7 +160,6 @@
         }
       }
     } else if (startCell && (tool === 'line' || tool === 'rect' || tool === 'circle')) {
-      // preview handled via $effect
     }
   }
 

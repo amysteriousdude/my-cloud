@@ -1,3 +1,4 @@
+<!-- hello there, tf u doing on my code???? -->
 <!-- src/routes/generators/patterns/+page.svelte -->
 <script lang="ts">
   import { onMount } from 'svelte';

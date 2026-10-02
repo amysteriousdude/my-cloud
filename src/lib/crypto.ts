@@ -1,4 +1,4 @@
-// src/lib/crypto.ts
+// hello there, tf u doing on my code????
 import crypto from 'crypto';
 
 const ALGO = 'aes-256-gcm';
@@ -9,16 +9,14 @@ if (!SECRET || SECRET.length < 32) {
 }
 
 function getKey(): Buffer {
-  // Derive a 32-byte key from the secret using SHA-256
   return crypto.createHash('sha256').update(SECRET).digest();
 }
 
 export function encrypt(plaintext: string): string {
-  const iv = crypto.randomBytes(12); // 96-bit IV for GCM
+  const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv(ALGO, getKey(), iv);
   const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
   const tag = cipher.getAuthTag();
-  // Format: iv:tag:ciphertext (all hex)
   return `${iv.toString('hex')}:${tag.toString('hex')}:${encrypted.toString('hex')}`;
 }
 

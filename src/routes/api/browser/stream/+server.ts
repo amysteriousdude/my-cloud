@@ -1,7 +1,4 @@
-// src/routes/api/browser/stream/+server.ts
-// Returns a short-lived stream token the client uses to connect directly
-// to the MJPEG stream on the CF tunnel. The tunnel URL never appears in
-// client JS — only the token does.
+// hello there, tf u doing on my code????
 import type { RequestHandler } from './$types';
 import { decrypt } from '$lib/crypto';
 import { getRecordByApiKey } from '$lib/telegramStorage';
@@ -19,7 +16,6 @@ async function _auth(request: Request, cookies: any) {
   return getRecordByApiKey(key);
 }
 
-// POST /api/browser/stream — get a stream token + the stream URL
 export const POST: RequestHandler = async ({ request, cookies }) => {
   const rec = await _auth(request, cookies);
   if (!rec) return new Response(JSON.stringify({ error: 'Forbidden' }), {
@@ -32,7 +28,6 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
   });
 
   try {
-    // Ask Colab to issue a stream token
     const r = await fetch(`${url}/stream-token`, {
       method: 'POST',
       headers: { 'x-session-secret': SECRET() },
@@ -41,8 +36,6 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
     const j = await r.json() as any;
     if (!j.token) throw new Error('No token returned');
 
-    // Return the stream URL with token embedded — client uses this as <img src>
-    // The base URL (SESSION_URL) is injected server-side, never sent to client
     return new Response(JSON.stringify({
       streamUrl: `${url}/stream?token=${j.token}`,
     }), { headers: { 'Content-Type': 'application/json' } });

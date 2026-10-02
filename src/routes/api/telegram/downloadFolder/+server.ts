@@ -1,4 +1,4 @@
-// src/routes/api/telegram/downloadFolder/+server.ts
+// hello there, tf u doing on my code????
 import type { RequestHandler } from './$types';
 import { getRecordByApiKey, readRegistry, downloadFileFromTelegram } from '$lib/telegramStorage';
 import { zipSync } from 'fflate';
@@ -33,7 +33,6 @@ async function downloadFile(metaFileId: string): Promise<{ name: string; data: U
   return { name: meta.fileName as string, data: new Uint8Array(buf) };
 }
 
-// Collect all file IDs recursively under a folder
 function collectFiles(
   folderId: string,
   allFolders: any[],
@@ -46,13 +45,11 @@ function collectFiles(
 
   const result: { path: string; metaFileId: string }[] = [];
 
-  // Direct files
   for (const f of allFiles) {
     if (f.folderId === folderId) {
       result.push({ path: `${base}/${f.fileName}`, metaFileId: f.metaFileId });
     }
   }
-  // Sub-folders (recursive)
   for (const sub of allFolders) {
     if (sub.parentId === folderId) {
       result.push(...collectFiles(sub.folderId, allFolders, allFiles, base));
@@ -81,7 +78,6 @@ export const GET: RequestHandler = async ({ request, url }) => {
 
     const entries = collectFiles(folderId, allFolders, allFiles);
     if (entries.length === 0) {
-      // Empty folder — return empty zip
       const zip = zipSync({});
       return new Response(zip, {
         headers: {
@@ -91,7 +87,6 @@ export const GET: RequestHandler = async ({ request, url }) => {
       });
     }
 
-    // Download all files in parallel (cap at 6 concurrent)
     const results: Record<string, Uint8Array> = {};
     const chunks = [];
     for (let i = 0; i < entries.length; i += 6) chunks.push(entries.slice(i, i + 6));
@@ -103,7 +98,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
       }
     }
 
-    const zip = zipSync(results, { level: 0 }); // level 0 = store, fast
+    const zip = zipSync(results, { level: 0 });
     return new Response(zip, {
       headers: {
         'Content-Type': 'application/zip',

@@ -1,4 +1,4 @@
-// src/routes/api/browser/token/+server.ts
+// hello there, tf u doing on my code????
 import type { RequestHandler } from './$types';
 import { decrypt } from '$lib/crypto';
 import { getRecordByApiKey } from '$lib/telegramStorage';
@@ -18,7 +18,7 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
   const rec = await _auth(request, cookies);
   if (!rec) return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 });
   const body = await request.json().catch(() => ({})) as any;
-  const ttl  = body?.stream ? 24 * 60 * 60 * 1000 : 30_000; // 24h for stream, 30s for input
+  const ttl  = body?.stream ? 24 * 60 * 60 * 1000 : 30_000;
   return new Response(JSON.stringify({ token: issueToken(ttl) }), {
     headers: { 'Content-Type': 'application/json' },
   });

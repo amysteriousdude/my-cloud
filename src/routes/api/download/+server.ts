@@ -1,4 +1,4 @@
-// src/routes/api/download/+server.ts
+// hello there, tf u doing on my code????
 import type { RequestHandler } from './$types';
 import { getRecordByApiKey, uploadBytesToTelegram, readRegistry, writeRegistry } from '$lib/telegramStorage';
 import { decrypt } from '$lib/crypto';
@@ -8,7 +8,6 @@ import { TG_SAFE_CHUNK_BYTES } from '$lib/telegramLimits';
 const COBALT_API  = 'https://api.cobalt.tools/';
 const CHUNK_SIZE  = TG_SAFE_CHUNK_BYTES;
 
-// ── Auth helper ────────────────────────────────────────────────────────────
 async function auth(request: Request, cookies: any) {
   const headerKey = (request.headers.get('x-api-key') ?? '').trim();
   if (headerKey) return getRecordByApiKey(headerKey);
@@ -19,12 +18,10 @@ async function auth(request: Request, cookies: any) {
   return getRecordByApiKey(key);
 }
 
-// ── SSE helper ─────────────────────────────────────────────────────────────
 function sseEvent(type: string, payload: object) {
   return `data: ${JSON.stringify({ type, ...payload })}\n\n`;
 }
 
-// ── POST /api/download ─────────────────────────────────────────────────────
 export const POST: RequestHandler = async ({ request, cookies }) => {
   const rec = await auth(request, cookies);
   if (!rec) return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 });
@@ -39,7 +36,6 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
         controller.enqueue(enc.encode(sseEvent(type, payload)));
 
       try {
-        // ── 1. Resolve via cobalt ────────────────────────────────────────
         send('status', { message: 'Resolving URL…' });
 
         const cobaltRes = await fetch(COBALT_API, {
@@ -59,7 +55,6 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
           controller.close(); return;
         }
 
-        // cobalt returns status: "redirect" | "tunnel" | "picker"
         let directUrl: string | null = null;
         let filename: string = 'download';
 
@@ -67,7 +62,6 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
           directUrl = cobalt.url;
           filename  = cobalt.filename ?? 'download';
         } else if (cobalt.status === 'picker') {
-          // Multiple streams (e.g. video + audio separate) — take first
           directUrl = cobalt.picker?.[0]?.url ?? null;
           filename  = cobalt.filename ?? 'download';
         }
@@ -79,7 +73,6 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 
         send('status', { message: `Downloading ${filename}…` });
 
-        // ── 2. Fetch the file ────────────────────────────────────────────
         const dlRes = await fetch(directUrl);
         if (!dlRes.ok) {
           send('error', { message: `Fetch failed: ${dlRes.status}` });
@@ -90,14 +83,12 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
         const contentType   = dlRes.headers.get('content-type') ?? 'application/octet-stream';
         const totalBytes    = contentLength || 0;
 
-        // Read full body (Cloudflare Workers supports streaming but we need chunks by size)
         const arrayBuf = await dlRes.arrayBuffer();
         const fullBuf  = new Uint8Array(arrayBuf);
         const actualBytes = fullBuf.length;
 
         send('status', { message: 'Uploading to cloud…', totalBytes: actualBytes });
 
-        // ── 3. Upload in chunks ──────────────────────────────────────────
         const totalChunks = Math.max(1, Math.ceil(actualBytes / CHUNK_SIZE));
         const chunks: any[] = [];
 
@@ -112,10 +103,8 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
           chunks.push({ index: i, file_id, message_id, size: slice.length });
         }
 
-        // ── 4. Write registry entry ──────────────────────────────────────
         send('status', { message: 'Finalizing…' });
 
-        // Build meta JSON and upload it
         const metaId   = 'dl:' + crypto.randomUUID();
         const meta     = {
           fileName:   filename,

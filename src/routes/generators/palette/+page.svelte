@@ -1,3 +1,4 @@
+<!-- hello there, tf u doing on my code???? -->
 <!-- src/routes/generators/palette/+page.svelte -->
 <script lang="ts">
   import { IconArrowLeft, IconRefresh, IconCheck, IconDownload } from '@tabler/icons-svelte';

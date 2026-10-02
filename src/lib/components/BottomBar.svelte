@@ -1,3 +1,4 @@
+<!-- hello there, tf u doing on my code???? -->
 <script lang="ts">
   import {
     IconFiles, IconSparkles, IconPencil, IconChartBar, IconNote,
@@ -7,10 +8,11 @@
     IconDatabase, IconBrain, IconHistory, IconPlus, IconTrash, IconPlayerStop, IconAdjustments,
     IconChevronDown, IconWaveSine,
   } from '@tabler/icons-svelte';
+  import RobloxIcon from '$lib/components/icons/RobloxIcon.svelte';
   import { env } from '$env/dynamic/public';
   const NAME = env.PUBLIC_NAME ?? "Omar";
 
-  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'ai' | 'fx';
+  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'ai' | 'fx' | 'utility';
 
   type BarButton = {
     icon: any;
@@ -104,9 +106,9 @@
     { id: 'database',  icon: IconDatabase,    label: 'Databases' },
     { id: 'ai',        icon: IconBrain,       label: 'AI' },
     { id: 'fx',        icon: IconWaveSine,    label: 'FX' },
+    { id: 'utility',   icon: RobloxIcon,      label: 'Utilities' },
   ];
 
-  // ── State ──────────────────────────────────────────────────────
   let position = $state<'bottom'|'top'|'left'|'right'>('bottom');
   let showMore = $state(false);
   let showUser = $state(false);
@@ -132,7 +134,6 @@
   let hasProviders = $derived(!!config?.aiChat?.providers && config!.aiChat!.providers!.length > 0);
   let hasChatActions = $derived(!!config?.aiChat?.chatActions && config!.aiChat!.chatActions!.length > 0);
 
-  // ── Hover tooltip state ────────────────────────────────────────
   let hoverTabId = $state<string | null>(null);
   let hoverX = $state(0);
   let hoverY = $state(0);
@@ -150,7 +151,6 @@
 
   function onItemLeave() { hoverTabId = null; }
 
-  // ── Nav expand on cloud hover ────────────────────────────────
   let bbEl: HTMLDivElement | null = null;
   let dockLeaveTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -166,7 +166,6 @@
     navHoverTimeout = setTimeout(() => { navExpanded = false; }, 300);
   }
 
-  // ── Long-press tooltip (mobile) ──────────────────────────────
   let longPressTooltipTab = $state<string | null>(null);
   let tooltipLongPressTimer: ReturnType<typeof setTimeout> | null = null;
   let longPressTouching = $state(false);
@@ -195,7 +194,6 @@
     if (tooltipLongPressTimer) { clearTimeout(tooltipLongPressTimer); tooltipLongPressTimer = null; }
   }
 
-  // ── Load / Save ────────────────────────────────────────────────
   function loadState() {
     try {
       const pos = localStorage.getItem('dock-position');
@@ -214,7 +212,6 @@
     localStorage.setItem('dock-main-tabs', JSON.stringify(mainTabIds));
   }
 
-  // ── Drag reorder ───────────────────────────────────────────────
   function onDragStart(e: DragEvent, idx: number) {
     dragIdx = idx;
     if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
@@ -273,7 +270,6 @@
     moreDragOverIdx = -1;
   }
 
-  // ── Reposition dock ────────────────────────────────────────────
   let longPressTimer: ReturnType<typeof setTimeout> | null = null;
   let isDraggingDock = $state(false);
   let dockDragX = $state(0);
@@ -317,7 +313,6 @@
     cancelDockDrag();
   }
 
-  // ── Helpers ────────────────────────────────────────────────────
   function fmtBytes(b: number) {
     if (b < 1024) return `${b} B`;
     if (b < 1024 ** 2) return `${(b / 1024).toFixed(1)} KB`;

@@ -1,3 +1,4 @@
+<!-- hello there, tf u doing on my code???? -->
 <script lang="ts">
   import { IconPlayerStop, IconSend, IconBrain, IconHistory, IconPlus, IconTrash, IconLink, IconChevronRight, IconCopy, IconCheck, IconArrowUp, IconDownload, IconClock, IconBook, IconAdjustments } from '@tabler/icons-svelte';
 
@@ -39,7 +40,6 @@
   let loadingModels = $state(false);
   let abortController: AbortController | null = null;
 
-  // Extras (secondary controls)
   let temperature = $state(0.7);
   let topP = $state(0.9);
   let maxTokens = $state(4096);
@@ -51,7 +51,6 @@
   let showBackToTop = $state(false);
   let messagesContainer: HTMLDivElement;
 
-  // Chat history
   let chatHistory = $state<ChatHistory[]>([]);
   let currentChatId = $state<string | null>(null);
   let showHistory = $state(false);
@@ -59,7 +58,6 @@
   let titleGenerating = $state(false);
   let loadingHistory = $state(false);
 
-  // ── Utility helpers ──────────────────────────────────────────
   function isRtl(text: string): boolean {
     return /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\u0590-\u05FF]/.test(text);
   }
@@ -73,9 +71,8 @@
   }
 
   function wordCount(text: string): number {
-    // Strip markdown syntax, code blocks, inline code, HTML tags
     let s = text
-      .replace(/```[\s\S]*?```/g, '')        // fenced code blocks
+      .replace(/```[\s\S]*?```/g, '')
       .replace(/`[^`]+`/g, '')                // inline code
       .replace(/<[^>]+>/g, '')                // HTML tags
       .replace(/#{1,6}\s+/g, '')             // headings
@@ -94,8 +91,6 @@
       .replace(/^[#*>\-|_\[\]()~`]+$/gm, '') // lines that are only syntax
       .trim();
     if (!s) return 0;
-    // Split on any whitespace (handles Arabic, English, mixed)
-    // Unicode \p{L} matches any letter from any script
     const words = s.split(/\s+/).filter(w => w.length > 0 && /\p{L}/u.test(w));
     return words.length;
   }
@@ -127,7 +122,6 @@
     } catch {}
   }
 
-  // ── Smart Internet Search ─────────────────────────────────
   const SEARCH_TRIGGERS = /\b(latest|recent|current|today|now|this (?:week|month|year)|yesterday|news|weather|stock|price|score|result|live|real.?time|who (?:won|is|was|are)|what (?:is|are) (?:the|new|latest)|when (?:did|was|is)|where (?:is|are|can)|how (?:much|many|old)|update|release|version|announce)\b/i;
   const SEARCH_DOMAINS = /\b(wikipedia|cnn|bbc|reuters|ap|nytimes|github\.com|stackoverflow|npm|pypi|hacker.?news|reddit|twitter|x\.com|youtube|arxiv)\b/i;
 
@@ -171,7 +165,6 @@
     } catch { return null; }
   }
 
-  // ── Pattern Detection ────────────────────────────────────────
   type PatternType =
     | 'callout-warning' | 'callout-tip' | 'callout-note' | 'callout-error' | 'callout-info'
     | 'definition' | 'faq' | 'comparison' | 'proscons'
@@ -243,24 +236,16 @@
     return lines.length > 8;
   }
 
-  // ── Enhanced Inline Markdown ─────────────────────────────────
   function inlineMd(text: string): string {
     let s = escapeHtml(text);
-    // images
     s = s.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" class="md-img" />');
-    // links
     s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" class="md-link">$1<svg class="md-ext-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>');
-    // bold+italic
     s = s.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
-    // bold
     s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     s = s.replace(/__(.+?)__/g, '<strong>$1</strong>');
-    // italic
     s = s.replace(/\*(.+?)\*/g, '<em>$1</em>');
     s = s.replace(/_(.+?)_/g, '<em>$1</em>');
-    // strikethrough
     s = s.replace(/~~(.+?)~~/g, '<del>$1</del>');
-    // inline code
     s = s.replace(/`([^`]+)`/g, '<code class="md-inline-code">$1</code>');
     return s;
   }
@@ -378,14 +363,12 @@
           continue;
         }
 
-        // ── Horizontal rule ──────────────────────────────
         if (/^(\*{3,}|-{3,}|_{3,})\s*$/.test(line.trim())) {
           html += '<hr class="md-hr" />';
           i++;
           continue;
         }
 
-        // ── Blockquote / Callout detection ───────────────
         if (line.startsWith('>')) {
           const quoteLines: string[] = [];
           while (i < lines.length && lines[i].startsWith('>')) {
@@ -428,7 +411,6 @@
           continue;
         }
 
-        // ── Task list ────────────────────────────────────
         if (/^- \[[ x]\]\s+/.test(line.trim())) {
           const taskLines: string[] = [];
           while (i < lines.length && /^- \[[ x]\]\s+/.test(lines[i].trim())) {
@@ -450,7 +432,6 @@
           continue;
         }
 
-        // ── Unordered list ───────────────────────────────
         if (/^(\s*)([-*+])\s+/.test(line)) {
           const listLines: string[] = [];
           while (i < lines.length && /^(\s*)([-*+])\s+/.test(lines[i])) {
@@ -473,7 +454,6 @@
           continue;
         }
 
-        // ── Ordered list ─────────────────────────────────
         if (/^(\s*)\d+\.\s+/.test(line)) {
           const listLines: string[] = [];
           while (i < lines.length && /^(\s*)\d+\.\s+/.test(lines[i])) {
@@ -499,7 +479,6 @@
           continue;
         }
 
-        // ── Paragraph ────────────────────────────────────
         if (line.trim() !== '') {
           const paraLines: string[] = [];
           while (i < lines.length && lines[i].trim() !== '' &&

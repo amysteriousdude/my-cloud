@@ -1,3 +1,4 @@
+<!-- hello there, tf u doing on my code???? -->
 <script lang="ts">
   let { brand, size = 16, class: className = '' }: { brand: string; size?: number; class?: string } = $props();
 

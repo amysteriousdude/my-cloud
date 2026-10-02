@@ -1,3 +1,4 @@
+<!-- hello there, tf u doing on my code???? -->
 <!-- src/lib/components/DetailsSidebar.svelte -->
 <script lang="ts">
     import {

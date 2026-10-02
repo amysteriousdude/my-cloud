@@ -1,6 +1,4 @@
-// src/routes/api/browser/ws-url/+server.ts
-// Returns a signed wss:// URL the client connects to directly.
-// The tunnel base URL lives only in server env — client only sees the token.
+// hello there, tf u doing on my code????
 import type { RequestHandler } from './$types';
 import { decrypt } from '$lib/crypto';
 import { getRecordByApiKey } from '$lib/telegramStorage';
@@ -27,10 +25,8 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
     status: 503, headers: { 'Content-Type': 'application/json' }
   });
 
-  // Issue a 1h non-consuming token for the WS connection
   const token = issueToken(60 * 60 * 1000);
 
-  // Convert https:// → wss://
   const wsUrl = sessionUrl.replace(/^https?:\/\//, 'wss://') + `/ws?token=${encodeURIComponent(token)}`;
 
   return new Response(JSON.stringify({ wsUrl }), {

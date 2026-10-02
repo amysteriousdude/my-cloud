@@ -1,3 +1,4 @@
+<!-- hello there, tf u doing on my code???? -->
 <script lang="ts">
     import { onMount, type Component } from "svelte";
     import { fly } from "svelte/transition";
@@ -31,19 +32,16 @@
                 onclose();
             }
         };
-        // Use a small timeout to avoid closing immediately from the right-click that opened it
         setTimeout(() => {
             window.addEventListener("click", handleClick);
         }, 10);
         return () => window.removeEventListener("click", handleClick);
     });
 
-    // Ensure menu stays within viewport
     let adjustedX = $state(0);
     let adjustedY = $state(0);
 
     $effect(() => {
-        // Reset to props when they change
         adjustedX = x;
         adjustedY = y;
         

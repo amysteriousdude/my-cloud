@@ -1,4 +1,4 @@
-// src/routes/api/telegram/deleteFile/+server.ts
+// hello there, tf u doing on my code????
 import type { RequestHandler } from './$types';
 import { getRecordByApiKey, deleteFile } from '$lib/telegramStorage';
 import { purgeByMetaFileId } from '$lib/cfPurge';
@@ -25,7 +25,6 @@ export const DELETE: RequestHandler = async ({ request, url }) => {
       status: 400, headers: { 'Content-Type': 'application/json' }
     });
 
-  // Purge cache BEFORE deleting (fire-and-forget)
   purgeByMetaFileId(metaFileId).catch(() => {});
 
   const found = await deleteFile(metaFileId);

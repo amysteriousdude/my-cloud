@@ -1,4 +1,4 @@
-// src/routes/api/telegram/finalizeUpload/+server.ts
+// hello there, tf u doing on my code????
 import type { RequestHandler } from './$types';
 import { getRecordByApiKey, uploadJsonToTelegram, registerFile } from '$lib/telegramStorage';
 import { TG_SAFE_CHUNK_BYTES } from '$lib/telegramLimits';
@@ -72,7 +72,6 @@ export const POST: RequestHandler = async ({ request, url }) => {
       compressed: compressed || undefined
     });
 
-    // Purge Cloudflare cache (fire-and-forget)
     purgePublicFiles().catch(() => {});
 
     return new Response(JSON.stringify({ success: true, metaFileId, metaMessageId, fileName }), {

@@ -1,7 +1,4 @@
-// src/hooks.server.ts
-// WebDAV server mounted at / — intercepts WebDAV methods before SvelteKit router.
-// Compatible with Windows Explorer, macOS Finder, FileZilla, Cyberduck, WinSCP.
-// Auth: HTTP Basic (username = your username, password = your API key)
+// hello there, tf u doing on my code????
 
 import { env } from '$env/dynamic/private';
 import {
@@ -26,14 +23,13 @@ const FAKE_TOTAL_BYTES = 9223372036854775807n;
 
 const DAV_METHODS = new Set(['PROPFIND', 'PROPPATCH', 'MKCOL', 'COPY', 'MOVE', 'LOCK', 'UNLOCK', 'OPTIONS']);
 
-// ── Auth ──────────────────────────────────────────────────────────────────────
 async function davAuth(request: Request): Promise<{ rec: any; apiKey: string } | null> {
   const auth = request.headers.get('Authorization') ?? '';
   if (!auth.startsWith('Basic ')) return null;
   const decoded = atob(auth.slice(6));
   const colon = decoded.indexOf(':');
   if (colon === -1) return null;
-  const apiKey = decoded.slice(colon + 1).trim(); // password = api key
+  const apiKey = decoded.slice(colon + 1).trim();
   const rec = await getRecordByApiKey(apiKey);
   if (!rec) return null;
   return { rec, apiKey };
@@ -62,7 +58,6 @@ function davHeaders(extra: Record<string, string> = {}) {
   };
 }
 
-// ── Path helpers ──────────────────────────────────────────────────────────────
 function parsePath(url: URL): { folderPath: string; fileName: string | null } {
   const parts = decodeURIComponent(url.pathname)
     .replace(/^\/+/, '')
@@ -80,7 +75,6 @@ function parsePath(url: URL): { folderPath: string; fileName: string | null } {
   return { folderPath: parts.join('/'), fileName: null };
 }
 
-// ── Registry helpers ──────────────────────────────────────────────────────────
 function folderFullPath(registryKey: string, registry: Record<string, any>): string {
   const f = registry[registryKey];
   if (!f || f._type !== 'folder') return '';
@@ -173,7 +167,6 @@ function davQuota(registry: Record<string, any>) {
   };
 }
 
-// ── XML helpers ───────────────────────────────────────────────────────────────
 function xmlEscape(s: string) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
@@ -289,7 +282,6 @@ function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// ── In-memory CDN URL cache ────────────────────────────────────────────────
 const CDN_URL_TTL = 50 * 60 * 1000;
 const cdnUrlCache = new Map<string, { url: string; exp: number }>();
 
@@ -473,7 +465,6 @@ async function streamFileAll(file: any): Promise<ReadableStream<Uint8Array>> {
   return stream;
 }
 
-// ── WebDAV handlers ───────────────────────────────────────────────────────────
 async function handleOptions() {
   return new Response(null, {
     status: 200,
@@ -593,7 +584,6 @@ async function handleGet(request: Request, url: URL, registry: Record<string, an
       if (meta && typeof meta.totalBytes === 'number') totalBytes = meta.totalBytes;
       if (meta && typeof meta.type === 'string') contentType = meta.type;
     } catch {
-      // best effort
     }
   }
 
@@ -664,7 +654,6 @@ async function handleHead(url: URL, registry: Record<string, any>) {
       if (meta && typeof meta.totalBytes === 'number') totalBytes = meta.totalBytes;
       if (meta && typeof meta.type === 'string') contentType = meta.type;
     } catch {
-      // best effort
     }
   }
 
@@ -1058,7 +1047,6 @@ async function handleLock(url: URL) {
   });
 }
 
-// ── SvelteKit hook ────────────────────────────────────────────────────────────
 export const handle: Handle = async ({ event, resolve }) => {
   const { request } = event;
   const method = request.method.toUpperCase();

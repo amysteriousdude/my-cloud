@@ -1,4 +1,4 @@
-// src/routes/api/telegram/getRequestFile/+server.ts
+// hello there, tf u doing on my code????
 import type { RequestHandler } from './$types';
 import { getRecordByApiKey } from '$lib/telegramStorage';
 import { env } from '$env/dynamic/private';
@@ -165,7 +165,6 @@ export const GET: RequestHandler = async ({ request, url }) => {
     const totalBytes: number = meta.totalBytes ?? 0;
     const rangeHeader = request.headers.get('range');
 
-    // ── CHUNKED FILE ────────────────────────────────────────────────────────
     if (meta.chunked && Array.isArray(meta.chunks)) {
       const sorted = [...meta.chunks].sort((a: any, b: any) => a.index - b.index);
 
@@ -218,7 +217,6 @@ export const GET: RequestHandler = async ({ request, url }) => {
         });
       }
 
-      // Full chunked file — ReadableStream keeps worker alive while browser consumes
       let bytesWritten = 0;
       const stream = new ReadableStream<Uint8Array>({
         async start(controller) {
@@ -256,7 +254,6 @@ export const GET: RequestHandler = async ({ request, url }) => {
       });
     }
 
-    // ── SINGLE FILE ─────────────────────────────────────────────────────────
     const cdnUrl = await getTelegramUrl(meta.telegramFileId);
 
     if (rangeHeader && totalBytes > 0) {

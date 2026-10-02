@@ -1,4 +1,4 @@
-// src/routes/api/sharex/upload/+server.ts
+// hello there, tf u doing on my code????
 import type { RequestHandler } from './$types';
 import { decrypt } from '$lib/crypto';
 import {
@@ -108,7 +108,6 @@ export const POST: RequestHandler = async ({ request }) => {
 
     await writeRegistry(registry);
 
-    // Purge Cloudflare cache (fire-and-forget)
     purgePublicFiles().catch(() => {});
 
     return jsonResp({

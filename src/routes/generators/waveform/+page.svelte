@@ -1,3 +1,4 @@
+<!-- hello there, tf u doing on my code???? -->
 <!-- src/routes/generators/waveform/+page.svelte -->
 <script lang="ts">
   import { onMount } from 'svelte';
@@ -22,7 +23,6 @@
   const DARK  = {'--bg-1':'#080808','--bg-2':'#101010','--bg-3':'#141414','--text-1':'#e2e2e2','--text-2':'#888','--text-3':'#444','--border':'#1a1a1a','--border-hover':'#333','--accent':'#6366f1','--hover':'rgba(255,255,255,.04)','--red':'#f87171'};
   const LIGHT = {'--bg-1':'#fafafa','--bg-2':'#ffffff','--bg-3':'#f0f0f0','--text-1':'#1a1a1a','--text-2':'#555','--text-3':'#999','--border':'#e0e0e0','--border-hover':'#bbb','--accent':'#4f46e5','--hover':'rgba(0,0,0,.04)','--red':'#dc2626'};
 
-  // ── Controls ──────────────────────────────────────────────────────────
   let inputText = $state('Hello World! This is a waveform.');
   type WaveType = 'sine' | 'square' | 'sawtooth' | 'noise';
   let waveType: WaveType = $state('sine');
@@ -34,12 +34,10 @@
   let canvasW = $state(800);
   let canvasH = $state(300);
 
-  // ── Save ──────────────────────────────────────────────────────────────
   let showSave = $state(false);
   let canvas: HTMLCanvasElement;
   let generating = $state(false);
 
-  // ── Tooltip ───────────────────────────────────────────────────────────
   let tooltip = $state<{text:string, x:number, y:number} | null>(null);
   function showTip(e: MouseEvent, text: string) {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -47,7 +45,6 @@
   }
   function hideTip() { tooltip = null; }
 
-  // ── Templates ─────────────────────────────────────────────────────────
   const TEMPLATES = [
     { name: 'Neon Wave', desc: 'Bright sine wave', apply: () => { waveType='sine'; waveColor='#6366f1'; bgColor='#080808'; amplitude=80; frequency=0.05; speed=1.0; }},
     { name: 'Square Digital', desc: 'Digital square wave', apply: () => { waveType='square'; waveColor='#22d3ee'; bgColor='#0a0a0a'; amplitude=60; frequency=0.04; speed=0.8; }},
@@ -56,7 +53,6 @@
     { name: 'Dense Sine', desc: 'High density sine', apply: () => { waveType='sine'; waveColor='#4ade80'; bgColor='#080808'; amplitude=60; frequency=0.08; speed=2.0; }},
   ];
 
-  // ── Tooltips map ──────────────────────────────────────────────────────
   const TIPS: Record<string, string> = {
     inputText: 'Text to encode into the waveform',
     waveType: 'Wave shape: sine is smooth, square is digital, sawtooth is sharp, noise is random',
@@ -68,7 +64,6 @@
     canvasSize: 'Output resolution',
   };
 
-  // ── Waveform functions ────────────────────────────────────────────────
   function sampleWave(type: WaveType, t: number, rand: () => number): number {
     switch (type) {
       case 'sine': return Math.sin(t);
@@ -78,7 +73,6 @@
     }
   }
 
-  // ── RNG ───────────────────────────────────────────────────────────────
   function mulberry32(s: number) {
     return () => {
       s |= 0; s = s + 0x6D2B79F5 | 0;
@@ -93,7 +87,6 @@
     return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
   }
 
-  // ── Generate ──────────────────────────────────────────────────────────
   function generate() {
     if (!canvas) return;
     generating = true;
@@ -112,7 +105,6 @@
       const midY = canvasH / 2;
       const bottomLabelY = canvasH - 12;
 
-      // Grid: vertical segment separators + center line
       ctx.strokeStyle = `rgba(${cr},${cg},${cb},0.06)`;
       ctx.lineWidth = 1;
       for (let i = 1; i < chars.length; i++) {
@@ -126,7 +118,6 @@
       ctx.lineTo(canvasW, midY);
       ctx.stroke();
 
-      // Pre-compute wave points for each segment
       type SegPoints = { x0: number; points: { x: number; y: number }[]; char: string; charCode: number };
       const segments: SegPoints[] = [];
       for (let i = 0; i < chars.length; i++) {
@@ -150,7 +141,6 @@
         segments.push({ x0, points, char: chars[i], charCode });
       }
 
-      // Fill: area under wave (top half)
       for (const seg of segments) {
         const grad = ctx.createLinearGradient(0, midY - amplitude, 0, midY);
         grad.addColorStop(0, `rgba(${cr},${cg},${cb},0.12)`);
@@ -164,7 +154,6 @@
         ctx.fill();
       }
 
-      // Mirror reflection (below midline, flipped)
       for (const seg of segments) {
         const grad = ctx.createLinearGradient(0, midY, 0, midY + amplitude);
         grad.addColorStop(0, `rgba(${cr},${cg},${cb},0.06)`);
@@ -181,7 +170,6 @@
         ctx.fill();
       }
 
-      // Glow pass
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       ctx.strokeStyle = `rgba(${cr},${cg},${cb},0.25)`;
@@ -196,7 +184,6 @@
         ctx.stroke();
       }
 
-      // Main line
       ctx.strokeStyle = `rgba(${cr},${cg},${cb},0.9)`;
       ctx.lineWidth = 3;
       for (const seg of segments) {
@@ -209,7 +196,6 @@
         ctx.stroke();
       }
 
-      // Character labels
       ctx.font = '10px "Geist Mono", monospace';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'bottom';

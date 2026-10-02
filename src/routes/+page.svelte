@@ -1,3 +1,4 @@
+<!-- hello there, tf u doing on my code???? -->
 <!-- src/routes/+page.svelte -->
 <script lang="ts">
   import { onMount } from 'svelte';
@@ -19,6 +20,7 @@
   import Database   from '$lib/tabs/Database.svelte';
   import AiChat     from '$lib/tabs/AiChat.svelte';
   import FX         from '$lib/tabs/FX.svelte';
+  import Utilities  from '$lib/tabs/Utilities.svelte';
   import BottomBar  from '$lib/components/BottomBar.svelte';
   import Toast      from '$lib/components/Toast.svelte';
   import { env } from '$env/dynamic/public';
@@ -29,8 +31,7 @@
   let apiKey = $derived(data.apiKey);
   let encryptedApiKey = $derived(data.encryptedApiKey);
 
-  // Tab state
-  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'ai' | 'fx';
+  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'ai' | 'fx' | 'utility';
   let activeTab = $state<Tab>('files');
   let editorFile = $state<{ metaFileId: string; fileName: string } | null>(null);
   let filesRefreshNonce = $state(0);
@@ -43,12 +44,10 @@
     filesRefreshNonce += 1;
   }
 
-  // Stats passed up from Files tab
   let fileCount    = $state(0);
   let folderCount  = $state(0);
   let storageBytes = $state(0);
 
-  // Theme
   let theme = $state<'system' | 'light' | 'dark'>('system');
 
   const THEME_VARS: Record<string, Record<string, string>> = {
@@ -120,11 +119,9 @@
     window.location.reload();
   }
 
-  // Dock vs Sidebar mode
   let dockMode = $state<'dock' | 'sidebar'>('dock');
   let dockPosition = $state('bottom');
 
-  // Dock auto-hide (for Draw tab fullscreen)
   let dockHovered = $state(false);
   let dockHoverTimeout: ReturnType<typeof setTimeout> | null = null;
   let isDrawTab = $derived(activeTab === 'draw');
@@ -235,6 +232,8 @@
         <Database {apiKey} />
       {:else if activeTab === 'fx'}
         <FX {apiKey} />
+      {:else if activeTab === 'utility'}
+        <Utilities />
       {/if}
     </main>
 

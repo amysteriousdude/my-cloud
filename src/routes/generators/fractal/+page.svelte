@@ -1,3 +1,4 @@
+<!-- hello there, tf u doing on my code???? -->
 <!-- src/routes/generators/fractal/+page.svelte -->
 <script lang="ts">
   import { onMount } from 'svelte';
@@ -22,7 +23,6 @@
   const DARK  = {'--bg-1':'#080808','--bg-2':'#101010','--bg-3':'#141414','--text-1':'#e2e2e2','--text-2':'#888','--text-3':'#444','--border':'#1a1a1a','--border-hover':'#333','--accent':'#6366f1','--hover':'rgba(255,255,255,.04)','--red':'#f87171'};
   const LIGHT = {'--bg-1':'#fafafa','--bg-2':'#ffffff','--bg-3':'#f0f0f0','--text-1':'#1a1a1a','--text-2':'#555','--text-3':'#999','--border':'#e0e0e0','--border-hover':'#bbb','--accent':'#4f46e5','--hover':'rgba(0,0,0,.04)','--red':'#dc2626'};
 
-  // ── Controls ──────────────────────────────────────────────────────────
   type FractalType = 'mandelbrot' | 'julia';
   let fractalType: FractalType = $state('mandelbrot');
   let maxIter = $state(100);
@@ -33,12 +33,10 @@
   let canvasW = $state(800);
   let canvasH = $state(600);
 
-  // ── Save ──────────────────────────────────────────────────────────────
   let showSave = $state(false);
   let canvas: HTMLCanvasElement;
   let generating = $state(false);
 
-  // ── Tooltip ───────────────────────────────────────────────────────────
   let tooltip = $state<{text:string, x:number, y:number} | null>(null);
   function showTip(e: MouseEvent, text: string) {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -46,7 +44,6 @@
   }
   function hideTip() { tooltip = null; }
 
-  // ── Templates ─────────────────────────────────────────────────────────
   const TEMPLATES = [
     { name: 'Turbo MB', desc: 'Classic Mandelbrot, turbo palette', apply: () => { fractalType='mandelbrot'; palette='turbo'; maxIter=100; }},
     { name: 'Inferno MB', desc: 'Mandelbrot, inferno palette', apply: () => { fractalType='mandelbrot'; palette='inferno'; maxIter=150; }},
@@ -56,7 +53,6 @@
     { name: 'Deep Zoom', desc: 'High iteration detail', apply: () => { fractalType='mandelbrot'; palette='turbo'; maxIter=500; }},
   ];
 
-  // ── Tooltips map ──────────────────────────────────────────────────────
   const TIPS: Record<string, string> = {
     fractalType: 'Mandelbrot: classic fractal. Julia: use a fixed c parameter for different shapes',
     maxIter: 'Higher = more detail but slower render. 50-200 is usually enough',
@@ -66,7 +62,6 @@
     canvasSize: 'Output resolution',
   };
 
-  // ── Color Palettes ────────────────────────────────────────────────────
   function turbo(t: number): [number, number, number] {
     t = Math.max(0, Math.min(1, t));
     const r = Math.round(255 * (0.13572138 + t * (4.6153926 + t * (-42.66032258 + t * (132.13108234 + t * (-152.94239396 + t * 59.28637943))))));
@@ -112,7 +107,6 @@
     }
   }
 
-  // ── Generate ──────────────────────────────────────────────────────────
   function generate() {
     if (!canvas) return;
     generating = true;
@@ -148,7 +142,6 @@
           if (iter === maxIter) {
             color = [0, 0, 0];
           } else {
-            // Smooth coloring
             const log2 = Math.log(2);
             const sl = iter + 1 - Math.log(Math.log(Math.sqrt(zx * zx + zy * zy))) / log2;
             const t = sl / maxIter;

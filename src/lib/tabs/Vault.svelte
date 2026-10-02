@@ -1,3 +1,4 @@
+<!-- hello there, tf u doing on my code???? -->
 <script lang="ts">
   import ContextMenu from "$lib/components/ContextMenu.svelte";
   import { toasts } from "$lib/types/toast";

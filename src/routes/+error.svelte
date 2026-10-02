@@ -1,3 +1,4 @@
+<!-- hello there, tf u doing on my code???? -->
 <script lang="ts">
   import { page } from '$app/stores';
   import { env } from '$env/dynamic/public';

@@ -1,3 +1,4 @@
+<!-- hello there, tf u doing on my code???? -->
 <!-- src/lib/components/viewer/FileEditor.svelte -->
 <script lang="ts">
   import WasmLoader from './WasmLoader.svelte';
@@ -20,7 +21,6 @@
     onsave?: (content: string) => void;
   } = $props();
 
-  // ── Helpers ─────────────────────────────────────────────────────────────────
   function editorKind(f: FileRecord) {
     if (f.type.startsWith('image/')) return 'image';
     if (f.type === 'application/epub+zip') return 'epub';
@@ -35,13 +35,11 @@
            type.includes('json') || type.includes('xml') || type.includes('text');
   }
 
-  // Same exhaustive list as public text viewer
   const _TEXT_EXTS = new Set('txt,md,markdown,mdx,rst,adoc,org,js,mjs,cjs,jsx,ts,tsx,cts,svelte,vue,astro,njk,hbs,ejs,erb,haml,pug,css,scss,sass,less,styl,html,htm,xhtml,xml,xsl,xsd,svg,json,json5,jsonc,jsonl,yaml,yml,toml,ini,cfg,conf,env,csv,tsv,sh,bash,zsh,fish,ksh,ps1,bat,cmd,vbs,py,pyw,pyx,pyi,rb,rake,php,phtml,pl,pm,lua,r,jl,c,h,cpp,cc,cxx,hpp,hxx,cs,csx,fs,fsi,fsx,rs,go,mod,zig,v,d,nim,ada,adb,ads,pas,asm,s,for,f90,java,kt,kts,groovy,scala,clj,cljs,hs,ml,elm,ex,exs,erl,purs,lisp,cl,el,scm,rkt,swift,dart,m,mm,sql,ddl,dml,graphql,gql,sparql,tex,latex,diff,patch,dockerfile,makefile,mk,cmake,tf,hcl,hx,cr,jl,sol,gd,glsl,frag,vert,hlsl,coffee,ls,reg,log,srt,vtt,pem,lock,gitignore,editorconfig,npmrc,nvmrc,prettierrc,eslintrc,babelrc'.split(','));
 
   function isTextExtension(name: string) {
     const ext = name.split('.').pop()?.toLowerCase() ?? '';
     const fname = name.toLowerCase();
-    // Special filenames
     if (['dockerfile','makefile','rakefile','gemfile','vagrantfile','jenkinsfile',
          'procfile','.bashrc','.zshrc','.profile','.env','.gitignore',
          '.editorconfig','.npmrc','.nvmrc'].includes(fname)) return true;
@@ -137,7 +135,6 @@
   let lang = $derived(monacoLang(file.fileName, file.type));
   let isMd  = $derived(isMarkdown(file.fileName));
 
-  // ── Text editor state ────────────────────────────────────────────────────────
   let textContent  = $state<string | null>(null);
   let editorEl     = $state<HTMLDivElement | null>(null);
   let monacoEditor: any = null;
@@ -151,7 +148,6 @@
   let textView     = $state<TextView>(isMd ? 'split' : 'editor');
   let mdHtml       = $state('');
 
-  // ── Load text content ────────────────────────────────────────────────────────
   $effect(() => {
     if (kind === 'text' && url) loadText();
   });
@@ -168,17 +164,15 @@
     }
   }
 
-  // ── Mount Monaco once content + DOM are ready ─────────────────────────────
   $effect(() => {
     if (kind !== 'text' || textContent === null || !editorEl || (textView === 'preview')) return;
-    if (monacoLoaded && monacoEditor) return; // already mounted
+    if (monacoLoaded && monacoEditor) return;
     loadMonaco();
   });
 
   async function loadMonaco() {
     if (typeof window === 'undefined') return;
 
-    // Lazy-load Monaco from CDN
     if (!(window as any).monacoReady) {
       await new Promise<void>((resolve, reject) => {
         const script = document.createElement('script');
@@ -228,7 +222,6 @@
     monacoLoaded = true;
   }
 
-  // ── Markdown rendering ───────────────────────────────────────────────────────
   async function renderMarkdown() {
     const content = monacoEditor?.getValue() ?? textContent ?? '';
     if (!(window as any).marked) {
@@ -247,17 +240,14 @@
     }
   });
 
-  // ── Switch view mode ─────────────────────────────────────────────────────────
   function setView(v: TextView) {
     textView = v;
     if (v !== 'editor' && isMd) renderMarkdown();
-    // Re-layout Monaco after DOM changes
     if (v !== 'preview') {
       setTimeout(() => monacoEditor?.layout(), 50);
     }
   }
 
-  // ── Save ─────────────────────────────────────────────────────────────────────
   async function save() {
     if (!apiKey || !dirty) return;
     const content = monacoEditor?.getValue() ?? textContent ?? '';
@@ -266,7 +256,6 @@
       const blob  = new Blob([content], { type: file.type || 'text/plain' });
       const form  = new FormData();
       form.append('file', blob, file.fileName);
-      // Upload as single chunk
       const upRes = await fetch('/api/telegram/uploadChunk', {
         method: 'POST',
         headers: {
@@ -287,7 +276,7 @@
           type: file.type || 'text/plain',
           totalBytes: blob.size,
           chunks: [chunk],
-          replaceMetaFileId: file.metaFileId,  // overwrite existing
+          replaceMetaFileId: file.metaFileId,
         }),
       });
       const final = await finalRes.json();
@@ -301,7 +290,6 @@
     }
   }
 
-  // Ctrl+S to save
   function handleKeydown(e: KeyboardEvent) {
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
       e.preventDefault();
@@ -311,7 +299,6 @@
 
   onDestroy(() => { monacoEditor?.dispose(); });
 
-  // ── Image editor ─────────────────────────────────────────────────────────────
   let magickReady = $state(false);
   let canvasEl = $state<HTMLCanvasElement | null>(null);
   let origData: Uint8Array | null = null;

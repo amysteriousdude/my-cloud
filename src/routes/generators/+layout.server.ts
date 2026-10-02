@@ -1,4 +1,4 @@
-// src/routes/generators/+layout.server.ts
+// hello there, tf u doing on my code????
 import type { LayoutServerLoad } from './$types';
 import { redirect } from '@sveltejs/kit';
 import { decrypt } from '$lib/crypto';

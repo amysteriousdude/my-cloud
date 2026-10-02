@@ -1,3 +1,4 @@
+<!-- hello there, tf u doing on my code???? -->
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import {
@@ -10,7 +11,6 @@
 
   let { apiKey }: { apiKey: string } = $props();
 
-  // ── Media types ──────────────────────────────────────────────────────
   type MediaClip = {
     id: string;
     name: string;
@@ -58,7 +58,6 @@
     durationFrames: number;
   };
 
-  // ── State ────────────────────────────────────────────────────────────
   let mediaPool = $state<MediaClip[]>([]);
   let tracks = $state<Track[]>([
     { id: "v1", name: "Video 1", type: "video", muted: false, locked: false, clips: [] },
@@ -91,12 +90,10 @@
   const TRACK_HEIGHT = 48;
   const HEADER_HEIGHT = 32;
 
-  // ── Derived ──────────────────────────────────────────────────────────
   let currentTime = $derived(currentFrame / fps);
   let duration = $derived(totalFrames / fps);
   let progress = $derived(totalFrames > 0 ? currentFrame / totalFrames : 0);
 
-  // ── Media import ─────────────────────────────────────────────────────
   function importMedia() {
     fileInputEl?.click();
   }
@@ -184,7 +181,6 @@
 
   let draggingOver = $state(false);
 
-  // ── Timeline operations ──────────────────────────────────────────────
   function addToTrack(media: MediaClip) {
     const targetTrack = tracks.find(t => t.type === media.type) ?? tracks.find(t => t.type === "video");
     if (!targetTrack) return;
@@ -248,7 +244,6 @@
     totalFrames = max;
   }
 
-  // ── Playback ─────────────────────────────────────────────────────────
   function play() {
     playing = true;
     lastTime = performance.now();
@@ -288,7 +283,6 @@
     return `${m}:${String(s).padStart(2, "0")}:${String(f).padStart(2, "0")}`;
   }
 
-  // ── Keyboard ─────────────────────────────────────────────────────────
   function onKeydown(e: KeyboardEvent) {
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
     if (e.code === "Space") { e.preventDefault(); playing ? pause() : play(); }
@@ -338,7 +332,6 @@
     recalcTotal();
   }
 
-  // ── Thumbnail generation ─────────────────────────────────────────────
   function getMediaForClip(clip: TimelineClip): MediaClip | undefined {
     return mediaPool.find(m => m.id === clip.mediaId);
   }
@@ -352,7 +345,6 @@
     }
   }
 
-  // ── Mount ────────────────────────────────────────────────────────────
   onMount(() => {
     window.addEventListener("keydown", onKeydown);
     window.addEventListener("mousemove", handleMouseMove);
@@ -369,7 +361,6 @@
 
   let showSettings = $state(false);
 
-  // ── Export ─────────────────────────────────────────────────────────
   let exporting = $state(false);
   let exportProgress = $state(0);
   let exportStatus = $state("");
@@ -427,11 +418,9 @@
     const ctx = canvas.getContext("2d")!;
 
     try {
-      // Clean up any previous files
       try { await ffmpeg.deleteFile("input.mp4"); } catch {}
       try { await ffmpeg.deleteFile("output." + exportFormat); } catch {}
 
-      // Render frames to PNG files
       const savedFrame = currentFrame;
       const frameBatchSize = 10;
 
@@ -441,11 +430,9 @@
           currentFrame = i;
           await tickRender();
 
-          // Draw preview to canvas
           ctx.fillStyle = "#000";
           ctx.fillRect(0, 0, outW, outH);
 
-          // Draw all visible video clips at this frame
           for (const track of tracks) {
             if (track.type !== "video" || track.muted) continue;
             for (const clip of track.clips) {
@@ -480,7 +467,6 @@
 
       currentFrame = savedFrame;
 
-      // Encode with FFmpeg
       exportStatus = "Encoding video...";
       exportProgress = 75;
       await tick();
@@ -515,19 +501,16 @@
       exportStatus = "Preparing download...";
       await tick();
 
-      // Read output
       const outFile = `output.${exportFormat}`;
       const data = await ffmpeg.readFile(outFile);
       const blob = new Blob([data], { type: exportFormat === "mp4" ? "video/mp4" : "video/webm" });
       const url = URL.createObjectURL(blob);
 
-      // Download
       const a = document.createElement("a");
       a.href = url;
       a.download = `export.${exportFormat}`;
       a.click();
 
-      // Cleanup frames
       for (let i = 0; i < total; i++) {
         try { await ffmpeg.deleteFile(`frame${String(i).padStart(5, "0")}.png`); } catch {}
       }

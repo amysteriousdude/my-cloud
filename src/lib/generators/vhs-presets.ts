@@ -1,3 +1,4 @@
+// hello there, tf u doing on my code????
 import { type VHSParams, DEFAULT_PARAMS } from './vhs-effects';
 
 export interface Preset {

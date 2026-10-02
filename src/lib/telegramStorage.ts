@@ -1,4 +1,4 @@
-// src/lib/telegramStorage.ts
+// hello there, tf u doing on my code????
 import axios from 'axios';
 import fs from 'fs';
 import crypto from 'crypto';
@@ -130,10 +130,8 @@ async function getLocalCache(): Promise<CacheData> {
 
 async function updateLocalCache(patch: Partial<CacheData>) {
   _memCache = { ..._memCache, ...patch };
-  // Invalidate slug lookup cache when registry changes
   _slugCache = null;
   _slugCachePtr = null;
-  // File write is best-effort — fails silently on CF Workers (no shared fs)
   try {
     await fs.promises.writeFile(CACHE_FILE, JSON.stringify(_memCache, null, 2), 'utf8');
   } catch {}
@@ -311,8 +309,6 @@ async function readRegistryInner(retry: boolean, forceFresh = false): Promise<Re
     return {};
   }
 
-  // Pointer-based cache: if the registry pointer hasn't changed, data is the same.
-  // The index is fetched fresh from Telegram (pinned message check), so the pointer is always current.
   if (!forceFresh) {
     const local = await getLocalCache();
     if (local.registryData && local.registryPtr?.file_id === ptr.file_id) {
@@ -382,7 +378,6 @@ export async function registerFile(rec: FileRecord): Promise<void> {
   try {
     const registry = await readRegistry(true) ?? {};
 
-    // Strict dedup: remove stale entries with same fileName + folderId
     const staleKeys: string[] = [];
     for (const [key, existing] of Object.entries(registry)) {
       if (!existing || (existing as any)._type) continue;
@@ -671,12 +666,10 @@ export async function getPublicFileByPath(fullPath: string): Promise<FileRecord 
   const targetPath = normalizePublicPath(fullPath);
   if (!targetPath) return null;
 
-  // Build slug→file lookup map (O(N) once, then O(1) per lookup)
   const cacheKey = JSON.stringify(Object.keys(registry).sort());
   if (_slugCache && _slugCachePtr === cacheKey) {
     const cached = _slugCache.get(targetPath);
     if (cached !== undefined) return cached || null;
-    // Fall through to slug miss handling below
   } else {
     _slugCache = new Map();
     _slugCachePtr = cacheKey;
@@ -685,7 +678,6 @@ export async function getPublicFileByPath(fullPath: string): Promise<FileRecord 
       if (!isFilePublic(file, registry)) continue;
       const slug = normalizePublicPath(walkFilePath(file, registry));
       if (slug) {
-        // Keep newest by time
         const existing = _slugCache.get(slug);
         if (!existing || (file.time || '') > (existing.time || '')) {
           _slugCache.set(slug, file);

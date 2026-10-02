@@ -1,3 +1,4 @@
+<!-- hello there, tf u doing on my code???? -->
 <!-- src/lib/tabs/Stats.svelte -->
 <script lang="ts">
   import { onMount } from "svelte";
@@ -19,11 +20,9 @@
   let loading   = $state(true);
   let error     = $state<string | null>(null);
 
-  // ── Derived stats ─────────────────────────────────────────────────────────
   const totalBytes   = $derived(files.reduce((s, f) => s + (f.totalBytes ?? 0), 0));
   const totalFiles   = $derived(files.length);
 
-  // Uploads by day (last 30 days)
   const uploadsByDay = $derived(() => {
     const map = new Map<string, { count: number; bytes: number }>();
     const now = Date.now();
@@ -45,7 +44,6 @@
     return result;
   });
 
-  // Upload heatmap (last 90 days, GitHub-style)
   const heatmapData = $derived(() => {
     const map = new Map<string, number>();
     const now = Date.now();
@@ -56,10 +54,8 @@
       const day = f.time.slice(0, 10);
       map.set(day, (map.get(day) ?? 0) + 1);
     }
-    // Build 13 weeks x 7 days grid
     const weeks: { day: string; count: number; col: number; row: number }[][] = [];
     const startDate = new Date(now - 89 * 24 * 60 * 60 * 1000);
-    // Align to Sunday
     const dayOfWeek = startDate.getDay();
     startDate.setDate(startDate.getDate() - dayOfWeek);
 
@@ -82,7 +78,6 @@
 
   const maxHeatmap = $derived(Math.max(1, ...heatmapData().flat().map(d => d.count)));
 
-  // File type breakdown
   const typeBreakdown = $derived(() => {
     const map = new Map<string, { count: number; bytes: number }>();
     for (const f of files) {
@@ -95,22 +90,18 @@
       .map(([cat, v]) => ({ cat, ...v }));
   });
 
-  // Biggest files
   const biggestFiles = $derived(
     [...files].sort((a, b) => (b.totalBytes ?? 0) - (a.totalBytes ?? 0)).slice(0, 10)
   );
 
-  // Most recent uploads
   const recentFiles = $derived(
     [...files].sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()).slice(0, 10)
   );
 
-  // Most accessed files
   const mostAccessed = $derived(
     [...files].filter(f => (f.accessCount ?? 0) > 0).sort((a, b) => (b.accessCount ?? 0) - (a.accessCount ?? 0)).slice(0, 10)
   );
 
-  // Storage growth (cumulative over time, sampled by day)
   const storageGrowth = $derived(() => {
     const sorted = [...files].sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
     const points: { day: string; bytes: number }[] = [];
@@ -124,7 +115,6 @@
       cumulative += bytes;
       points.push({ day, bytes: cumulative });
     }
-    // Fill gaps
     if (points.length > 0) {
       const start = new Date(points[0].day);
       const end = new Date();
@@ -144,7 +134,6 @@
     return points;
   });
 
-  // Daily summary (today)
   const todaySummary = $derived(() => {
     const today = new Date().toISOString().slice(0, 10);
     const todayFiles = files.filter(f => f.time.startsWith(today));
@@ -154,7 +143,6 @@
     };
   });
 
-  // Weekly summary (last 7 days)
   const weeklySummary = $derived(() => {
     const now = Date.now();
     const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
@@ -203,7 +191,6 @@
     return "#39d353";
   }
 
-  // ── SVG Donut chart ───────────────────────────────────────────────────
   const donutData = $derived(() => {
     const data = typeBreakdown();
     const total = data.reduce((s, d) => s + d.bytes, 0) || 1;
@@ -220,7 +207,6 @@
   function donutPath(cx: number, cy: number, r: number, startAngle: number, endAngle: number): string {
     const sweep = endAngle - startAngle;
     if (sweep >= Math.PI * 2 - 0.001) {
-      // Full circle - draw two half arcs
       const x1 = cx + r * Math.cos(startAngle);
       const y1 = cy + r * Math.sin(startAngle);
       const x2 = cx + r * Math.cos(startAngle + Math.PI);
@@ -235,7 +221,6 @@
     return `M ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2}`;
   }
 
-  // ── SVG Line chart ────────────────────────────────────────────────────
   const growthPoints = $derived(() => {
     const data = storageGrowth();
     if (data.length === 0) return "";
@@ -288,7 +273,6 @@
     }
   });
 
-  // ── Chart helpers ──────────────────────────────────────────────────────────
   const chartDays = $derived(uploadsByDay());
   const maxCount  = $derived(Math.max(1, ...chartDays.map(d => d.count)));
   const typeData  = $derived(typeBreakdown());

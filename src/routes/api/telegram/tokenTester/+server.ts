@@ -1,4 +1,4 @@
-// src/routes/api/telegram/tokenTester/+server.ts
+// hello there, tf u doing on my code????
 import type { RequestHandler } from './$types';
 import { getRecordByApiKey } from '$lib/telegramStorage';
 

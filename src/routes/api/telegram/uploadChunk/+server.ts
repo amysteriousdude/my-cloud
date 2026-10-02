@@ -1,4 +1,4 @@
-// src/routes/api/telegram/uploadChunk/+server.ts
+// hello there, tf u doing on my code????
 import type { RequestHandler } from './$types';
 import { getRecordByApiKey, uploadBytesToTelegram } from '$lib/telegramStorage';
 import { TG_SAFE_CHUNK_BYTES } from '$lib/telegramLimits';
@@ -65,7 +65,6 @@ export const POST: RequestHandler = async ({ request, url }) => {
     const chunkName = `${originalName}.chunk${chunkIndex}`;
     const { message_id, file_id } = await uploadBytesToTelegram(fileData!, chunkName);
 
-    // Pre-cache chunk in Cloudflare Cache (zero extra subrequests — data is already in memory)
     try {
       const cache = await caches.open('tg-chunks-v1');
       const cacheReq = new Request(`https://tg-cache/${file_id}`);

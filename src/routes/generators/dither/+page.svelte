@@ -1,3 +1,4 @@
+<!-- hello there, tf u doing on my code???? -->
 <!-- src/routes/generators/dither/+page.svelte -->
 <script lang="ts">
   import { onMount } from 'svelte';
@@ -21,7 +22,6 @@
   const DARK  = {'--bg-1':'#080808','--bg-2':'#101010','--bg-3':'#141414','--text-1':'#e2e2e2','--text-2':'#888','--text-3':'#444','--border':'#1a1a1a','--border-hover':'#333','--accent':'#6366f1','--hover':'rgba(255,255,255,.04)','--red':'#f87171'};
   const LIGHT = {'--bg-1':'#fafafa','--bg-2':'#ffffff','--bg-3':'#f0f0f0','--text-1':'#1a1a1a','--text-2':'#555','--text-3':'#999','--border':'#e0e0e0','--border-hover':'#bbb','--accent':'#4f46e5','--hover':'rgba(0,0,0,.04)','--red':'#dc2626'};
 
-  // ── Controls ──────────────────────────────────────────────────────────
   type DitherAlg = 'floyd-steinberg' | 'atkinson' | 'none';
   let ditherAlg: DitherAlg = $state('floyd-steinberg');
   type PaletteMode = '2' | '4' | '8' | '16' | 'custom';
@@ -32,16 +32,13 @@
   let canvasW = $state(800);
   let canvasH = $state(600);
 
-  // ── Save ──────────────────────────────────────────────────────────────
   let showSave = $state(false);
   let canvas: HTMLCanvasElement;
   let generating = $state(false);
 
-  // ── Image ─────────────────────────────────────────────────────────────
   let uploadedImage = $state<HTMLImageElement | null>(null);
   let imageLoaded = $state(false);
 
-  // ── Tooltip ───────────────────────────────────────────────────────────
   let tooltip = $state<{text:string, x:number, y:number} | null>(null);
   function showTip(e: MouseEvent, text: string) {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -49,7 +46,6 @@
   }
   function hideTip() { tooltip = null; }
 
-  // ── Preset palettes ───────────────────────────────────────────────────
   const PALETTES: Record<string, [number, number, number][]> = {
     '2': [[0,0,0],[255,255,255]],
     '4': [[0,0,0],[255,255,255],[255,0,0],[0,0,255]],
@@ -76,7 +72,6 @@
     return '#' + [r,g,b].map(c => Math.max(0, Math.min(255, Math.round(c))).toString(16).padStart(2,'0')).join('');
   }
 
-  // ── Templates ─────────────────────────────────────────────────────────
   const TEMPLATES = [
     { name: 'B&W Classic', desc: '2-color black and white', apply: () => { paletteMode='2'; ditherAlg='floyd-steinberg'; brightness=0; contrast=0; }},
     { name: '4-Color', desc: 'Limited 4-color palette', apply: () => { paletteMode='4'; ditherAlg='floyd-steinberg'; brightness=0; contrast=0; }},
@@ -85,7 +80,6 @@
     { name: 'Atkinson', desc: 'Atkinson dithering, punchy look', apply: () => { paletteMode='8'; ditherAlg='atkinson'; brightness=0; contrast=10; }},
   ];
 
-  // ── Tooltips map ──────────────────────────────────────────────────────
   const TIPS: Record<string, string> = {
     ditherAlg: 'Floyd-Steinberg: smooth, Atkinson: higher contrast, None: posterized',
     paletteMode: 'Number of colors in the output palette',
@@ -94,7 +88,6 @@
     canvasSize: 'Output resolution',
   };
 
-  // ── File upload ───────────────────────────────────────────────────────
   function handleFileUpload(e: Event) {
     const input = e.target as HTMLInputElement;
     const file = input.files?.[0];
@@ -112,7 +105,6 @@
     reader.readAsDataURL(file);
   }
 
-  // ── Nearest palette color ─────────────────────────────────────────────
   function nearestColor(r: number, g: number, b: number, palette: [number, number, number][]): [number, number, number] {
     let best = palette[0];
     let bestDist = Infinity;
@@ -124,12 +116,9 @@
     return best;
   }
 
-  // ── Apply brightness/contrast ─────────────────────────────────────────
   function adjustPixel(r: number, g: number, b: number): [number, number, number] {
     let nr = r, ng = g, nb = b;
-    // Brightness
     nr += brightness; ng += brightness; nb += brightness;
-    // Contrast
     if (contrast !== 0) {
       const f = (259 * (contrast + 255)) / (255 * (259 - contrast));
       nr = f * (nr - 128) + 128;
@@ -139,7 +128,6 @@
     return [Math.max(0, Math.min(255, nr)), Math.max(0, Math.min(255, ng)), Math.max(0, Math.min(255, nb))];
   }
 
-  // ── Generate ──────────────────────────────────────────────────────────
   function generate() {
     if (!canvas || !uploadedImage) return;
     generating = true;
@@ -147,13 +135,11 @@
       const ctx = canvas.getContext('2d')!;
       canvas.width = canvasW; canvas.height = canvasH;
 
-      // Draw uploaded image scaled to canvas
       ctx.drawImage(uploadedImage, 0, 0, canvasW, canvasH);
       const imgData = ctx.getImageData(0, 0, canvasW, canvasH);
       const pixels = imgData.data;
       const palette = getActivePalette();
 
-      // Apply brightness/contrast first
       for (let i = 0; i < pixels.length; i += 4) {
         const [r, g, b] = adjustPixel(pixels[i], pixels[i+1], pixels[i+2]);
         pixels[i] = r; pixels[i+1] = g; pixels[i+2] = b;
@@ -167,7 +153,6 @@
       } else {
         const w = canvasW, h = canvasH;
         const errBuf = new Float32Array(w * h * 3);
-        // Load into error buffer
         for (let i = 0; i < pixels.length; i += 4) {
           const idx = (i / 4) * 3;
           errBuf[idx] = pixels[i];
@@ -215,7 +200,6 @@
           }
         }
 
-        // Write back
         for (let i = 0; i < pixels.length; i += 4) {
           const idx = (i / 4) * 3;
           pixels[i]   = Math.max(0, Math.min(255, Math.round(errBuf[idx])));

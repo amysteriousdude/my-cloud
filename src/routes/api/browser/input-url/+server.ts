@@ -1,6 +1,4 @@
-// src/routes/api/browser/input-url/+server.ts
-// Returns a direct Colab input URL + nonce. Client sends input straight
-// to Colab tunnel — zero SvelteKit round-trip per keystroke/mousemove.
+// hello there, tf u doing on my code????
 import type { RequestHandler } from './$types';
 import { decrypt } from '$lib/crypto';
 import { getRecordByApiKey } from '$lib/telegramStorage';
@@ -38,7 +36,6 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
     const { nonce } = await r.json() as any;
     if (!nonce) throw new Error('no nonce');
 
-    // Nonce TTL is 60s by default — extend it on Colab side for input sessions
     return new Response(JSON.stringify({
       inputUrl: `${colab}/input-direct`,
       nonce,

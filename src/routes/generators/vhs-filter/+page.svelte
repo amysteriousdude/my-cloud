@@ -1,3 +1,4 @@
+<!-- hello there, tf u doing on my code???? -->
 <script lang="ts">
   import { onMount } from 'svelte';
   import { IconArrowLeft, IconDownload, IconRefresh, IconUpload, IconVideo, IconPhoto, IconPlayerPlay, IconPlayerPause, IconPlayerSkipBack, IconPlayerSkipForward, IconLoader2, IconCloud, IconX, IconFile } from '@tabler/icons-svelte';

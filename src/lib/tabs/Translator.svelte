@@ -1,3 +1,4 @@
+<!-- hello there, tf u doing on my code???? -->
 <script lang="ts">
   import {
     IconLanguage, IconLoader2, IconArrowRight, IconCopy,
@@ -135,11 +136,9 @@
       if (!res.ok) throw new Error('Translation failed');
       const data = await res.json();
 
-      // Response is [[["translated","original",...], ...], ...]
       const sentences = data[0];
       translatedText = sentences.map((s: any[]) => s[0]).join('');
 
-      // Auto-detect language
       if (sourceLang === 'auto' && data[2]) {
         sourceLang = data[2];
       }
@@ -173,7 +172,6 @@
 
     const tl = lang === 'auto' ? 'en' : lang;
 
-    // Ensure voices are loaded
     if (!voicesLoaded && window.speechSynthesis) {
       await new Promise<void>(resolve => {
         const voices = window.speechSynthesis.getVoices();
@@ -183,7 +181,6 @@
       });
     }
 
-    // Split into ~200 char chunks on sentence boundaries
     const chunks = text.match(/[^.!?]+[.!?]+[\s]*|[^.!?]+$/g) || [text];
 
     for (const chunk of chunks) {
@@ -195,14 +192,10 @@
       u.rate = 1;
       u.pitch = 1;
 
-      // Find best matching voice
       if (window.speechSynthesis) {
         const voices = window.speechSynthesis.getVoices();
-        // Exact match first
         let voice = voices.find(v => v.lang === tl);
-        // Then prefix match (e.g. 'es' matches 'es-ES')
         if (!voice) voice = voices.find(v => v.lang.startsWith(tl.split('-')[0]));
-        // Then partial match
         if (!voice) voice = voices.find(v => v.lang.includes(tl.split('-')[0]));
         if (voice) u.voice = voice;
       }
@@ -211,7 +204,6 @@
         u.onend = () => resolve();
         u.onerror = () => resolve();
         window.speechSynthesis?.speak(u);
-        // Safety timeout
         setTimeout(resolve, 15000);
       });
     }

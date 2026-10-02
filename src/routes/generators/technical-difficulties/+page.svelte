@@ -1,3 +1,4 @@
+<!-- hello there, tf u doing on my code???? -->
 <script lang="ts">
   import { onMount } from 'svelte';
   import { IconArrowLeft, IconDownload, IconRefresh } from '@tabler/icons-svelte';
@@ -18,7 +19,6 @@
   const DARK  = {'--bg-1':'#080808','--bg-2':'#101010','--bg-3':'#141414','--text-1':'#e2e2e2','--text-2':'#888','--text-3':'#444','--border':'#1a1a1a','--border-hover':'#333','--accent':'#6366f1'};
   const LIGHT = {'--bg-1':'#fafafa','--bg-2':'#ffffff','--bg-3':'#f0f0f0','--text-1':'#1a1a1a','--text-2':'#555','--text-3':'#999','--border':'#e0e0e0','--border-hover':'#bbb','--accent':'#4f46e5'};
 
-  // ── Settings (mirrors the API params) ────────────────────────────────
   let canvasW      = $state(800);
   let canvasH      = $state(600);
   let glitchI      = $state(1.0);
@@ -63,10 +63,8 @@
     else cancelAnimationFrame(animFrame);
   });
 
-  // ── Helpers ───────────────────────────────────────────────────────────
   function clamp(v: number) { return v < 0 ? 0 : v > 255 ? 255 : v; }
 
-  // ── All effect functions operating on Uint8ClampedArray ──────────────
 
   function drawColorBars(d: Uint8ClampedArray, w: number, h: number) {
     const cols: [number,number,number][] = [
@@ -172,23 +170,18 @@
   }
 
   function addVerticalGlitchLine(d: Uint8ClampedArray, w: number, h: number, I: number) {
-    // Pick base hue from temperature setting
     function pickColor(): [number,number,number] {
       const t = vlineTemp;
       if (t === 'warm') {
-        // reds, oranges, yellows
         const hues: [number,number,number][] = [[255,60,0],[255,180,0],[255,220,30],[255,80,30],[200,40,0]];
         return hues[Math.floor(Math.random()*hues.length)];
       } else if (t === 'cool') {
-        // blues, cyans, purples
         const hues: [number,number,number][] = [[0,180,255],[80,100,255],[160,0,255],[0,255,220],[30,80,200]];
         return hues[Math.floor(Math.random()*hues.length)];
       } else if (t === 'neon') {
-        // hot pinks, electric greens, acid yellows
         const hues: [number,number,number][] = [[255,0,180],[0,255,60],[200,255,0],[255,0,255],[0,255,255]];
         return hues[Math.floor(Math.random()*hues.length)];
       } else {
-        // auto — random full hue
         const h6 = Math.random() * 6;
         const s = Math.floor(h6), f = h6 - s;
         const q = Math.floor((1 - f) * 255), t2 = Math.floor(f * 255);
@@ -210,11 +203,9 @@
       for (let y = y0; y < y0 + lh && y < h; y++) {
         for (let x = x0; x < x0 + lw && x < w; x++) {
           const idx = (w * y + x) * 4;
-          // Per-pixel noise on the color
           const nr = vlineNoise > 0 ? Math.floor((Math.random()*2-1) * vlineNoise * 80) : 0;
           const ng = vlineNoise > 0 ? Math.floor((Math.random()*2-1) * vlineNoise * 80) : 0;
           const nb = vlineNoise > 0 ? Math.floor((Math.random()*2-1) * vlineNoise * 80) : 0;
-          // Also randomly skip pixels for a scanline-within-line effect
           if (vlineNoise > 0 && Math.random() < vlineNoise * 0.3) continue;
           d[idx]   = clamp(cr + nr);
           d[idx+1] = clamp(cg + ng);
@@ -279,7 +270,6 @@
     const bw  = Math.floor(w * (rW + (Math.random() * 0.15)));
     const x0  = Math.floor(w * (0.1 + Math.random() * 0.6));
     const yOff = Math.floor(bh * (0.1 + Math.random() * 0.4));
-    // Pick solid color once if needed
     const sr = 120 + Math.floor(Math.random()*135);
     const sg = 120 + Math.floor(Math.random()*135);
     const sb = 120 + Math.floor(Math.random()*135);
@@ -297,7 +287,6 @@
             d[idx+1]= clamp(d[idx+1] + Math.floor(Math.random()*180 - 40));
             d[idx+2]= clamp(d[idx+2] + Math.floor(Math.random()*180 - 40));
           } else {
-            // split (original)
             d[idx]  = 140 + Math.floor(Math.random()*40);
             d[idx+1]= 220 + Math.floor(Math.random()*35);
             d[idx+2]= Math.floor(Math.random()*30);
@@ -416,7 +405,6 @@
     }
   }
 
-  // ── Main generate (mirrors the API pipeline exactly) ──────────────────
   function generate() {
     if (!canvas) return;
     generating = true;
@@ -427,19 +415,14 @@
       const img = ctx.createImageData(W, H);
       const d = img.data;
 
-      // 1. Base color bars
       drawColorBars(d, W, H);
 
-      // 1a. Screen push
       if (screenPush && screenPushI > 0) applyScreenPush(d, W, H, screenPushI);
 
-      // 2. Clean push
       if (cleanPush) applyCleanPush(d, W, H, pushStart, pushInt);
 
-      // 3. Slice push
       if (slicePush && sliceCount > 0) applySlicePush(d, W, H, sliceCount, sliceInt);
 
-      // 4. CRT / glitch effects
       if (scanI > 0) applyScanlines(d, W, H, scanI);
       applyVignette(d, W, H, 0.7);
       if (glitchI > 0) {
@@ -452,16 +435,12 @@
       applyPushGlitch(d, W, H, 0.25, glitchI);
       if (shiftI > 0) applyRGBSplit(d, W, H, shiftI);
 
-      // 5. Bloom
       applyBloom(d, W, H, 200, 0.5);
 
-      // 6. Chromatic aberration
       applyChromaticAberration(d, W, H, 2);
 
-      // 7. Noise
       if (noiseI > 0) addNoise(d, W, H, noiseI);
 
-      // 8. Dust
       if (dust && dustOpacity > 0 && dustDensity > 0) addDust(d, W, H, dustOpacity, dustDensity, dustColor);
 
       ctx.putImageData(img, 0, 0);

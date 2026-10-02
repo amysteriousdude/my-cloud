@@ -1,4 +1,4 @@
-// src/routes/api/browser/stream-proxy/+server.ts
+// hello there, tf u doing on my code????
 import type { RequestHandler } from './$types';
 import { validateToken } from '$lib/browserToken';
 
@@ -14,7 +14,6 @@ export const GET: RequestHandler = async ({ url }) => {
   if (!colab) return new Response('No session URL', { status: 503 });
 
   try {
-    // Get a fresh nonce from Colab
     const nr = await fetch(`${colab}/nonce`, {
       method: 'POST',
       headers: { 'x-session-secret': SECRET() },
@@ -24,7 +23,6 @@ export const GET: RequestHandler = async ({ url }) => {
     const { nonce } = await nr.json() as any;
     if (!nonce) return new Response('No nonce returned', { status: 502 });
 
-    // Pipe the SSE stream
     const upstream = await fetch(`${colab}/stream?nonce=${nonce}`, {
       headers: { 'x-session-secret': SECRET() },
     });

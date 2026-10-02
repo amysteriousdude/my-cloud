@@ -1,3 +1,4 @@
+<!-- hello there, tf u doing on my code???? -->
 <!-- src/lib/tabs/Console.svelte -->
 <script lang="ts">
   import { IconPlayerPlay, IconTerminal } from "@tabler/icons-svelte";

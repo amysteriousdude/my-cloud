@@ -1,3 +1,4 @@
+<!-- hello there, tf u doing on my code???? -->
 <!-- src/routes/generators/topographic-lines/+page.svelte -->
 <script lang="ts">
   import { onMount } from 'svelte';
@@ -22,7 +23,6 @@
   const DARK  = {'--bg-1':'#080808','--bg-2':'#101010','--bg-3':'#141414','--text-1':'#e2e2e2','--text-2':'#888','--text-3':'#444','--border':'#1a1a1a','--border-hover':'#333','--accent':'#6366f1','--hover':'rgba(255,255,255,.04)','--red':'#f87171'};
   const LIGHT = {'--bg-1':'#fafafa','--bg-2':'#ffffff','--bg-3':'#f0f0f0','--text-1':'#1a1a1a','--text-2':'#555','--text-3':'#999','--border':'#e0e0e0','--border-hover':'#bbb','--accent':'#4f46e5','--hover':'rgba(0,0,0,.04)','--red':'#dc2626'};
 
-  // ── Controls ──────────────────────────────────────────────────────────
   let seed        = $state(Math.floor(Math.random() * 99999));
   let lineCount   = $state(18);
   let smoothness  = $state(6);
@@ -53,12 +53,10 @@
   let fillMode    = $state(false);
   let fillOpacity = $state(0.08);
 
-  // ── Save ──────────────────────────────────────────────────────────────
   let showSave = $state(false);
   let canvas: HTMLCanvasElement;
   let generating = $state(false);
 
-  // ── Tooltip ───────────────────────────────────────────────────────────
   let tooltip = $state<{text:string, x:number, y:number} | null>(null);
   function showTip(e: MouseEvent, text: string) {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -66,7 +64,6 @@
   }
   function hideTip() { tooltip = null; }
 
-  // ── Templates ─────────────────────────────────────────────────────────
   const TEMPLATES = [
     { name: 'Dark Topo',    desc: 'Classic dark topographic', apply: () => { bgColor='#0d0d1a'; lineColor='#6366f1'; lineColor2='#a78bfa'; lineCount=18; smoothness=6; curviness=0.5; lineWidth=1.2; lineStyle='solid' as LineStyle; shapeMode='contour' as ShapeMode; useGradient=false; fillMode=false; invertColors=false; }},
     { name: 'Terrain',      desc: 'Dense realistic contours',  apply: () => { bgColor='#0a1628'; lineColor='#3b82f6'; lineColor2='#93c5fd'; lineCount=40; smoothness=8; curviness=0.7; lineWidth=0.8; lineStyle='solid' as LineStyle; shapeMode='contour' as ShapeMode; useGradient=true; fillMode=false; }},
@@ -81,7 +78,6 @@
     { name: 'Filled',       desc: 'Layered fill effect',       apply: () => { bgColor='#0d0d1a'; lineColor='#818cf8'; lineColor2='#c4b5fd'; lineCount=15; smoothness=8; curviness=0.9; lineWidth=0.8; lineStyle='solid' as LineStyle; shapeMode='contour' as ShapeMode; useGradient=true; fillMode=true; fillOpacity=0.12; }},
   ];
 
-  // ── Tooltips map ──────────────────────────────────────────────────────
   const TIPS: Record<string, string> = {
     seed:       'Random seed — same seed always produces the same pattern',
     lineCount:  'How many contour lines to draw — higher = more detail',
@@ -106,7 +102,6 @@
     canvasSize: 'Output resolution — higher = larger file, slower render',
   };
 
-  // ── RNG ───────────────────────────────────────────────────────────────
   function mulberry32(s: number) {
     return () => {
       s |= 0; s = s + 0x6D2B79F5 | 0;
@@ -116,7 +111,6 @@
     };
   }
 
-  // ── Perlin noise ─────────────────────────────────────────────────────
   function createPerlin(rand: ()=>number) {
     const p = new Uint8Array(512);
     for (let i = 0; i < 256; i++) p[i] = i;
@@ -142,11 +136,8 @@
   }
 
   function buildGrid(rand: ()=>number, cols: number, rows: number, smooth: number): number[][] {
-    // smooth = noise scale: lower = zoomed in / bigger blobs, higher = tighter
     const noise = createPerlin(rand);
-    // Fixed base scale — smoothness does NOT change zoom, only detail level
     const scale = 0.018;
-    // smooth 1-18: low = 1 octave (big smooth blobs), high = many octaves (fine jagged detail)
     const octaves = [
       { f: 1.0,  a: 1.0   },
       { f: 2.1,  a: 0.50  },
@@ -154,8 +145,7 @@
       { f: 8.7,  a: 0.125 },
       { f: 17.3, a: 0.063 },
     ];
-    // how many octaves to blend in, fractionally
-    const octaveBlend = (smooth - 1) / 17; // 0..1
+    const octaveBlend = (smooth - 1) / 17;
     const activeOctaves = 1 + octaveBlend * (octaves.length - 1);
     const grid: number[][] = [];
     for (let r = 0; r < rows; r++) {
@@ -174,7 +164,6 @@
     return grid;
   }
 
-  // ── Catmull-Rom bezier — handles both open and closed chains ──────────
   type Pt = {x:number, y:number};
 
   function catmullBez(ctx: CanvasRenderingContext2D, pts: Pt[], tension: number, ox: number, oy: number, closed: boolean) {
@@ -189,13 +178,11 @@
     ctx.moveTo(pts[0].x+ox, pts[0].y+oy);
     const limit = closed ? n : n - 1;
     for (let i = 0; i < limit; i++) {
-      // For closed loops, wrap indices around instead of clamping — this is what prevents the box artifact
       const p0 = pts[(i - 1 + n) % n];
       const p1 = pts[i % n];
       const p2 = pts[(i + 1) % n];
       const p3 = pts[(i + 2) % n];
-      // tension in 0-1; /6 is the Catmull-Rom standard divisor
-      const t6 = tension * 0.15; // Catmull-Rom sweet spot — prevents edge looping
+      const t6 = tension * 0.15;
       const cp1x = p1.x + (p2.x - p0.x) * t6;
       const cp1y = p1.y + (p2.y - p0.y) * t6;
       const cp2x = p2.x - (p3.x - p1.x) * t6;
@@ -247,11 +234,9 @@
       return;
     }
 
-    // Chain segments — use a point-keyed map for O(n) lookup
     const EPS = 0.5;
     const key = (p: Pt) => `${Math.round(p.x/EPS)},${Math.round(p.y/EPS)}`;
 
-    // Build adjacency: endpoint -> [segIndex, endIndex(0 or 1)]
     type EndRef = {si: number, ei: 0|1};
     const endMap = new Map<string, EndRef[]>();
     const addEnd = (p: Pt, si: number, ei: 0|1) => {
@@ -272,7 +257,6 @@
       used[start] = 1;
       const chain: Pt[] = [allSegs[start][0], allSegs[start][1]];
 
-      // grow forward
       let growing = true;
       while (growing) {
         growing = false;
@@ -286,7 +270,6 @@
           break;
         }
       }
-      // grow backward
       growing = true;
       while (growing) {
         growing = false;
@@ -301,15 +284,13 @@
         }
       }
 
-      // Check if closed loop: head ≈ tail
       const h = chain[0], t = chain[chain.length-1];
       const isClosed = Math.abs(h.x-t.x) < EPS*2 && Math.abs(h.y-t.y) < EPS*2;
-      if (isClosed) chain.pop(); // remove duplicate endpoint for closed curves
+      if (isClosed) chain.pop();
       chains.push({pts: chain, closed: isClosed});
     }
 
     for (const {pts, closed} of chains) {
-      // Short closed chains (≤6 pts) are tiny islands — clamp tension hard to avoid box artifacts
       const maxT = pts.length <= 4 ? 0 : pts.length <= 8 ? curviness * 0.3 : curviness;
       catmullBez(ctx, pts, maxT, wx, wy, closed);
     }
@@ -374,11 +355,9 @@
     return c1.map((v,i) => Math.round(v+(c2[i]-v)*t));
   }
 
-  // ── Generate ──────────────────────────────────────────────────────────
   function generate() {
     if (!canvas) return;
     generating = true;
-    // Double rAF: first frame flushes Svelte state (shows overlay), second does the work
     requestAnimationFrame(() => requestAnimationFrame(() => {
       const ctx = canvas.getContext('2d')!;
       canvas.width = canvasW; canvas.height = canvasH;
@@ -388,7 +367,6 @@
       ctx.fillStyle = bg;
       ctx.fillRect(0,0,canvasW,canvasH);
 
-      // Clip so edge-crossing curves don't snap back outside canvas
       ctx.save();
       ctx.beginPath();
       ctx.rect(0, 0, canvasW, canvasH);
@@ -443,7 +421,7 @@
       }
 
       if (rotation!==0) ctx.restore();
-      ctx.restore(); // end clip
+      ctx.restore();
       ctx.setLineDash([]);
       generating = false;
     }));

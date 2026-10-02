@@ -1,3 +1,4 @@
+// hello there, tf u doing on my code????
 import type { RequestHandler } from './$types';
 import { getPublicFileByPath, getPublicFolderByPath } from '$lib/telegramStorage';
 
@@ -8,7 +9,6 @@ const MAX_RETRIES = 3;
 const RETRY_DELAYS = [500, 1000, 2000];
 const INTER_CHUNK_DELAY_MS = 50;
 
-// ── In-memory CDN URL cache (warm after first request per file) ─────────────
 const CDN_URL_TTL = 50 * 60 * 1000;
 const cdnUrlCache = new Map<string, { url: string; exp: number }>();
 
@@ -148,7 +148,6 @@ export const GET: RequestHandler = async ({ params, url, request }) => {
     'Content-Disposition': contentDisposition(file.fileName, download)
   });
 
-  // ── NON-CHUNKED: single fetch ─────────────────────────────────────────────
   if (!meta?.chunked) {
     const tgUrl = await getTgUrl(meta?.telegramFileId || file.telegramFileId || file.metaFileId);
     if (!tgUrl) return new Response('No file url', { status: 500 });
@@ -171,7 +170,6 @@ export const GET: RequestHandler = async ({ params, url, request }) => {
     return new Response(res.body, { status: 200, headers });
   }
 
-  // ── CHUNKED: fetch each chunk, verify size, stream to client ──────────────
   const chunks = [...(meta?.chunks ?? [])].sort((a: any, b: any) => a.index - b.index);
   console.log(`public: streaming ${chunks.length} chunks (${(size / 1048576).toFixed(1)}MB) for ${file.fileName}`);
 

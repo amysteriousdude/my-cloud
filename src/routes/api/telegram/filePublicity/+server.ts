@@ -1,4 +1,4 @@
-// src/routes/api/telegram/filePublicity/+server.ts
+// hello there, tf u doing on my code????
 import type { RequestHandler } from './$types';
 import { getRecordByApiKey, setFilePublicity } from '$lib/telegramStorage';
 import { purgeByMetaFileId } from '$lib/cfPurge';
@@ -34,7 +34,6 @@ export const POST: RequestHandler = async ({ request, url }) => {
         status: 404, headers: { 'Content-Type': 'application/json' }
       });
 
-    // Purge cache (fire-and-forget)
     purgeByMetaFileId(metaFileId).catch(() => {});
 
     return new Response(JSON.stringify({ success: true, metaFileId, public: isPublic }), {

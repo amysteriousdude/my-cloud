@@ -1,3 +1,4 @@
+// hello there, tf u doing on my code????
 export type NoteEvent = {
   id: string;
   note: number;

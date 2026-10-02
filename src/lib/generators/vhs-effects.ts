@@ -1,3 +1,4 @@
+// hello there, tf u doing on my code????
 export type EffectParams = Record<string, number>;
 
 function clamp(v: number, min = 0, max = 255) {
@@ -73,8 +74,6 @@ function mulberry32(seed: number) {
   };
 }
 
-// ── 1. SIGNAL ──────────────────────────────────────────
-
 export function ntscArtifactColor(pixels: Uint8ClampedArray, w: number, h: number, strength: number) {
   if (strength === 0) return;
   const out = new Uint8ClampedArray(pixels);
@@ -121,8 +120,6 @@ export function compositeBlend(pixels: Uint8ClampedArray, w: number, h: number, 
     }
   }
 }
-
-// ── 2. GEOMETRY ────────────────────────────────────────
 
 export function waveDistortion(pixels: Uint8ClampedArray, w: number, h: number, amplitude: number, frequency: number, time: number) {
   if (amplitude === 0) return;
@@ -206,8 +203,6 @@ export function barrelDistortion(pixels: Uint8ClampedArray, w: number, h: number
   }
 }
 
-// ── 3. NOISE ───────────────────────────────────────────
-
 export function staticNoise(pixels: Uint8ClampedArray, w: number, h: number, amount: number, seed: number) {
   if (amount === 0) return;
   const rand = mulberry32(seed);
@@ -258,8 +253,6 @@ export function chromaNoise(pixels: Uint8ClampedArray, w: number, h: number, amo
     pixels[i + 2] = clamp(pixels[i + 2] + (rand() - 0.5) * a);
   }
 }
-
-// ── 4. VHS ─────────────────────────────────────────────
 
 export function tapeSpeed(pixels: Uint8ClampedArray, w: number, h: number, speed: number, time: number) {
   if (speed === 0) return;
@@ -319,8 +312,6 @@ export function chromaBlur(pixels: Uint8ClampedArray, w: number, h: number, radi
   boxBlurChannel(tmp, pixels, w, h, 2, r);
 }
 
-// ── 5. COLOR ───────────────────────────────────────────
-
 export function saturation(pixels: Uint8ClampedArray, w: number, h: number, amount: number) {
   if (amount === 1) return;
   for (let i = 0; i < pixels.length; i += 4) {
@@ -379,8 +370,6 @@ export function colorFringing(pixels: Uint8ClampedArray, w: number, h: number, o
   }
 }
 
-// ── 6. SCANLINES ───────────────────────────────────────
-
 export function scanlines(pixels: Uint8ClampedArray, w: number, h: number, thickness: number, intensity: number, beamIntensity: number) {
   if (intensity === 0) return;
   const thick = Math.max(1, Math.round(thickness * 3));
@@ -397,8 +386,6 @@ export function scanlines(pixels: Uint8ClampedArray, w: number, h: number, thick
     }
   }
 }
-
-// ── 7. EDGE ────────────────────────────────────────────
 
 export function edgeGlow(pixels: Uint8ClampedArray, w: number, h: number, threshold: number, glowAmount: number) {
   if (glowAmount === 0) return;
@@ -420,8 +407,6 @@ export function edgeGlow(pixels: Uint8ClampedArray, w: number, h: number, thresh
   }
 }
 
-// ── 8. WEB-ONLY: INTERLACE ────────────────────────────
-
 export function interlaceFields(pixels: Uint8ClampedArray, w: number, h: number, fieldOffset: number) {
   if (fieldOffset === 0) return;
   const out = new Uint8ClampedArray(pixels);
@@ -438,8 +423,6 @@ export function interlaceFields(pixels: Uint8ClampedArray, w: number, h: number,
     }
   }
 }
-
-// ── 9. PIXEL DEGRADATION ──────────────────────────────
 
 export function pixelate(pixels: Uint8ClampedArray, w: number, h: number, size: number) {
   if (size <= 1) return;
@@ -524,8 +507,6 @@ export function horizontalTear(pixels: Uint8ClampedArray, w: number, h: number, 
     }
   }
 }
-
-// ── PIPELINE ───────────────────────────────────────────
 
 export interface VHSParams {
   signalArtifactColor: number;
