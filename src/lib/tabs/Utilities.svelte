@@ -68,7 +68,7 @@
         <p class="util-sub">Live client versions from Roblox client settings</p>
       </div>
       <button class="util-refresh" onclick={fetchVersion} disabled={loading} title="Refresh">
-        <IconRefresh size={16} class:spin={loading} />
+        <span class="refresh-ico" class:spin={loading}><IconRefresh size={16} /></span>
       </button>
     </div>
 
@@ -147,7 +147,8 @@
   .util-refresh { margin-left: auto; background: var(--bg-3); border: 1px solid var(--border); color: var(--text-2); width: 34px; height: 34px; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
   .util-refresh:hover { color: var(--text-1); border-color: var(--border-hover); }
   .util-refresh:disabled { opacity: .6; }
-  .spin { animation: spin .8s linear infinite; }
+  .refresh-ico { display: flex; }
+  .refresh-ico.spin { animation: spin .8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
   .util-controls { display: flex; flex-direction: column; gap: 12px; margin-bottom: 18px; }
   .util-label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-3); display: block; margin-bottom: 6px; }

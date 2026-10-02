@@ -946,7 +946,6 @@
   .upload-btn{display:flex;align-items:center;justify-content:center;gap:6px;padding:8px 12px;border-radius:8px;border:1px dashed var(--border);background:var(--bg-1);color:var(--text-2);font-size:12px;font-family:'Geist',sans-serif;cursor:pointer;transition:.13s;}
   .upload-btn:hover{border-color:var(--accent);color:var(--text-1);}
   .drop-hint{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--text-3);font-size:13px;pointer-events:none;}
-  .drop-sub{font-size:11px;opacity:.5;}
   .video-controls{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg-2);border:1px solid var(--border);border-radius:10px;width:100%;max-width:800px;}
   .vc-btn{background:none;border:none;color:var(--text-2);cursor:pointer;padding:4px;display:flex;align-items:center;}
   .vc-btn:hover{color:var(--text-1);}
