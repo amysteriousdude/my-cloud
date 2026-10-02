@@ -21,11 +21,6 @@
     mac: 'MacPlayer',
     studio: 'WindowsStudio64',
   };
-  const MOBILE_APP: Record<string, string> = {
-    ios: 'AppVersionIOS',
-    android: 'AppVersionAndroid',
-  };
-
   const CHANNELS = ['LIVE', 'ZLIVE', 'zcanary', 'zdev'];
 
   let view = $state<'home' | 'roblox'>('home');
@@ -43,19 +38,23 @@
     loading = true;
     error = null;
     try {
-      let url: string;
       if (platform in DESKTOP_BIN) {
-        url = `${BASE}/v2/client-version/${DESKTOP_BIN[platform]}?channel=${encodeURIComponent(channel)}`;
+        const res = await fetch(`${BASE}/v2/client-version/${DESKTOP_BIN[platform]}?channel=${encodeURIComponent(channel)}`);
+        const data = await res.json();
+        if (!res.ok || data?.errors?.length) {
+          throw new Error(data?.errors?.[0]?.message ?? `HTTP ${res.status}`);
+        }
+        version = data.clientVersionUpload ?? data.activeVersion ?? null;
+        versionNumber = data.version ?? null;
       } else {
-        url = `${BASE}/v1/mobile-client-version?appVersion=${MOBILE_APP[platform]}`;
+        const res = await fetch(`/api/roblox/store?platform=${platform}`);
+        const data = await res.json();
+        if (!res.ok || data?.error) {
+          throw new Error(data?.error ?? `HTTP ${res.status}`);
+        }
+        version = data.version ?? null;
+        versionNumber = data.updated ? `updated ${new Date(data.updated).toLocaleDateString()}` : null;
       }
-      const res = await fetch(url);
-      const data = await res.json();
-      if (!res.ok || data?.errors?.length) {
-        throw new Error(data?.errors?.[0]?.message ?? `HTTP ${res.status}`);
-      }
-      version = data.clientVersionUpload ?? data.activeVersion ?? null;
-      versionNumber = data.version ?? null;
       lastChecked = new Date().toLocaleTimeString();
 
       if (version) {
@@ -117,7 +116,7 @@
         <RobloxIcon size={20} />
         <div>
           <h2>Roblox Version Tracker</h2>
-          <p class="util-sub">Live client versions from Roblox client settings</p>
+          <p class="util-sub">Desktop from Roblox client settings, mobile from the app stores</p>
         </div>
         <button class="util-refresh" onclick={fetchVersion} disabled={loading} title="Refresh">
           <span class="refresh-ico" class:spin={loading}><IconRefresh size={16} /></span>
