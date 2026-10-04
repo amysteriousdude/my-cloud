@@ -3,7 +3,8 @@
 <script lang="ts">
   import { IconArrowLeft, IconRefresh, IconCheck, IconDownload } from '@tabler/icons-svelte';
   import { env } from '$env/dynamic/public';
-  const NAME = env.PUBLIC_NAME ?? "Omar";
+  import { branding } from '$lib/branding.svelte';
+  let NAME = $derived(branding.name);
 
   let { data } = $props();
   let apiKey = $derived(data?.apiKey ?? "");

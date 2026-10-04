@@ -11,10 +11,10 @@
     IconDownload,
     IconEye,
     IconChevronRight,
-    IconCloud,
   } from "@tabler/icons-svelte";
-  import { env } from '$env/dynamic/public';
-  const NAME = env.PUBLIC_NAME ?? "Omar";
+  import CloudLogo from '$lib/components/icons/CloudLogo.svelte';
+  import { branding } from '$lib/branding.svelte';
+  let NAME = $derived(branding.name);
 
   let { data } = $props();
 
@@ -108,7 +108,7 @@
 <div class="root">
   <header>
     <div class="header-left">
-      <IconCloud size={20} />
+      <CloudLogo size={20} />
       <span class="header-title">{NAME}'s Cloud</span>
     </div>
     <div class="header-right">

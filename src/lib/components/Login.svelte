@@ -1,9 +1,8 @@
 <!-- hello there, tf u doing on my code???? -->
 <!-- src/lib/components/Login.svelte -->
 <script lang="ts">
-  import { IconCloud } from '@tabler/icons-svelte';
-  import { env } from '$env/dynamic/public';
-  const NAME = env.PUBLIC_NAME ?? "Omar";
+  import CloudLogo from '$lib/components/icons/CloudLogo.svelte';
+  import { branding } from '$lib/branding.svelte';
 
   let {
     onsuccess,
@@ -38,8 +37,8 @@
 <div class="centered">
   <div class="login-card">
     <div class="logo">
-      <IconCloud size={40} stroke={1.5} />
-      <h1>{NAME}'s Cloud</h1>
+      <CloudLogo size={40} stroke={1.5} />
+      <h1>{branding.name}'s Cloud</h1>
       <p>Enter your API token to continue.</p>
     </div>
     <div class="token-form">

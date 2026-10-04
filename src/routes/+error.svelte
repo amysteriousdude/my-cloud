@@ -2,7 +2,8 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import { env } from '$env/dynamic/public';
-  const NAME = env.PUBLIC_NAME ?? "Omar";
+  import { branding } from '$lib/branding.svelte';
+  let NAME = $derived(branding.name);
 </script>
 
 <svelte:head>

@@ -3,12 +3,12 @@
   import {
     IconFiles, IconSparkles, IconPencil, IconChartBar, IconNote,
     IconLock, IconTerminal, IconBook, IconLanguage, IconApi,
-    IconSun, IconMoon, IconDeviceDesktop, IconLogout, IconCloud,
+    IconSun, IconMoon, IconDeviceDesktop, IconLogout,
     IconDots, IconX, IconSettings,
     IconDatabase, IconWaveSine,
   } from '@tabler/icons-svelte';
-    import { env } from '$env/dynamic/public';
-  const NAME = env.PUBLIC_NAME ?? "Omar";
+  import CloudLogo from '$lib/components/icons/CloudLogo.svelte';
+  import Avatar from '$lib/components/Avatar.svelte';
 
   type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'fx' | 'utility';
 
@@ -344,7 +344,7 @@
 {#if showUser && user}
   <div class="dock-user-panel" class:pos-top={position === 'top'} class:pos-left={position === 'left'} class:pos-right={position === 'right'}>
     <div class="dock-user-header">
-      <div class="dock-user-avatar-lg">{user.username[0].toUpperCase()}</div>
+      <div class="dock-user-avatar-lg"><Avatar name={user.username} /></div>
       <div class="dock-user-info">
         <span class="dock-user-name">{user.username}</span>
         <span class="dock-user-stats">{fmtBytes(storageBytes)} · {fileCount} files · {folderCount} folders</span>
@@ -395,7 +395,7 @@
 >
   <!-- Brand -->
   <div class="dock-brand">
-    <IconCloud size={16} stroke={1.5}/>
+    <CloudLogo size={16} stroke={1.5}/>
   </div>
 
   <div class="dock-sep"></div>
@@ -462,7 +462,7 @@
       role="button"
       tabindex="-1"
     >
-      <div class="dock-avatar-circle">{user.username[0].toUpperCase()}</div>
+      <div class="dock-avatar-circle"><Avatar name={user.username} /></div>
     </div>
   {/if}
 

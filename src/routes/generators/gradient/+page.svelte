@@ -5,7 +5,8 @@
   import { IconArrowLeft, IconDownload, IconRefresh, IconPlus, IconX } from '@tabler/icons-svelte';
   import SaveDialog from '$lib/components/SaveDialog.svelte';
   import { env } from '$env/dynamic/public';
-  const NAME = env.PUBLIC_NAME ?? "Omar";
+  import { branding } from '$lib/branding.svelte';
+  let NAME = $derived(branding.name);
 
   let { data } = $props();
   let apiKey = $derived(data?.apiKey ?? "");

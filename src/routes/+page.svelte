@@ -23,8 +23,7 @@
   import Utilities  from '$lib/tabs/Utilities.svelte';
   import BottomBar  from '$lib/components/BottomBar.svelte';
   import Toast      from '$lib/components/Toast.svelte';
-  import { env } from '$env/dynamic/public';
-  const NAME = env.PUBLIC_NAME ?? "Omar";
+  import { branding, loadBranding } from '$lib/branding.svelte';
 
   let { data } = $props();
   let user = $derived(data.user);
@@ -85,6 +84,8 @@
   }
 
   onMount(() => {
+    loadBranding();
+
     const saved = localStorage.getItem('theme');
     if (saved === 'light' || saved === 'dark' || saved === 'system') theme = saved as any;
     applyTheme();
@@ -153,7 +154,7 @@
 </script>
 
 <svelte:head>
-  <title>{NAME}'s Cloud</title>
+  <title>{branding.name}'s Cloud</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
 </svelte:head>
@@ -233,7 +234,7 @@
       {:else if activeTab === 'fx'}
         <FX {apiKey} />
       {:else if activeTab === 'utility'}
-        <Utilities />
+        <Utilities {user} />
       {/if}
     </main>
 

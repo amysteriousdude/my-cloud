@@ -3,6 +3,13 @@
   import { onMount } from 'svelte';
   import { IconRefresh, IconHistory, IconCopy, IconCheck, IconArrowLeft, IconDownload } from '@tabler/icons-svelte';
   import RobloxIcon from '$lib/components/icons/RobloxIcon.svelte';
+  import CloudLogo from '$lib/components/icons/CloudLogo.svelte';
+  import CloudSettings from '$lib/components/CloudSettings.svelte';
+  import { branding } from '$lib/branding.svelte';
+
+  let {
+    user = null,
+  }: { user?: { username: string; discordId: string; createdAt: string } | null } = $props();
 
   type HistoryEntry = { version: string; platform: string; channel: string; at: string };
 
@@ -23,7 +30,7 @@
   };
   const CHANNELS = ['LIVE', 'ZLIVE', 'zcanary', 'zdev'];
 
-  let view = $state<'home' | 'roblox'>('home');
+  let view = $state<'home' | 'roblox' | 'cloud'>('home');
   let platform = $state('windows');
   let channel = $state('LIVE');
   let version = $state<string | null>(null);
@@ -93,6 +100,10 @@
     fetchVersion();
   }
 
+  function openCloud() {
+    view = 'cloud';
+  }
+
   onMount(() => {
     try { history = JSON.parse(localStorage.getItem('robloxVersionHistory') || '[]'); } catch { history = []; }
   });
@@ -113,10 +124,20 @@
           <span class="card-desc">Live client versions from Roblox client settings, with change tracking.</span>
         </div>
       </button>
+
+      <button class="card" onclick={openCloud}>
+        <div class="card-banner banner-cloud">
+          <span class="card-icon"><CloudLogo size={44} stroke={1.3} /></span>
+        </div>
+        <div class="card-body">
+          <span class="card-title">Cloud</span>
+          <span class="card-desc">Display name, logo, profile picture, username and token.</span>
+        </div>
+      </button>
     </div>
 
     <p class="empty-note">more coming whenever i feel like it</p>
-  {:else}
+  {:else if view === 'roblox'}
     <button class="back-btn" onclick={() => view = 'home'}><IconArrowLeft size={15}/> Utilities</button>
 
     <div class="util-card">
@@ -205,6 +226,11 @@
         </div>
       {/if}
     </div>
+  {:else}
+    <button class="back-btn" onclick={() => view = 'home'}><IconArrowLeft size={15}/> Utilities</button>
+    <h1 class="page-title">{branding.name}'s Cloud</h1>
+    <p class="page-sub">How you show up across the app.</p>
+    <CloudSettings {user} />
   {/if}
 </div>
 
@@ -220,6 +246,12 @@
   .banner-roblox {
     background:
       radial-gradient(circle at 50% 50%, rgba(226,226,226,.14) 0%, transparent 55%),
+      repeating-linear-gradient(45deg, transparent, transparent 14px, rgba(255,255,255,.04) 14px, rgba(255,255,255,.04) 28px),
+      linear-gradient(135deg, #16161c 0%, #0b0b0e 100%);
+  }
+  .banner-cloud {
+    background:
+      radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--accent) 40%, transparent) 0%, transparent 60%),
       repeating-linear-gradient(45deg, transparent, transparent 14px, rgba(255,255,255,.04) 14px, rgba(255,255,255,.04) 28px),
       linear-gradient(135deg, #16161c 0%, #0b0b0e 100%);
   }

@@ -5,7 +5,7 @@
     IconFiles, IconSparkles, IconDownload, IconPhoto,
     IconSun, IconMoon, IconDeviceDesktop,
     IconLogout, IconLock, IconLockOpen,
-    IconFolder, IconFile, IconCloud, IconChevronUp, IconChevronDown,
+    IconFolder, IconFile, IconChevronUp, IconChevronDown,
     IconPencil,
     IconChartBar,
     IconNote,
@@ -19,8 +19,9 @@
     IconWaveSine,
     IconSettings,
   } from '@tabler/icons-svelte';
-    import { env } from '$env/dynamic/public';
-  const NAME = env.PUBLIC_NAME ?? "Omar";
+  import { branding } from '$lib/branding.svelte';
+  import CloudLogo from '$lib/components/icons/CloudLogo.svelte';
+  import Avatar from '$lib/components/Avatar.svelte';
 
   type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'ai' | 'fx' | 'utility';
 
@@ -115,8 +116,8 @@
 >
   <div class="sb-top">
     <div class="sb-logo">
-      <IconCloud size={18} stroke={1.5}/>
-      {#if isExpanded}<span class="sb-logo-text">{NAME}'s Cloud</span>{/if}
+      <CloudLogo size={18} stroke={1.5}/>
+      {#if isExpanded}<span class="sb-logo-text">{branding.name}'s Cloud</span>{/if}
     </div>
     {#if isExpanded}
       <button class="sb-lock" onclick={toggleLock} title={locked ? 'Unlock' : 'Lock open'}>
@@ -158,7 +159,7 @@
     </div>
     <div class="sb-divider"></div>
     <div class="sb-user">
-      <div class="sb-avatar">{user.username[0].toUpperCase()}</div>
+      <div class="sb-avatar"><Avatar name={user.username} /></div>
       {#if isExpanded}<span class="sb-username">{user.username}</span>{/if}
     </div>
     <div class="sb-actions">
@@ -193,7 +194,7 @@
 
     {#if user}
       <div class="sheet-user">
-        <div class="sb-avatar">{user.username[0].toUpperCase()}</div>
+        <div class="sb-avatar"><Avatar name={user.username} /></div>
         <div class="sheet-user-info">
           <span class="sheet-username">{user.username}</span>
           <span class="sheet-storage">💾 {fmtBytes(storageBytes)} · {fileCount} files · {folderCount} folders</span>

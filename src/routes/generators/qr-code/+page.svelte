@@ -6,7 +6,8 @@
   import SaveDialog from '$lib/components/SaveDialog.svelte';
   import { env } from '$env/dynamic/public';
   import QRCode from 'qrcode';
-  const NAME = env.PUBLIC_NAME ?? "Omar";
+  import { branding } from '$lib/branding.svelte';
+  let NAME = $derived(branding.name);
 
   let { data } = $props();
   let apiKey = $derived(data?.apiKey ?? "");

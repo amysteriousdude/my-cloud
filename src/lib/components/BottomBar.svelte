@@ -3,13 +3,13 @@
   import {
     IconFiles, IconSparkles, IconPencil, IconChartBar, IconNote,
     IconLock, IconTerminal, IconBook, IconLanguage, IconApi,
-    IconSun, IconMoon, IconDeviceDesktop, IconLogout, IconCloud,
+    IconSun, IconMoon, IconDeviceDesktop, IconLogout,
     IconDots, IconX, IconSettings,
     IconDatabase, IconBrain, IconHistory, IconPlus, IconTrash, IconPlayerStop, IconAdjustments,
     IconChevronDown, IconWaveSine,
   } from '@tabler/icons-svelte';
-    import { env } from '$env/dynamic/public';
-  const NAME = env.PUBLIC_NAME ?? "Omar";
+  import CloudLogo from '$lib/components/icons/CloudLogo.svelte';
+  import Avatar from '$lib/components/Avatar.svelte';
 
   type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'ai' | 'fx' | 'utility';
 
@@ -457,7 +457,7 @@
 {#if showUser && user}
   <div class="bb-user-panel" class:pos-top={position === 'top'} class:pos-left={position === 'left'} class:pos-right={position === 'right'}>
     <div class="bb-user-header">
-      <div class="bb-user-avatar-lg">{user.username[0].toUpperCase()}</div>
+      <div class="bb-user-avatar-lg"><Avatar name={user.username} /></div>
       <div class="bb-user-info">
         <span class="bb-user-name">{user.username}</span>
         <span class="bb-user-stats">{fmtBytes(storageBytes)} · {fileCount} files · {folderCount} folders</span>
@@ -513,7 +513,7 @@
   <div class="bb-nav-section" onmouseenter={onBarNavEnter} onmouseleave={onBarNavLeave}>
     <!-- Brand / cloud icon (always visible) -->
     <div class="bb-brand">
-      <IconCloud size={16} stroke={1.5}/>
+      <CloudLogo size={16} stroke={1.5}/>
     </div>
     {#if hasCustomUtility}
       <button class="bb-mobile-nav-toggle" onclick={() => navExpanded = !navExpanded} aria-label="Toggle navigation tabs">
@@ -703,7 +703,7 @@
       role="button"
       tabindex="-1"
     >
-      <div class="bb-avatar-circle">{user.username[0].toUpperCase()}</div>
+      <div class="bb-avatar-circle"><Avatar name={user.username} /></div>
     </div>
   {/if}
 </div>
