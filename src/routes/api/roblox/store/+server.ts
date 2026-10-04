@@ -65,12 +65,28 @@ async function androidVersion() {
   };
 }
 
+async function itunesLookup(query: string) {
+  const res = await fetch(`https://itunes.apple.com/lookup?${query}`, {
+    headers: { 'User-Agent': UA, 'Accept': 'application/json' },
+  });
+  if (!res.ok) throw new Error(`itunes HTTP ${res.status}`);
+  return res.json();
+}
+
 async function iosVersion() {
-  const res = await fetch('https://itunes.apple.com/lookup?bundleId=com.roblox.RobloxMobile');
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const data = await res.json();
+  let data: any = null;
+  let lastErr = '';
+  for (const q of ['bundleId=com.roblox.RobloxMobile', 'id=431946152&country=us']) {
+    try {
+      const d = await itunesLookup(q);
+      if (d?.results?.[0]?.version) { data = d; break; }
+      lastErr = `${q}: empty result`;
+    } catch (e: any) {
+      lastErr = `${q}: ${e?.message ?? 'failed'}`;
+    }
+  }
   const r = data?.results?.[0];
-  if (!r?.version) throw new Error('no iTunes result');
+  if (!r?.version) throw new Error(lastErr || 'itunes lookup failed');
   return { version: r.version, updated: r.currentVersionReleaseDate ?? null, source: 'itunes', download: r.trackViewUrl ?? null };
 }
 
