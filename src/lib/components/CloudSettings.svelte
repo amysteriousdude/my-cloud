@@ -142,8 +142,8 @@
       <label class="cs-label">Logo</label>
       <div class="cs-icons">
         {#each CLOUD_ICON_KEYS as key (key)}
+          {@const I = CLOUD_ICONS[key]}
           <button class="cs-icon" class:cs-icon-active={branding.icon === key} onclick={() => pickIcon(key)} title={key}>
-            {@const I = CLOUD_ICONS[key]}
             <I size={18} stroke={1.6} />
           </button>
         {/each}
