@@ -10,7 +10,6 @@
     IconFileText,
     IconMovie,
     IconVector,
-    IconSun,
     IconWand,
     IconLayout,
     IconChartBar,

@@ -1,7 +1,7 @@
 <!-- hello there, tf u doing on my code???? -->
 <script lang="ts">
   import {
-    IconFiles, IconSparkles, IconPencil, IconChartBar, IconNote, IconFileText, IconMovie, IconVector, IconSun, IconWand, IconLayout,
+    IconFiles, IconSparkles, IconPencil, IconChartBar, IconNote, IconFileText, IconMovie, IconVector, IconWand, IconLayout,
     IconLock, IconTerminal, IconBook, IconLanguage, IconApi,
     IconSun, IconMoon, IconDeviceDesktop, IconLogout,
     IconDots, IconX, IconSettings,
