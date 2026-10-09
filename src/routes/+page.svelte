@@ -30,7 +30,7 @@
   let apiKey = $derived(data.apiKey);
   let encryptedApiKey = $derived(data.encryptedApiKey);
 
-  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'pdf' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'ai' | 'fx' | 'utility';
+  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'pdf' | 'film' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'ai' | 'fx' | 'utility';
   let activeTab = $state<Tab>('files');
   let editorFile = $state<{ metaFileId: string; fileName: string } | null>(null);
   let filesRefreshNonce = $state(0);
@@ -125,7 +125,7 @@
 
   let dockHovered = $state(false);
   let dockHoverTimeout: ReturnType<typeof setTimeout> | null = null;
-  let isCraftTab = $derived(activeTab === 'draw' || activeTab === 'pdf');
+  let isCraftTab = $derived(activeTab === 'draw' || activeTab === 'pdf' || activeTab === 'film');
   let dockAutoHide = $derived(isCraftTab && dockMode === 'dock');
 
   function onDockHoverZoneEnter() {
@@ -251,6 +251,15 @@
           wasmPath="/pdfcraft/pdfcraft-web-a5e9b1d863d1ae9b_bg.wasm.gz"
           canvasId="pdfcraft"
           active={activeTab === 'pdf'}
+        />
+      </div>
+      <div class="craft-host" class:craft-show={activeTab === 'film'}>
+        <CraftPane
+          label="FilmCraft"
+          jsPath="/filmcraft/filmcraft_web.js"
+          wasmPath="/filmcraft/filmcraft_web_bg.wasm.gz"
+          canvasId="filmcraft_canvas"
+          active={activeTab === 'film'}
         />
       </div>
     </main>

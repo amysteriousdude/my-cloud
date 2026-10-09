@@ -33,6 +33,7 @@
     try {
       const mod = await import(/* @vite-ignore */ jsPath);
       await mod.default({ module_or_path: await fetchWasm(wasmPath) });
+      if (typeof mod.start === 'function') await mod.start(canvasId);
     } catch (e: any) {
       error = e?.message ?? String(e);
     } finally {

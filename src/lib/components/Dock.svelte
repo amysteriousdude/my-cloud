@@ -1,7 +1,7 @@
 <!-- hello there, tf u doing on my code???? -->
 <script lang="ts">
   import {
-    IconFiles, IconSparkles, IconPencil, IconChartBar, IconNote, IconFileText,
+    IconFiles, IconSparkles, IconPencil, IconChartBar, IconNote, IconFileText, IconMovie,
     IconLock, IconTerminal, IconBook, IconLanguage, IconApi,
     IconSun, IconMoon, IconDeviceDesktop, IconLogout,
     IconDots, IconX, IconSettings,
@@ -10,7 +10,7 @@
   import CloudLogo from '$lib/components/icons/CloudLogo.svelte';
   import Avatar from '$lib/components/Avatar.svelte';
 
-  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'pdf' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'fx' | 'utility';
+  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'pdf' | 'film' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'fx' | 'utility';
 
   let {
     user,
@@ -43,6 +43,7 @@
     { id: 'generators', icon: IconSparkles,    label: 'Generators' },
     { id: 'draw',       icon: IconPencil,      label: 'Draw' },
     { id: 'pdf',        icon: IconFileText,    label: 'PDF' },
+    { id: 'film',       icon: IconMovie,       label: 'Film' },
     { id: 'stats',      icon: IconChartBar,    label: 'Stats' },
     { id: 'notes',      icon: IconNote,        label: 'Notes' },
     { id: 'vault',      icon: IconLock,        label: 'Vault' },

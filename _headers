@@ -1,4 +1,4 @@
-# header rules for the bundled PhotoCraft + PdfCraft web builds (see HOSTING.md in each folder)
+# header rules for the bundled PhotoCraft + PdfCraft + FilmCraft web builds (see HOSTING.md in each folder)
 
 /photocraft/*
   X-Content-Type-Options: nosniff
@@ -25,4 +25,18 @@
   Cache-Control: public, max-age=31536000, immutable
 
 /pdfcraft/index.html
+  Cache-Control: no-cache
+
+/filmcraft/*
+  X-Content-Type-Options: nosniff
+
+/filmcraft/*.wasm.gz
+  Content-Encoding: gzip
+  Content-Type: application/wasm
+  Cache-Control: public, max-age=31536000, immutable
+
+/filmcraft/*.js
+  Cache-Control: public, max-age=31536000, immutable
+
+/filmcraft/index.html
   Cache-Control: no-cache
