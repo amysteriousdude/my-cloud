@@ -8,7 +8,7 @@
   import Files from '$lib/tabs/Files.svelte';
   import Generators from '$lib/tabs/Generators.svelte';
   import Downloader from '$lib/tabs/Downloader.svelte';
-  import Draw       from '$lib/draw/Draw.svelte';
+  import CraftPane from '$lib/craft/CraftPane.svelte';
   import Editor     from '$lib/tabs/Editor.svelte';
   import Stats      from '$lib/tabs/Stats.svelte';
   import Vault	    from '$lib/tabs/Vault.svelte';
@@ -30,7 +30,7 @@
   let apiKey = $derived(data.apiKey);
   let encryptedApiKey = $derived(data.encryptedApiKey);
 
-  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'ai' | 'fx' | 'utility';
+  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'pdf' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'ai' | 'fx' | 'utility';
   let activeTab = $state<Tab>('files');
   let editorFile = $state<{ metaFileId: string; fileName: string } | null>(null);
   let filesRefreshNonce = $state(0);
@@ -125,8 +125,8 @@
 
   let dockHovered = $state(false);
   let dockHoverTimeout: ReturnType<typeof setTimeout> | null = null;
-  let isDrawTab = $derived(activeTab === 'draw');
-  let dockAutoHide = $derived(isDrawTab && dockMode === 'dock');
+  let isCraftTab = $derived(activeTab === 'draw' || activeTab === 'pdf');
+  let dockAutoHide = $derived(isCraftTab && dockMode === 'dock');
 
   function onDockHoverZoneEnter() {
     if (dockHoverTimeout) { clearTimeout(dockHoverTimeout); dockHoverTimeout = null; }
@@ -211,8 +211,6 @@
         <Generators />
       {:else if activeTab === 'downloader'}
         <Downloader />
-      {:else if activeTab === 'draw'}
-        <Draw {apiKey} fullscreen={dockAutoHide && !dockHovered} />
       {:else if activeTab === 'stats'}
         <Stats {apiKey} />
       {:else if activeTab === 'editor'}
@@ -236,6 +234,25 @@
       {:else if activeTab === 'utility'}
         <Utilities {user} />
       {/if}
+
+      <div class="craft-host" class:craft-show={activeTab === 'draw'}>
+        <CraftPane
+          label="PhotoCraft"
+          jsPath="/photocraft/photocraft-web-d1c0874c5553435c.js"
+          wasmPath="/photocraft/photocraft-web-d1c0874c5553435c_bg.wasm"
+          canvasId="photocraft_canvas"
+          active={activeTab === 'draw'}
+        />
+      </div>
+      <div class="craft-host" class:craft-show={activeTab === 'pdf'}>
+        <CraftPane
+          label="PdfCraft"
+          jsPath="/pdfcraft/pdfcraft-web-a5e9b1d863d1ae9b.js"
+          wasmPath="/pdfcraft/pdfcraft-web-a5e9b1d863d1ae9b_bg.wasm.gz"
+          canvasId="pdfcraft"
+          active={activeTab === 'pdf'}
+        />
+      </div>
     </main>
 
     <!-- AI floating panel (rendered outside main, above Bottom Bar) -->
@@ -263,6 +280,9 @@
     min-width: 0;
     transition: margin 0.22s cubic-bezier(.16,1,.3,1);
   }
+
+  .craft-host { display: none; height: 100%; width: 100%; }
+  .craft-host.craft-show { display: block; }
 
   /* Sidebar mode: left margin */
   .app:not(.dock-mode) .main {

@@ -1,7 +1,7 @@
 <!-- hello there, tf u doing on my code???? -->
 <script lang="ts">
   import {
-    IconFiles, IconSparkles, IconPencil, IconChartBar, IconNote,
+    IconFiles, IconSparkles, IconPencil, IconChartBar, IconNote, IconFileText,
     IconLock, IconTerminal, IconBook, IconLanguage, IconApi,
     IconSun, IconMoon, IconDeviceDesktop, IconLogout,
     IconDots, IconX, IconSettings,
@@ -11,7 +11,7 @@
   import CloudLogo from '$lib/components/icons/CloudLogo.svelte';
   import Avatar from '$lib/components/Avatar.svelte';
 
-  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'ai' | 'fx' | 'utility';
+  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'pdf' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'ai' | 'fx' | 'utility';
 
   type BarButton = {
     icon: any;
@@ -95,6 +95,7 @@
     { id: 'files',      icon: IconFiles,      label: 'Files' },
     { id: 'generators', icon: IconSparkles,    label: 'Generators' },
     { id: 'draw',       icon: IconPencil,      label: 'Draw' },
+    { id: 'pdf',        icon: IconFileText,    label: 'PDF' },
     { id: 'stats',      icon: IconChartBar,    label: 'Stats' },
     { id: 'notes',      icon: IconNote,        label: 'Notes' },
     { id: 'vault',      icon: IconLock,        label: 'Vault' },

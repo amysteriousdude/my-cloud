@@ -1,0 +1,67 @@
+<!-- hello there, tf u doing on my code???? -->
+<script lang="ts">
+  let {
+    label,
+    jsPath,
+    wasmPath,
+    canvasId,
+    active = false,
+  }: {
+    label: string;
+    jsPath: string;
+    wasmPath: string;
+    canvasId: string;
+    active?: boolean;
+  } = $props();
+
+  let booted = $state(false);
+  let loading = $state(false);
+  let error = $state<string | null>(null);
+
+  async function boot() {
+    if (booted) return;
+    booted = true;
+    loading = true;
+    try {
+      const mod = await import(/* @vite-ignore */ jsPath);
+      await mod.default({ module_or_path: wasmPath });
+    } catch (e: any) {
+      error = e?.message ?? String(e);
+    } finally {
+      loading = false;
+    }
+  }
+
+  $effect(() => {
+    if (active) boot();
+  });
+</script>
+
+<div class="craft-pane" class:craft-off={!active}>
+  <canvas id={canvasId} tabindex="0"></canvas>
+  {#if loading}
+    <div class="craft-loading">
+      <p>Loading {label}…</p>
+      <p class="craft-sub">first time only, it's a big download</p>
+    </div>
+  {:else if error}
+    <div class="craft-loading"><p>Failed to load {label}: {error}</p></div>
+  {/if}
+</div>
+
+<style>
+  .craft-pane {
+    position: relative;
+    width: 100%; height: 100%;
+    background: #1c1c1c;
+  }
+  .craft-off { display: none; }
+  canvas { width: 100%; height: 100%; display: block; outline: none; }
+  .craft-loading {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+    background: #1c1c1c; color: #9a9a9a; font-size: 13px; font-family: 'Geist', sans-serif;
+  }
+  .craft-loading p { margin: 0; }
+  .craft-sub { font-size: 11px; color: #666; }
+</style>

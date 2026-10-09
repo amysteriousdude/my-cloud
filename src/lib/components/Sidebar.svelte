@@ -7,6 +7,7 @@
     IconLogout, IconLock, IconLockOpen,
     IconFolder, IconFile, IconChevronUp, IconChevronDown,
     IconPencil,
+    IconFileText,
     IconChartBar,
     IconNote,
     IconTerminal,
@@ -23,7 +24,7 @@
   import CloudLogo from '$lib/components/icons/CloudLogo.svelte';
   import Avatar from '$lib/components/Avatar.svelte';
 
-  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'ai' | 'fx' | 'utility';
+  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'pdf' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'ai' | 'fx' | 'utility';
 
   let {
     user,
@@ -76,6 +77,7 @@
     { id: 'files',      icon: IconFiles,          label: 'Files'      },
     { id: 'generators', icon: IconSparkles,        label: 'Generators' },
     { id: 'draw',       icon: IconPencil,           label: 'Draw'       },
+    { id: 'pdf',        icon: IconFileText,         label: 'PDF'        },
     { id: 'stats',      icon: IconChartBar,          label: 'Stats'      },
     { id: 'notes',      icon: IconNote,               label: 'Notes'      },
     { id: 'vault',      icon: IconLock,                label: 'Vault' },
@@ -88,7 +90,7 @@
     { id: 'fx',       icon: IconWaveSine,             label: 'FX' },
     { id: 'utility',  icon: IconSettings,          label: 'Utilities' },
   ];
-  const PRIMARY_TABS: Tab[] = ['files', 'draw', 'stats', 'notes', 'vault'];
+  const PRIMARY_TABS: Tab[] = ['files', 'draw', 'pdf', 'stats', 'notes', 'vault'];
   const secondaryIds: Tab[] = ['generators', 'downloader', 'console', 'dictionary', 'translator', 'apitester', 'database', 'ai', 'fx', 'utility'];
   const secondaryTabs = TABS.filter(t => secondaryIds.includes(t.id));
   const primaryTabs = TABS.filter(t => PRIMARY_TABS.includes(t.id));
