@@ -26,11 +26,26 @@
     return new Response(stream).arrayBuffer();
   }
 
+  let workletPatched = false;
+  function patchWorklet() {
+    if (workletPatched) return;
+    workletPatched = true;
+    const orig = AudioWorklet.prototype.addModule;
+    AudioWorklet.prototype.addModule = function (mod: RequestInfo | URL, options?: WorkletOptions) {
+      const s = String(mod);
+      if (s === 'audio-worklet.js' || s.endsWith('/audio-worklet.js')) {
+        return orig.call(this, '/filmcraft/audio-worklet.js', options);
+      }
+      return orig.call(this, mod, options);
+    };
+  }
+
   async function boot() {
     if (booted) return;
     booted = true;
     loading = true;
     try {
+      patchWorklet();
       const mod = await import(/* @vite-ignore */ jsPath);
       await mod.default({ module_or_path: await fetchWasm(wasmPath) });
       if (typeof mod.start === 'function') await mod.start(canvasId);
