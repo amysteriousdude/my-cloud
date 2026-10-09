@@ -18,13 +18,21 @@
   let loading = $state(false);
   let error = $state<string | null>(null);
 
+  async function fetchWasm(path: string) {
+    if (!path.endsWith('.gz')) return path;
+    const res = await fetch(path);
+    if (!res.ok) throw new Error(`failed to fetch wasm: ${res.status}`);
+    const stream = res.body!.pipeThrough(new DecompressionStream('gzip'));
+    return new Response(stream).arrayBuffer();
+  }
+
   async function boot() {
     if (booted) return;
     booted = true;
     loading = true;
     try {
       const mod = await import(/* @vite-ignore */ jsPath);
-      await mod.default({ module_or_path: wasmPath });
+      await mod.default({ module_or_path: await fetchWasm(wasmPath) });
     } catch (e: any) {
       error = e?.message ?? String(e);
     } finally {

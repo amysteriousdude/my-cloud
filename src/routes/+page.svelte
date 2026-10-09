@@ -194,7 +194,7 @@
       />
     {/if}
 
-    <main class="main" class:draw-fullscreen={dockAutoHide && !dockHovered} class:ai-active={activeTab === 'ai'}>
+    <main class="main" class:draw-fullscreen={dockAutoHide && !dockHovered} class:craft-mode={isCraftTab} class:ai-active={activeTab === 'ai'}>
       {#if activeTab === 'files'}
         <Files
           {user}
@@ -281,8 +281,13 @@
     transition: margin 0.22s cubic-bezier(.16,1,.3,1);
   }
 
-  .craft-host { display: none; height: 100%; width: 100%; }
+  .craft-host { display: none; height: 100%; width: 100%; overflow: hidden; }
   .craft-host.craft-show { display: block; }
+
+  .main.craft-mode {
+    height: 100vh;
+    overflow: hidden;
+  }
 
   /* Sidebar mode: left margin */
   .app:not(.dock-mode) .main {
