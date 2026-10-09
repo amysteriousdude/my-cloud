@@ -30,7 +30,7 @@
   let apiKey = $derived(data.apiKey);
   let encryptedApiKey = $derived(data.encryptedApiKey);
 
-  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'pdf' | 'film' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'ai' | 'fx' | 'utility';
+  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'pdf' | 'film' | 'vector' | 'light' | 'effect' | 'design' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'ai' | 'fx' | 'utility';
   let activeTab = $state<Tab>('files');
   let editorFile = $state<{ metaFileId: string; fileName: string } | null>(null);
   let filesRefreshNonce = $state(0);
@@ -125,7 +125,7 @@
 
   let dockHovered = $state(false);
   let dockHoverTimeout: ReturnType<typeof setTimeout> | null = null;
-  let isCraftTab = $derived(activeTab === 'draw' || activeTab === 'pdf' || activeTab === 'film');
+  let isCraftTab = $derived(['draw', 'pdf', 'film', 'vector', 'light', 'effect', 'design'].includes(activeTab));
   let dockAutoHide = $derived(isCraftTab && dockMode === 'dock');
 
   function onDockHoverZoneEnter() {
@@ -260,6 +260,44 @@
           wasmPath="/filmcraft/filmcraft_web_bg.wasm.gz"
           canvasId="filmcraft_canvas"
           active={activeTab === 'film'}
+        />
+      </div>
+      <div class="craft-host" class:craft-show={activeTab === 'vector'}>
+        <CraftPane
+          label="VectorCraft"
+          jsPath="/vectorcraft/vectorcraft-web-dc0d7ab8eeca049b.js"
+          wasmPath="/vectorcraft/vectorcraft-web-dc0d7ab8eeca049b_bg.wasm.gz"
+          canvasId="vectorcraft_canvas"
+          active={activeTab === 'vector'}
+        />
+      </div>
+      <div class="craft-host" class:craft-show={activeTab === 'light'}>
+        <CraftPane
+          label="LightCraft"
+          jsPath="/lightcraft/lightcraft_web.js"
+          wasmPath="/lightcraft/lightcraft_web_bg.wasm.gz"
+          canvasId="lightcraft_canvas"
+          moduleGlobal="lightcraftModule"
+          active={activeTab === 'light'}
+        />
+      </div>
+      <div class="craft-host" class:craft-show={activeTab === 'effect'}>
+        <CraftPane
+          label="EffectCraft"
+          jsPath="/effectcraft/effectcraft_web.js"
+          wasmPath="/effectcraft/effectcraft_web_bg.wasm.gz"
+          canvasId="effectcraft_canvas"
+          moduleGlobal="effectcraftModule"
+          active={activeTab === 'effect'}
+        />
+      </div>
+      <div class="craft-host" class:craft-show={activeTab === 'design'}>
+        <CraftPane
+          label="DesignCraft"
+          jsPath="/designcraft/designcraft-web-47bda5c2b7b43c6c.js"
+          wasmPath="/designcraft/designcraft-web-47bda5c2b7b43c6c_bg.wasm.gz"
+          canvasId="designcraft_canvas"
+          active={activeTab === 'design'}
         />
       </div>
     </main>

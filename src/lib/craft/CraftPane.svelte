@@ -5,12 +5,14 @@
     jsPath,
     wasmPath,
     canvasId,
+    moduleGlobal = '',
     active = false,
   }: {
     label: string;
     jsPath: string;
     wasmPath: string;
     canvasId: string;
+    moduleGlobal?: string;
     active?: boolean;
   } = $props();
 
@@ -18,26 +20,52 @@
   let loading = $state(false);
   let error = $state<string | null>(null);
 
-  async function fetchWasm(path: string) {
-    if (!path.endsWith('.gz')) return path;
-    const res = await fetch(path);
-    if (!res.ok) throw new Error(`failed to fetch wasm: ${res.status}`);
-    const stream = res.body!.pipeThrough(new DecompressionStream('gzip'));
-    return new Response(stream).arrayBuffer();
+  let craftBase = '/';
+  let urlPatched = false;
+
+  function patchUrls(base: string) {
+    craftBase = base;
+    if (urlPatched) return;
+    urlPatched = true;
+
+    const resolve = (u: unknown) => {
+      const s = String(u);
+      if (!s || s.startsWith('data:') || s.startsWith('blob:')) return s;
+      try {
+        const abs = new URL(s, location.origin + craftBase);
+        if (abs.origin === location.origin && (abs.pathname === '/worker.js' || abs.pathname === '/audio-worklet.js')) {
+          abs.pathname = craftBase + abs.pathname.slice(1);
+        }
+        return abs.href;
+      } catch {
+        return s;
+      }
+    };
+
+    const origAdd = AudioWorklet.prototype.addModule;
+    AudioWorklet.prototype.addModule = function (mod: RequestInfo | URL, options?: WorkletOptions) {
+      return origAdd.call(this, resolve(mod) as RequestInfo, options);
+    };
+
+    const OrigWorker = window.Worker;
+    window.Worker = class extends OrigWorker {
+      constructor(scriptURL: string | URL, options?: WorkerOptions) {
+        super(resolve(scriptURL) as string | URL, options);
+      }
+    };
   }
 
-  let workletPatched = false;
-  function patchWorklet() {
-    if (workletPatched) return;
-    workletPatched = true;
-    const orig = AudioWorklet.prototype.addModule;
-    AudioWorklet.prototype.addModule = function (mod: RequestInfo | URL, options?: WorkletOptions) {
-      const s = String(mod);
-      if (s === 'audio-worklet.js' || s.endsWith('/audio-worklet.js')) {
-        return orig.call(this, '/filmcraft/audio-worklet.js', options);
-      }
-      return orig.call(this, mod, options);
-    };
+  async function loadWasmModule(path: string): Promise<WebAssembly.Module> {
+    const res = await fetch(path.endsWith('.gz') ? path : path);
+    if (!res.ok) throw new Error(`failed to fetch wasm: ${res.status}`);
+    let bytes: ArrayBuffer;
+    if (path.endsWith('.gz')) {
+      const stream = res.body!.pipeThrough(new DecompressionStream('gzip'));
+      bytes = await new Response(stream).arrayBuffer();
+    } else {
+      bytes = await res.arrayBuffer();
+    }
+    return WebAssembly.compile(bytes);
   }
 
   async function boot() {
@@ -45,9 +73,12 @@
     booted = true;
     loading = true;
     try {
-      patchWorklet();
+      const base = jsPath.slice(0, jsPath.lastIndexOf('/') + 1);
+      patchUrls(base);
       const mod = await import(/* @vite-ignore */ jsPath);
-      await mod.default({ module_or_path: await fetchWasm(wasmPath) });
+      const wasmModule = await loadWasmModule(wasmPath);
+      if (moduleGlobal) (globalThis as any)[moduleGlobal] = wasmModule;
+      await mod.default({ module_or_path: wasmModule });
       if (typeof mod.start === 'function') await mod.start(canvasId);
     } catch (e: any) {
       error = e?.message ?? String(e);
