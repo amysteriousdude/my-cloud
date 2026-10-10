@@ -15,6 +15,7 @@
     IconTypography,
     IconPresentation,
     IconGridDots,
+    IconMusic,
     IconChartBar,
     IconNote,
     IconTerminal,
@@ -31,7 +32,7 @@
   import CloudLogo from '$lib/components/icons/CloudLogo.svelte';
   import Avatar from '$lib/components/Avatar.svelte';
 
-  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'pdf' | 'film' | 'vector' | 'light' | 'effect' | 'design' | 'word' | 'deck' | 'grid' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'ai' | 'fx' | 'utility';
+  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'pdf' | 'film' | 'vector' | 'light' | 'effect' | 'design' | 'word' | 'deck' | 'grid' | 'sound' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'ai' | 'fx' | 'utility';
 
   let {
     user,
@@ -93,6 +94,7 @@
     { id: 'word',       icon: IconTypography,        label: 'Word'       },
     { id: 'deck',       icon: IconPresentation,      label: 'Deck'       },
     { id: 'grid',       icon: IconGridDots,          label: 'Grid'       },
+    { id: 'sound',      icon: IconMusic,             label: 'Sound'      },
     { id: 'stats',      icon: IconChartBar,          label: 'Stats'      },
     { id: 'notes',      icon: IconNote,               label: 'Notes'      },
     { id: 'vault',      icon: IconLock,                label: 'Vault' },
@@ -105,7 +107,7 @@
     { id: 'fx',       icon: IconWaveSine,             label: 'FX' },
     { id: 'utility',  icon: IconSettings,          label: 'Utilities' },
   ];
-  const PRIMARY_TABS: Tab[] = ['files', 'draw', 'pdf', 'film', 'vector', 'light', 'effect', 'design', 'word', 'deck', 'grid', 'stats', 'notes', 'vault'];
+  const PRIMARY_TABS: Tab[] = ['files', 'draw', 'pdf', 'film', 'vector', 'light', 'effect', 'design', 'word', 'deck', 'grid', 'sound', 'stats', 'notes', 'vault'];
   const secondaryIds: Tab[] = ['generators', 'downloader', 'console', 'dictionary', 'translator', 'apitester', 'database', 'ai', 'fx', 'utility'];
   const secondaryTabs = TABS.filter(t => secondaryIds.includes(t.id));
   const primaryTabs = TABS.filter(t => PRIMARY_TABS.includes(t.id));

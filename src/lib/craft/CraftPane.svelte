@@ -68,6 +68,30 @@
     return WebAssembly.compile(bytes);
   }
 
+  let audioPatched = false;
+  function patchAudio() {
+    if (audioPatched) return;
+    audioPatched = true;
+    const Orig = window.AudioContext;
+    if (!Orig) return;
+    const ctxs: AudioContext[] = [];
+    const Wrapped = function (this: unknown, opts?: AudioContextOptions) {
+      const c = new Orig(opts);
+      ctxs.push(c);
+      return c;
+    } as any;
+    Wrapped.prototype = Orig.prototype;
+    window.AudioContext = Wrapped;
+    const resumeAll = () => {
+      for (const c of ctxs) {
+        if (c.state === 'suspended') c.resume().catch(() => {});
+      }
+    };
+    for (const ev of ['pointerdown', 'mousedown', 'touchstart', 'keydown'] as const) {
+      window.addEventListener(ev, resumeAll, { capture: true });
+    }
+  }
+
   async function boot() {
     if (booted) return;
     booted = true;
@@ -75,6 +99,7 @@
     try {
       const base = jsPath.slice(0, jsPath.lastIndexOf('/') + 1);
       patchUrls(base);
+      patchAudio();
       const mod = await import(/* @vite-ignore */ jsPath);
       const wasmModule = await loadWasmModule(wasmPath);
       if (moduleGlobal) (globalThis as any)[moduleGlobal] = wasmModule;

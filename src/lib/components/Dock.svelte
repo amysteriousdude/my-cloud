@@ -1,7 +1,7 @@
 <!-- hello there, tf u doing on my code???? -->
 <script lang="ts">
   import {
-    IconFiles, IconSparkles, IconPencil, IconChartBar, IconNote, IconFileText, IconMovie, IconVector, IconWand, IconLayout, IconTypography, IconPresentation, IconGridDots,
+    IconFiles, IconSparkles, IconPencil, IconChartBar, IconNote, IconFileText, IconMovie, IconVector, IconWand, IconLayout, IconTypography, IconPresentation, IconGridDots, IconMusic,
     IconLock, IconTerminal, IconBook, IconLanguage, IconApi,
     IconSun, IconMoon, IconDeviceDesktop, IconLogout,
     IconDots, IconX, IconSettings,
@@ -10,7 +10,7 @@
   import CloudLogo from '$lib/components/icons/CloudLogo.svelte';
   import Avatar from '$lib/components/Avatar.svelte';
 
-  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'pdf' | 'film' | 'vector' | 'light' | 'effect' | 'design' | 'word' | 'deck' | 'grid' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'fx' | 'utility';
+  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'pdf' | 'film' | 'vector' | 'light' | 'effect' | 'design' | 'word' | 'deck' | 'grid' | 'sound' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'fx' | 'utility';
 
   let {
     user,
@@ -51,6 +51,7 @@
     { id: 'word',       icon: IconTypography,   label: 'Word' },
     { id: 'deck',       icon: IconPresentation, label: 'Deck' },
     { id: 'grid',       icon: IconGridDots,     label: 'Grid' },
+    { id: 'sound',      icon: IconMusic,        label: 'Sound' },
     { id: 'stats',      icon: IconChartBar,    label: 'Stats' },
     { id: 'notes',      icon: IconNote,        label: 'Notes' },
     { id: 'vault',      icon: IconLock,        label: 'Vault' },

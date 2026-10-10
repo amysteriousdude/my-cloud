@@ -30,7 +30,7 @@
   let apiKey = $derived(data.apiKey);
   let encryptedApiKey = $derived(data.encryptedApiKey);
 
-  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'pdf' | 'film' | 'vector' | 'light' | 'effect' | 'design' | 'word' | 'deck' | 'grid' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'ai' | 'fx' | 'utility';
+  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'pdf' | 'film' | 'vector' | 'light' | 'effect' | 'design' | 'word' | 'deck' | 'grid' | 'sound' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'ai' | 'fx' | 'utility';
   let activeTab = $state<Tab>('files');
   let editorFile = $state<{ metaFileId: string; fileName: string } | null>(null);
   let filesRefreshNonce = $state(0);
@@ -125,7 +125,7 @@
 
   let dockHovered = $state(false);
   let dockHoverTimeout: ReturnType<typeof setTimeout> | null = null;
-  let isCraftTab = $derived(['draw', 'pdf', 'film', 'vector', 'light', 'effect', 'design', 'word', 'deck', 'grid'].includes(activeTab));
+  let isCraftTab = $derived(['draw', 'pdf', 'film', 'vector', 'light', 'effect', 'design', 'word', 'deck', 'grid', 'sound'].includes(activeTab));
   let dockAutoHide = $derived(isCraftTab && dockMode === 'dock');
 
   function onDockHoverZoneEnter() {
@@ -325,6 +325,15 @@
           wasmPath="/gridcraft/gridcraft-web-9ff3b9315f5260cf_bg.wasm"
           canvasId="gridcraft_canvas"
           active={activeTab === 'grid'}
+        />
+      </div>
+      <div class="craft-host" class:craft-show={activeTab === 'sound'}>
+        <CraftPane
+          label="SoundCraft"
+          jsPath="/soundcraft/soundcraft-web-b3884c402b3ea57e.js"
+          wasmPath="/soundcraft/soundcraft-web-b3884c402b3ea57e_bg.wasm"
+          canvasId="soundcraft_canvas"
+          active={activeTab === 'sound'}
         />
       </div>
     </main>
