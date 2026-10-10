@@ -30,7 +30,7 @@
   let apiKey = $derived(data.apiKey);
   let encryptedApiKey = $derived(data.encryptedApiKey);
 
-  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'pdf' | 'film' | 'vector' | 'light' | 'effect' | 'design' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'ai' | 'fx' | 'utility';
+  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'pdf' | 'film' | 'vector' | 'light' | 'effect' | 'design' | 'word' | 'deck' | 'grid' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'ai' | 'fx' | 'utility';
   let activeTab = $state<Tab>('files');
   let editorFile = $state<{ metaFileId: string; fileName: string } | null>(null);
   let filesRefreshNonce = $state(0);
@@ -125,7 +125,7 @@
 
   let dockHovered = $state(false);
   let dockHoverTimeout: ReturnType<typeof setTimeout> | null = null;
-  let isCraftTab = $derived(['draw', 'pdf', 'film', 'vector', 'light', 'effect', 'design'].includes(activeTab));
+  let isCraftTab = $derived(['draw', 'pdf', 'film', 'vector', 'light', 'effect', 'design', 'word', 'deck', 'grid'].includes(activeTab));
   let dockAutoHide = $derived(isCraftTab && dockMode === 'dock');
 
   function onDockHoverZoneEnter() {
@@ -298,6 +298,33 @@
           wasmPath="/designcraft/designcraft-web-47bda5c2b7b43c6c_bg.wasm.gz"
           canvasId="designcraft_canvas"
           active={activeTab === 'design'}
+        />
+      </div>
+      <div class="craft-host" class:craft-show={activeTab === 'word'}>
+        <CraftPane
+          label="WordCraft"
+          jsPath="/wordcraft/wordcraft-web-bf24e657ac946abf.js"
+          wasmPath="/wordcraft/wordcraft-web-bf24e657ac946abf_bg.wasm.gz"
+          canvasId="wordcraft_canvas"
+          active={activeTab === 'word'}
+        />
+      </div>
+      <div class="craft-host" class:craft-show={activeTab === 'deck'}>
+        <CraftPane
+          label="DeckCraft"
+          jsPath="/deckcraft/deckcraft-web-1c141558cb0a5c2c.js"
+          wasmPath="/deckcraft/deckcraft-web-1c141558cb0a5c2c_bg.wasm.gz"
+          canvasId="deckcraft_canvas"
+          active={activeTab === 'deck'}
+        />
+      </div>
+      <div class="craft-host" class:craft-show={activeTab === 'grid'}>
+        <CraftPane
+          label="GridCraft"
+          jsPath="/gridcraft/gridcraft-web-9ff3b9315f5260cf.js"
+          wasmPath="/gridcraft/gridcraft-web-9ff3b9315f5260cf_bg.wasm"
+          canvasId="gridcraft_canvas"
+          active={activeTab === 'grid'}
         />
       </div>
     </main>

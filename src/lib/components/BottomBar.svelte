@@ -1,7 +1,7 @@
 <!-- hello there, tf u doing on my code???? -->
 <script lang="ts">
   import {
-    IconFiles, IconSparkles, IconPencil, IconChartBar, IconNote, IconFileText, IconMovie, IconVector, IconWand, IconLayout,
+    IconFiles, IconSparkles, IconPencil, IconChartBar, IconNote, IconFileText, IconMovie, IconVector, IconWand, IconLayout, IconTypography, IconPresentation, IconGridDots,
     IconLock, IconTerminal, IconBook, IconLanguage, IconApi,
     IconSun, IconMoon, IconDeviceDesktop, IconLogout,
     IconDots, IconX, IconSettings,
@@ -11,7 +11,7 @@
   import CloudLogo from '$lib/components/icons/CloudLogo.svelte';
   import Avatar from '$lib/components/Avatar.svelte';
 
-  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'pdf' | 'film' | 'vector' | 'light' | 'effect' | 'design' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'ai' | 'fx' | 'utility';
+  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'pdf' | 'film' | 'vector' | 'light' | 'effect' | 'design' | 'word' | 'deck' | 'grid' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'ai' | 'fx' | 'utility';
 
   type BarButton = {
     icon: any;
@@ -101,6 +101,9 @@
     { id: 'light',      icon: IconSun,         label: 'Light' },
     { id: 'effect',     icon: IconWand,        label: 'Effect' },
     { id: 'design',     icon: IconLayout,      label: 'Design' },
+    { id: 'word',       icon: IconTypography,   label: 'Word' },
+    { id: 'deck',       icon: IconPresentation, label: 'Deck' },
+    { id: 'grid',       icon: IconGridDots,     label: 'Grid' },
     { id: 'stats',      icon: IconChartBar,    label: 'Stats' },
     { id: 'notes',      icon: IconNote,        label: 'Notes' },
     { id: 'vault',      icon: IconLock,        label: 'Vault' },
