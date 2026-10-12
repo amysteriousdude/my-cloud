@@ -3,6 +3,7 @@
 <script lang="ts">
   import CloudLogo from '$lib/components/icons/CloudLogo.svelte';
   import { branding } from '$lib/branding.svelte';
+  import { startAuthentication, browserSupportsWebAuthn } from '@simplewebauthn/browser';
 
   let {
     onsuccess,
@@ -13,6 +14,10 @@
   let tokenInput = $state('');
   let tokenError = $state('');
   let tokenLoading = $state(false);
+  let passkeyLoading = $state(false);
+  let passkeyError = $state('');
+
+  const passkeysOk = browserSupportsWebAuthn();
 
   async function submit() {
     tokenError = '';
@@ -32,6 +37,32 @@
       tokenLoading = false;
     }
   }
+
+  async function passkeyLogin() {
+    passkeyError = '';
+    passkeyLoading = true;
+    try {
+      const optRes = await fetch('/api/auth/webauthn/login/options', { method: 'POST' });
+      const options = await optRes.json().catch(() => ({}));
+      if (!optRes.ok) throw new Error(options.error ?? 'No passkeys registered');
+
+      const cred = await startAuthentication(options);
+
+      const verifyRes = await fetch('/api/auth/webauthn/login/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cred),
+      });
+      const d = await verifyRes.json().catch(() => ({}));
+      if (!verifyRes.ok) throw new Error(d.error ?? 'Verification failed');
+      onsuccess();
+    } catch (err: any) {
+      if (err?.name === 'AbortError' || err?.name === 'NotAllowedError') return;
+      passkeyError = err?.message ?? 'Passkey login failed';
+    } finally {
+      passkeyLoading = false;
+    }
+  }
 </script>
 
 <div class="centered">
@@ -39,8 +70,14 @@
     <div class="logo">
       <CloudLogo size={40} stroke={1.5} />
       <h1>{branding.name}'s Cloud</h1>
-      <p>Enter your API token to continue.</p>
+      <p>Sign in with a passkey or your API token.</p>
     </div>
+    {#if passkeysOk}
+      <button class="passkey-btn" onclick={passkeyLogin} disabled={passkeyLoading || tokenLoading}>
+        {passkeyLoading ? 'Waiting for authenticator…' : 'Sign in with passkey'}
+      </button>
+      <div class="divider"><span>or</span></div>
+    {/if}
     <div class="token-form">
       <input
         class="token-input"
@@ -48,15 +85,16 @@
         placeholder="Paste your token..."
         bind:value={tokenInput}
         onkeydown={(e) => e.key === 'Enter' && submit()}
-        disabled={tokenLoading}
+        disabled={tokenLoading || passkeyLoading}
       />
       <button
         class="token-btn"
         onclick={submit}
-        disabled={tokenLoading || !tokenInput.trim()}
+        disabled={tokenLoading || passkeyLoading || !tokenInput.trim()}
       >{tokenLoading ? '...' : 'Continue →'}</button>
     </div>
     {#if tokenError}<p class="token-error">{tokenError}</p>{/if}
+    {#if passkeyError}<p class="token-error">{passkeyError}</p>{/if}
   </div>
 </div>
 
@@ -77,6 +115,21 @@
   }
   .logo h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.5px; }
   .logo p  { font-size: 13px; color: var(--text-3); }
+  .passkey-btn {
+    width: 100%; background: var(--bg-3); border: 1px solid var(--border);
+    border-radius: 9px; padding: 12px; color: var(--text-1);
+    font: inherit; font-size: 14px; font-weight: 500; cursor: pointer;
+    transition: background 0.15s;
+  }
+  .passkey-btn:hover:not(:disabled) { background: var(--border); }
+  .passkey-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .divider {
+    width: 100%; display: flex; align-items: center; gap: 10px;
+    color: var(--text-3); font-size: 12px;
+  }
+  .divider::before, .divider::after {
+    content: ''; flex: 1; height: 1px; background: var(--border);
+  }
   .token-form { display: flex; flex-direction: column; gap: 8px; width: 100%; }
   .token-input {
     background: var(--bg-1); border: 1px solid var(--border);

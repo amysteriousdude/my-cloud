@@ -3,12 +3,13 @@
   import { invalidateAll } from '$app/navigation';
   import { env } from '$env/dynamic/public';
   import {
-    IconCopy, IconCheck, IconTrash, IconRefresh, IconUpload, IconAlertTriangle,
+    IconCopy, IconCheck, IconTrash, IconRefresh, IconUpload, IconAlertTriangle, IconKey,
   } from '@tabler/icons-svelte';
   import { branding, saveBranding } from '$lib/branding.svelte';
   import { CLOUD_ICONS, CLOUD_ICON_KEYS } from '$lib/cloudIcons';
   import CloudLogo from '$lib/components/icons/CloudLogo.svelte';
   import Avatar from '$lib/components/Avatar.svelte';
+  import { startRegistration, browserSupportsWebAuthn } from '@simplewebauthn/browser';
 
   let {
     user,
@@ -20,6 +21,31 @@
   let busy = $state(false);
   let newToken = $state<string | null>(null);
   let tokenCopied = $state(false);
+
+  type PasskeyInfo = { id: string; label: string; createdAt: string; transports: string[] };
+  let passkeys = $state<PasskeyInfo[]>([]);
+  let passkeysLoaded = $state(false);
+  let passkeyBusy = $state(false);
+  let passkeyMsg = $state<{ ok: boolean; text: string } | null>(null);
+  let newPasskeyLabel = $state('');
+
+  const passkeysSupported = browserSupportsWebAuthn();
+
+  async function loadPasskeys() {
+    if (passkeysLoaded) return;
+    try {
+      const res = await fetch('/api/auth/webauthn/credentials');
+      const d = await res.json().catch(() => ({}));
+      if (res.ok) {
+        passkeys = d.passkeys ?? [];
+        passkeysLoaded = true;
+      }
+    } catch { /* leave unloaded */ }
+  }
+
+  $effect(() => {
+    if (user && passkeysSupported) loadPasskeys();
+  });
 
   $effect(() => {
     displayName = branding.name;
@@ -116,6 +142,62 @@
       /* clipboard blocked */
     }
   }
+
+  async function addPasskey() {
+    if (passkeyBusy) return;
+    passkeyBusy = true;
+    passkeyMsg = null;
+    try {
+      const label = (newPasskeyLabel.trim() || `Passkey ${new Date().toLocaleDateString()}`).slice(0, 64);
+      const optRes = await fetch('/api/auth/webauthn/register/options', { method: 'POST' });
+      const options = await optRes.json().catch(() => ({}));
+      if (!optRes.ok) throw new Error(options.error ?? 'Failed to start registration');
+
+      const cred = await startRegistration(options);
+
+      const verifyRes = await fetch('/api/auth/webauthn/register/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ response: cred, label }),
+      });
+      const d = await verifyRes.json().catch(() => ({}));
+      if (!verifyRes.ok) throw new Error(d.error ?? 'Registration failed');
+
+      passkeys = [...passkeys, { id: d.id, label: d.label, createdAt: new Date().toISOString(), transports: [] }];
+      newPasskeyLabel = '';
+      passkeyMsg = { ok: true, text: `Passkey "${d.label}" added` };
+    } catch (err: any) {
+      if (err?.name === 'AbortError' || err?.name === 'NotAllowedError') {
+        passkeyMsg = null;
+      } else {
+        passkeyMsg = { ok: false, text: err?.message ?? 'Failed to add passkey' };
+      }
+    } finally {
+      passkeyBusy = false;
+    }
+  }
+
+  async function removePasskey(id: string) {
+    if (passkeyBusy) return;
+    if (!confirm('Remove this passkey? You will need your token or another passkey to sign in.')) return;
+    passkeyBusy = true;
+    passkeyMsg = null;
+    try {
+      const res = await fetch('/api/auth/webauthn/credentials', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error ?? 'Failed to remove');
+      passkeys = passkeys.filter((p) => p.id !== id);
+      passkeyMsg = { ok: true, text: 'Passkey removed' };
+    } catch (err: any) {
+      passkeyMsg = { ok: false, text: err?.message ?? 'Failed to remove' };
+    } finally {
+      passkeyBusy = false;
+    }
+  }
 </script>
 
 <section class="cs">
@@ -197,6 +279,41 @@
       {/if}
     </div>
 
+    {#if passkeysSupported}
+      <div class="cs-row cs-row-col">
+        <label class="cs-label">Passkeys</label>
+        <div class="cs-inline">
+          <input class="cs-input" type="text" maxlength="64" bind:value={newPasskeyLabel} placeholder="Name (optional)" disabled={passkeyBusy} />
+          <button class="cs-btn" onclick={addPasskey} disabled={passkeyBusy}>
+            <IconKey size={14} /> {passkeyBusy ? '…' : 'Add passkey'}
+          </button>
+        </div>
+        {#if passkeys.length}
+          <ul class="pk-list">
+            {#each passkeys as pk (pk.id)}
+              <li class="pk-item">
+                <div class="pk-meta">
+                  <span class="pk-label">{pk.label}</span>
+                  <span class="pk-sub">{new Date(pk.createdAt).toLocaleDateString()}{pk.transports.length ? ` · ${pk.transports.join(', ')}` : ''}</span>
+                </div>
+                <button class="cs-btn cs-btn-danger" onclick={() => removePasskey(pk.id)} disabled={passkeyBusy} title="Remove">
+                  <IconTrash size={13} />
+                </button>
+              </li>
+            {/each}
+          </ul>
+        {:else if passkeysLoaded}
+          <span class="cs-hint">No passkeys yet — add one to skip the token on this and other devices.</span>
+        {/if}
+        {#if passkeyMsg}
+          <div class="cs-msg" class:cs-msg-bad={!passkeyMsg.ok}>
+            {#if !passkeyMsg.ok}<IconAlertTriangle size={14} />{/if}
+            {passkeyMsg.text}
+          </div>
+        {/if}
+      </div>
+    {/if}
+
     {#if userMsg}
       <div class="cs-msg" class:cs-msg-bad={!userMsg.ok}>
         {#if !userMsg.ok}<IconAlertTriangle size={14} />{/if}
@@ -265,4 +382,16 @@
     font-size: 12.5px; color: #16a34a;
   }
   .cs-msg-bad { color: #dc2626; }
+  .pk-list {
+    list-style: none; margin: 4px 0 0; padding: 0;
+    display: flex; flex-direction: column; gap: 6px; width: 100%;
+  }
+  .pk-item {
+    display: flex; align-items: center; gap: 10px; width: 100%;
+    background: var(--bg-3); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 10px;
+  }
+  .pk-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .pk-label { font-size: 13px; font-weight: 600; color: var(--text-1); }
+  .pk-sub { font-size: 11px; color: var(--text-3); }
 </style>

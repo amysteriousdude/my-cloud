@@ -10,6 +10,7 @@ export type ApiKeyRecord = {
   discordId: string;
   username?: string;
   createdAt: string;
+  passkeys?: { fileId: string; messageId: number };
 };
 
 export type FileRecord = {
@@ -541,6 +542,15 @@ export async function uploadBytesToTelegram(
   };
 }
 
+export async function deleteTelegramMessage(messageId: number): Promise<void> {
+  if (!TELE_API) throw new Error('Telegram not configured');
+  await axios.post(`${TELE_API}/deleteMessage`, null, {
+    params: { chat_id: CHAT_ID, message_id: messageId }
+  }).catch((e) => {
+    console.error('deleteTelegramMessage failed:', messageId, e?.message);
+  });
+}
+
 export async function uploadJsonToTelegram(
   data: any,
   filename = 'meta.json'
@@ -756,6 +766,7 @@ export default {
   uploadFileToTelegramAndPin,
   uploadBytesToTelegram,
   uploadJsonToTelegram,
+  deleteTelegramMessage,
   downloadFileFromTelegram,
   writeRegistry,
   uploadFileStream,

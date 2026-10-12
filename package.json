@@ -29,6 +29,8 @@
 		"@ffmpeg/ffmpeg": "^0.12.15",
 		"@ffmpeg/util": "^0.12.2",
 		"@imagemagick/magick-wasm": "^0.0.38",
+		"@simplewebauthn/browser": "^13.3.0",
+		"@simplewebauthn/server": "^13.3.3",
 		"@tabler/icons-svelte": "^3.39.0",
 		"@types/jsmediatags": "^3.9.6",
 		"axios": "^1.13.6",
