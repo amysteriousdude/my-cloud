@@ -28,6 +28,8 @@
   let passkeyBusy = $state(false);
   let passkeyMsg = $state<{ ok: boolean; text: string } | null>(null);
   let newPasskeyLabel = $state('');
+  let editingId = $state<string | null>(null);
+  let editLabel = $state('');
 
   const passkeysSupported = browserSupportsWebAuthn();
 
@@ -198,6 +200,39 @@
       passkeyBusy = false;
     }
   }
+
+  function startEdit(pk: PasskeyInfo) {
+    editingId = pk.id;
+    editLabel = pk.label;
+  }
+
+  function cancelEdit() {
+    editingId = null;
+    editLabel = '';
+  }
+
+  async function saveEdit(id: string) {
+    if (passkeyBusy) return;
+    const clean = editLabel.trim();
+    if (!clean) { cancelEdit(); return; }
+    passkeyBusy = true;
+    passkeyMsg = null;
+    try {
+      const res = await fetch('/api/auth/webauthn/credentials', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, label: clean }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error ?? 'Failed to rename');
+      passkeys = passkeys.map((p) => p.id === id ? { ...p, label: d.label } : p);
+      cancelEdit();
+    } catch (err: any) {
+      passkeyMsg = { ok: false, text: err?.message ?? 'Failed to rename' };
+    } finally {
+      passkeyBusy = false;
+    }
+  }
 </script>
 
 <section class="cs">
@@ -250,6 +285,64 @@
   <div class="cs-card">
     <h3 class="cs-h">Account</h3>
 
+    {#if passkeysSupported}
+      <div class="cs-row cs-row-col">
+        <label class="cs-label">Passkeys</label>
+        <div class="cs-inline">
+          <input class="cs-input" type="text" maxlength="64" bind:value={newPasskeyLabel} placeholder="Name (optional)" disabled={passkeyBusy} />
+          <button class="cs-btn" onclick={addPasskey} disabled={passkeyBusy}>
+            <IconKey size={14} /> {passkeyBusy ? '…' : 'Add passkey'}
+          </button>
+        </div>
+        {#if passkeys.length}
+          <ul class="pk-list">
+            {#each passkeys as pk (pk.id)}
+              <li class="pk-item">
+                <div class="pk-meta">
+                  {#if editingId === pk.id}
+                    <div class="pk-edit">
+                      <input
+                        class="cs-input pk-edit-input"
+                        type="text"
+                        maxlength="64"
+                        bind:value={editLabel}
+                        disabled={passkeyBusy}
+                        onkeydown={(e) => {
+                          if (e.key === 'Enter') saveEdit(pk.id);
+                          if (e.key === 'Escape') cancelEdit();
+                        }}
+                      />
+                      <button class="cs-btn" onclick={() => saveEdit(pk.id)} disabled={passkeyBusy || !editLabel.trim()}>
+                        <IconCheck size={13} />
+                      </button>
+                      <button class="cs-btn cs-btn-ghost" onclick={cancelEdit} disabled={passkeyBusy}>✕</button>
+                    </div>
+                  {:else}
+                    <button class="pk-label-btn" onclick={() => startEdit(pk)} title="Click to rename" disabled={passkeyBusy}>
+                      {pk.label}
+                    </button>
+                  {/if}
+                  <span class="pk-sub">{new Date(pk.createdAt).toLocaleDateString()}{pk.transports.length ? ` · ${pk.transports.join(', ')}` : ''}</span>
+                </div>
+                <button class="cs-btn cs-btn-danger" onclick={() => removePasskey(pk.id)} disabled={passkeyBusy} title="Remove">
+                  <IconTrash size={13} />
+                </button>
+              </li>
+            {/each}
+          </ul>
+        {:else if passkeysLoaded}
+          <span class="cs-hint">No passkeys yet — add one to skip the token on this and other devices.</span>
+        {/if}
+        {#if passkeyMsg}
+          <div class="cs-msg" class:cs-msg-bad={!passkeyMsg.ok}>
+            {#if !passkeyMsg.ok}<IconAlertTriangle size={14} />{/if}
+            {passkeyMsg.text}
+          </div>
+        {/if}
+        <span class="cs-hint">Click a name to rename it.</span>
+      </div>
+    {/if}
+
     <div class="cs-row cs-row-col">
       <label class="cs-label">Username</label>
       <div class="cs-inline">
@@ -268,7 +361,7 @@
           <IconRefresh size={14} /> Reset token
         </button>
       </div>
-      <span class="cs-hint">Used to sign in outside this browser and in the ShareX config. Resetting kills the old one instantly.</span>
+      <span class="cs-hint">Fallback sign-in and ShareX config. Resetting kills the old one instantly.</span>
       {#if newToken}
         <div class="cs-token">
           <code class="cs-token-val">{newToken}</code>
@@ -278,41 +371,6 @@
         </div>
       {/if}
     </div>
-
-    {#if passkeysSupported}
-      <div class="cs-row cs-row-col">
-        <label class="cs-label">Passkeys</label>
-        <div class="cs-inline">
-          <input class="cs-input" type="text" maxlength="64" bind:value={newPasskeyLabel} placeholder="Name (optional)" disabled={passkeyBusy} />
-          <button class="cs-btn" onclick={addPasskey} disabled={passkeyBusy}>
-            <IconKey size={14} /> {passkeyBusy ? '…' : 'Add passkey'}
-          </button>
-        </div>
-        {#if passkeys.length}
-          <ul class="pk-list">
-            {#each passkeys as pk (pk.id)}
-              <li class="pk-item">
-                <div class="pk-meta">
-                  <span class="pk-label">{pk.label}</span>
-                  <span class="pk-sub">{new Date(pk.createdAt).toLocaleDateString()}{pk.transports.length ? ` · ${pk.transports.join(', ')}` : ''}</span>
-                </div>
-                <button class="cs-btn cs-btn-danger" onclick={() => removePasskey(pk.id)} disabled={passkeyBusy} title="Remove">
-                  <IconTrash size={13} />
-                </button>
-              </li>
-            {/each}
-          </ul>
-        {:else if passkeysLoaded}
-          <span class="cs-hint">No passkeys yet — add one to skip the token on this and other devices.</span>
-        {/if}
-        {#if passkeyMsg}
-          <div class="cs-msg" class:cs-msg-bad={!passkeyMsg.ok}>
-            {#if !passkeyMsg.ok}<IconAlertTriangle size={14} />{/if}
-            {passkeyMsg.text}
-          </div>
-        {/if}
-      </div>
-    {/if}
 
     {#if userMsg}
       <div class="cs-msg" class:cs-msg-bad={!userMsg.ok}>
@@ -392,6 +450,18 @@
     border-radius: 8px; padding: 8px 10px;
   }
   .pk-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-  .pk-label { font-size: 13px; font-weight: 600; color: var(--text-1); }
+  .pk-label {
+    font-size: 13px; font-weight: 600; color: var(--text-1);
+  }
+  .pk-label-btn {
+    font-size: 13px; font-weight: 600; color: var(--text-1);
+    background: none; border: none; padding: 0; margin: 0;
+    text-align: left; cursor: pointer; font-family: inherit;
+    transition: color .15s;
+  }
+  .pk-label-btn:hover:not(:disabled) { color: var(--accent); }
+  .pk-label-btn:disabled { cursor: default; }
+  .pk-edit { display: flex; gap: 6px; align-items: center; }
+  .pk-edit-input { flex: 1; min-width: 0; max-width: none; }
   .pk-sub { font-size: 11px; color: var(--text-3); }
 </style>
