@@ -107,10 +107,12 @@
     { id: 'fx',       icon: IconWaveSine,             label: 'FX' },
     { id: 'utility',  icon: IconSettings,          label: 'Utilities' },
   ];
-  const PRIMARY_TABS: Tab[] = ['files', 'draw', 'pdf', 'film', 'vector', 'light', 'effect', 'design', 'word', 'deck', 'grid', 'sound', 'stats', 'notes', 'vault'];
   const secondaryIds: Tab[] = ['generators', 'downloader', 'console', 'dictionary', 'translator', 'apitester', 'database', 'ai', 'fx', 'utility'];
   const secondaryTabs = TABS.filter(t => secondaryIds.includes(t.id));
-  const primaryTabs = TABS.filter(t => PRIMARY_TABS.includes(t.id));
+  const MOB_NAV_IDS: Tab[] = ['files', 'draw', 'stats', 'notes', 'vault'];
+  const mobNavTabs = TABS.filter(t => MOB_NAV_IDS.includes(t.id));
+  const CRAFT_SHEET_IDS: Tab[] = ['pdf', 'film', 'vector', 'light', 'effect', 'design', 'word', 'deck', 'grid', 'sound'];
+  const craftSheetTabs = TABS.filter(t => CRAFT_SHEET_IDS.includes(t.id));
 
   function switchToDock() {
     localStorage.setItem('dock-mode', 'dock');
@@ -220,7 +222,21 @@
         </div>
       </div>
       <div class="sheet-divider"></div>
+      <!-- Craft apps -->
+      <div class="sheet-section-label">Apps</div>
+      <div class="sheet-tabs">
+        {#each craftSheetTabs as tab}
+          {@const active = activeTab === tab.id}
+          <button class="sheet-tab" class:sheet-tab-active={active}
+            onclick={() => { ontabchange(tab.id); sheetOpen = false; }}>
+            <tab.icon size={18} stroke={1.5}/>
+            <span>{tab.label}</span>
+          </button>
+        {/each}
+      </div>
+      <div class="sheet-divider"></div>
       <!-- Secondary tabs -->
+      <div class="sheet-section-label">Tools</div>
       <div class="sheet-tabs">
         {#each secondaryTabs as tab}
           {@const active = activeTab === tab.id}
@@ -246,9 +262,9 @@
     {/if}
   </div>
 
-  <!-- Always-visible tab bar — primary tabs only -->
+  <!-- Always-visible tab bar -->
   <nav class="mob-nav">
-    {#each primaryTabs as tab}
+    {#each mobNavTabs as tab}
       {@const active = activeTab === tab.id}
       <button
         class="mob-tab"
@@ -263,7 +279,7 @@
       </button>
     {/each}
     <!-- More button -->
-    <button class="mob-tab" class:mob-tab-active={sheetOpen && !primaryTabs.some(t => t.id === activeTab)} onclick={() => sheetOpen = !sheetOpen}>
+    <button class="mob-tab" class:mob-tab-active={sheetOpen && !mobNavTabs.some(t => t.id === activeTab)} onclick={() => sheetOpen = !sheetOpen}>
       <div class="mob-tab-icon">
         {#if sheetOpen}<IconChevronDown size={21} stroke={1.5}/>{:else}<IconChevronUp size={21} stroke={1.5}/>{/if}
       </div>
@@ -399,7 +415,8 @@
       transition: max-height 0.32s cubic-bezier(.16,1,.3,1), padding 0.32s;
     }
     .mob-sheet.open {
-      max-height: 420px;
+      max-height: 70vh;
+      overflow-y: auto;
       padding: 0 16px 16px;
     }
     .sheet-handle {
@@ -421,6 +438,10 @@
     .sheet-username { font-size: 14px; font-weight: 600; color: var(--text-1); }
     .sheet-storage { font-size: 11px; color: var(--text-3); font-family: 'Geist Mono', monospace; }
     .sheet-divider { border-top: 1px solid var(--border); margin: 8px 0; }
+    .sheet-section-label {
+      font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+      color: var(--text-3); padding: 4px 2px;
+    }
     /* Secondary tabs in sheet */
     .sheet-tabs {
       display: grid;
