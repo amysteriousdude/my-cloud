@@ -2,6 +2,8 @@
 import type { RequestHandler } from './$types';
 import { loadAuthBlob, saveAuthBlob, sessionRec } from '$lib/passkeys';
 import { generateTotpSecret, totpUri, verifyTotp } from '$lib/totp';
+import { readIndex } from '$lib/telegramStorage';
+import { encrypt } from '$lib/crypto';
 
 export const GET: RequestHandler = async ({ cookies }) => {
   const json = (body: any, status = 200) =>
@@ -28,9 +30,6 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
   const json = (body: any, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
-  const rec = await sessionRec(cookies);
-  if (!rec) return json({ error: 'Not signed in' }, 401);
-
   let body: any = {};
   try {
     const text = await request.text();
@@ -40,6 +39,50 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
   }
 
   const action = String(body.action ?? '');
+
+  if (action === 'login') {
+    const code = String(body.code ?? '').trim();
+    if (!/^\d{6}$/.test(code)) return json({ error: 'Enter the 6-digit code' }, 400);
+
+    let index;
+    try {
+      index = await readIndex();
+    } catch {
+      return json({ error: 'Could not reach storage' }, 503);
+    }
+
+    for (const rec of Object.values(index)) {
+      if (!rec.passkeys?.fileId) continue;
+      let blob;
+      try {
+        blob = await loadAuthBlob(rec);
+      } catch {
+        continue;
+      }
+      if (!blob.totps?.length) continue;
+      for (const t of blob.totps) {
+        if (await verifyTotp(t.secret, code)) {
+          cookies.set('session', encrypt(rec.apiKey), {
+            httpOnly: true,
+            secure: true,
+            sameSite: 'lax',
+            path: '/',
+            maxAge: 60 * 60 * 24 * 30,
+          });
+          return json({
+            ok: true,
+            username: rec.username,
+            discordId: rec.discordId,
+            createdAt: rec.createdAt,
+          });
+        }
+      }
+    }
+    return json({ error: 'Wrong code' }, 403);
+  }
+
+  const rec = await sessionRec(cookies);
+  if (!rec) return json({ error: 'Not signed in' }, 401);
 
   if (action === 'setup') {
     try {
