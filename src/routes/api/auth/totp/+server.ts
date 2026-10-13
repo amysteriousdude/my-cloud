@@ -57,7 +57,7 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
   if (action === 'enable') {
     const { secret, code, label } = body;
     if (!secret || !code) return json({ error: 'Missing secret or code' }, 400);
-    if (!verifyTotp(String(secret), String(code))) {
+    if (!(await verifyTotp(String(secret), String(code)))) {
       return json({ error: 'Wrong code, try again' }, 400);
     }
 
@@ -101,7 +101,7 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
     if (idx < 0) return json({ error: 'Not found' }, 404);
 
     if (code) {
-      if (!verifyTotp(totps[idx].secret, String(code))) {
+      if (!(await verifyTotp(totps[idx].secret, String(code)))) {
         return json({ error: 'Wrong code' }, 400);
       }
     }

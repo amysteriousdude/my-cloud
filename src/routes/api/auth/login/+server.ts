@@ -40,8 +40,14 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
           status: 401, headers: { 'Content-Type': 'application/json' }
         });
       }
-      const ok = blob.totps.some((t) => verifyTotp(t.secret, String(code)));
-      if (!ok) {
+      let matched = false;
+      for (const t of blob.totps) {
+        if (await verifyTotp(t.secret, String(code))) {
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) {
         return new Response(JSON.stringify({ error: 'Wrong authenticator code' }), {
           status: 403, headers: { 'Content-Type': 'application/json' }
         });
