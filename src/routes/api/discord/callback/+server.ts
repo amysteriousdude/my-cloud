@@ -1,5 +1,6 @@
 // hello there, tf u doing on my code????
 import type { RequestHandler } from './$types';
+import { redirect } from '@sveltejs/kit';
 import { generateApiKeyForDiscordId, readIndex } from '$lib/telegramStorage';
 import { encrypt } from '$lib/crypto';
 import { env } from '$env/dynamic/private';
@@ -74,7 +75,7 @@ export const GET: RequestHandler = async ({ url, cookies }) => {
     cookies.set('session', encrypt(rec.apiKey), {
       httpOnly: true,
       secure: true,
-      sameSite: 'strict',
+      sameSite: 'lax',
       path: '/',
       maxAge: 60 * 60 * 24 * 30
     });
@@ -83,11 +84,9 @@ export const GET: RequestHandler = async ({ url, cookies }) => {
       return json({ user, apiKey: rec.apiKey }, 200);
     }
 
-    return new Response(null, {
-      status: 302,
-      headers: { Location: '/' }
-    });
+    redirect(302, '/');
   } catch (err) {
+    if (err && typeof err === 'object' && 'status' in err && 'location' in err) throw err;
     return json({ error: 'Discord OAuth failed', message: (err as Error).message }, 500);
   }
 };
