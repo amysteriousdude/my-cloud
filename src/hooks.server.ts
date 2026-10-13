@@ -876,10 +876,11 @@ async function handleMkcol(url: URL, registry: Record<string, any>) {
   let counter = 1;
   while (true) {
     let exists = false;
-    for (const [key, item] of Object.entries(registry)) {
-      if ((item as any)._type === 'folder' &&
-          ((item as any).name ?? '').toLowerCase() === finalName.toLowerCase() &&
-          ((item as any).parentId ?? null) === parentId) {
+    for (const [, item] of Object.entries(registry)) {
+      const it = item as any;
+      const sameParent = (it.parentId ?? it.folderId ?? null) === parentId;
+      const sameName = (it.name ?? it.fileName ?? '').toLowerCase() === finalName.toLowerCase();
+      if (sameName && sameParent) {
         exists = true;
         break;
       }
@@ -895,10 +896,19 @@ async function handleMkcol(url: URL, registry: Record<string, any>) {
     folderId,
     name: finalName,
     createdAt: new Date().toISOString(),
-    ...(parent?._regKey ? { parentId: parent._regKey } : {}),
+    ...(parentId ? { parentId } : {}),
   };
 
-  await writeRegistry(registry);
+  try {
+    await writeRegistry(registry);
+  } catch (err) {
+    delete registry[folderId];
+    console.error('MKCOL writeRegistry failed:', err);
+    return new Response('Failed to create collection', {
+      status: 500,
+      headers: davHeaders(),
+    });
+  }
   purgePublicFiles().catch(() => {});
   return new Response(null, {
     status: 201,
@@ -1069,7 +1079,7 @@ export const handle: Handle = async ({ event, resolve }) => {
   const auth = await davAuth(request);
   if (!auth) return unauth();
 
-  const registry = await readRegistry() as Record<string, any>;
+  const registry = ((await readRegistry(true)) ?? {}) as Record<string, any>;
 
   if (method === 'OPTIONS') return handleOptions();
   if (method === 'PROPFIND') return handlePropfind(request, url, registry);
