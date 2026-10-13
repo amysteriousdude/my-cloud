@@ -3,6 +3,22 @@ import type { RequestHandler } from './$types';
 import { loadAuthBlob, saveAuthBlob, sessionRec } from '$lib/passkeys';
 import { generateTotpSecret, totpUri, verifyTotp } from '$lib/totp';
 
+export const GET: RequestHandler = async ({ cookies }) => {
+  const json = (body: any, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+
+  const rec = await sessionRec(cookies);
+  if (!rec) return json({ error: 'Not signed in' }, 401);
+
+  let blob;
+  try {
+    blob = await loadAuthBlob(rec);
+  } catch {
+    return json({ error: 'Could not reach storage' }, 503);
+  }
+  return json({ enabled: !!blob.totp });
+};
+
 export const POST: RequestHandler = async ({ cookies, request }) => {
   const json = (body: any, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -10,15 +26,27 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
   const rec = await sessionRec(cookies);
   if (!rec) return json({ error: 'Not signed in' }, 401);
 
-  const body = await request.json().catch(() => ({}));
+  let body: any = {};
+  try {
+    const text = await request.text();
+    if (text) body = JSON.parse(text);
+  } catch {
+    body = {};
+  }
+
   const action = String(body.action ?? '');
 
   if (action === 'setup') {
-    const secret = generateTotpSecret();
-    return json({
-      secret,
-      uri: totpUri(secret, rec.username || rec.discordId),
-    });
+    try {
+      const secret = generateTotpSecret();
+      const account = rec.username || rec.discordId || 'account';
+      return json({
+        secret,
+        uri: totpUri(secret, account),
+      });
+    } catch (err: any) {
+      return json({ error: 'Setup failed: ' + (err?.message ?? err) }, 500);
+    }
   }
 
   if (action === 'enable') {
@@ -62,15 +90,5 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
     return json({ ok: true });
   }
 
-  if (action === 'status') {
-    let blob;
-    try {
-      blob = await loadAuthBlob(rec);
-    } catch {
-      return json({ error: 'Could not reach storage' }, 503);
-    }
-    return json({ enabled: !!blob.totp });
-  }
-
-  return json({ error: 'Unknown action' }, 400);
+  return json({ error: 'Unknown action: ' + action }, 400);
 };

@@ -65,11 +65,7 @@
   async function loadTotp() {
     if (!user) return;
     try {
-      const res = await fetch('/api/auth/totp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'status' }),
-      });
+      const res = await fetch('/api/auth/totp');
       const d = await res.json().catch(() => ({}));
       if (res.ok) totpEnabled = !!d.enabled;
     } catch { /* leave as is */ }
