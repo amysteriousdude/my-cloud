@@ -10,6 +10,7 @@
   import CloudLogo from '$lib/components/icons/CloudLogo.svelte';
   import Avatar from '$lib/components/Avatar.svelte';
   import { startRegistration, browserSupportsWebAuthn } from '@simplewebauthn/browser';
+  import QRCode from 'qrcode';
 
   let {
     user,
@@ -31,6 +32,16 @@
   let editingId = $state<string | null>(null);
   let editLabel = $state('');
 
+  let totpEnabled = $state(false);
+  let totpLoading = $state(false);
+  let totpMsg = $state<{ ok: boolean; text: string } | null>(null);
+  let totpSetupSecret = $state('');
+  let totpSetupUri = $state('');
+  let totpQr = $state('');
+  let totpCode = $state('');
+  let totpDisableCode = $state('');
+  let showTotpDisable = $state(false);
+
   const passkeysSupported = browserSupportsWebAuthn();
 
   async function loadPasskeys() {
@@ -48,6 +59,101 @@
   $effect(() => {
     if (user && passkeysSupported) loadPasskeys();
   });
+
+  async function loadTotp() {
+    if (!user) return;
+    try {
+      const res = await fetch('/api/auth/totp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'status' }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok) totpEnabled = !!d.enabled;
+    } catch { /* leave as is */ }
+  }
+
+  $effect(() => {
+    if (user) loadTotp();
+  });
+
+  async function startTotpSetup() {
+    if (totpLoading) return;
+    totpLoading = true;
+    totpMsg = null;
+    totpCode = '';
+    try {
+      const res = await fetch('/api/auth/totp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'setup' }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error ?? 'Failed to start setup');
+      totpSetupSecret = d.secret;
+      totpSetupUri = d.uri;
+      totpQr = await QRCode.toDataURL(d.uri, { margin: 1, width: 200, color: { dark: '#000', light: '#fff' } });
+    } catch (err: any) {
+      totpMsg = { ok: false, text: err?.message ?? 'Failed to start setup' };
+    } finally {
+      totpLoading = false;
+    }
+  }
+
+  async function confirmTotp() {
+    if (totpLoading || !totpSetupSecret || totpCode.trim().length !== 6) return;
+    totpLoading = true;
+    totpMsg = null;
+    try {
+      const res = await fetch('/api/auth/totp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'enable', secret: totpSetupSecret, code: totpCode.trim() }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error ?? 'Failed to enable');
+      totpEnabled = true;
+      totpSetupSecret = '';
+      totpSetupUri = '';
+      totpQr = '';
+      totpCode = '';
+      totpMsg = { ok: true, text: 'Authenticator app enabled — you will need a code when logging in with your token.' };
+    } catch (err: any) {
+      totpMsg = { ok: false, text: err?.message ?? 'Failed to enable' };
+    } finally {
+      totpLoading = false;
+    }
+  }
+
+  function cancelTotpSetup() {
+    totpSetupSecret = '';
+    totpSetupUri = '';
+    totpQr = '';
+    totpCode = '';
+  }
+
+  async function disableTotp() {
+    if (totpLoading || totpDisableCode.trim().length !== 6) return;
+    totpLoading = true;
+    totpMsg = null;
+    try {
+      const res = await fetch('/api/auth/totp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'disable', code: totpDisableCode.trim() }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error ?? 'Failed to disable');
+      totpEnabled = false;
+      totpDisableCode = '';
+      showTotpDisable = false;
+      totpMsg = { ok: true, text: 'Authenticator app removed.' };
+    } catch (err: any) {
+      totpMsg = { ok: false, text: err?.message ?? 'Failed to disable' };
+    } finally {
+      totpLoading = false;
+    }
+  }
 
   $effect(() => {
     displayName = branding.name;
@@ -344,6 +450,72 @@
     {/if}
 
     <div class="cs-row cs-row-col">
+      <label class="cs-label">Authenticator app</label>
+      {#if !totpSetupSecret && !totpEnabled}
+        <div class="cs-inline">
+          <button class="cs-btn" onclick={startTotpSetup} disabled={totpLoading}>
+            {totpLoading ? '…' : 'Set up TOTP'}
+          </button>
+        </div>
+        <span class="cs-hint">Optional second step when signing in with your API token. Not needed for passkeys or Discord.</span>
+      {/if}
+
+      {#if totpSetupSecret}
+        <div class="totp-setup">
+          {#if totpQr}
+            <img class="totp-qr" src={totpQr} alt="TOTP QR code" />
+          {/if}
+          <code class="totp-secret">{totpSetupSecret}</code>
+          <div class="cs-inline">
+            <input
+              class="cs-input"
+              type="text"
+              inputmode="numeric"
+              autocomplete="one-time-code"
+              maxlength="6"
+              placeholder="6-digit code"
+              bind:value={totpCode}
+              onkeydown={(e) => e.key === 'Enter' && confirmTotp()}
+              disabled={totpLoading}
+            />
+            <button class="cs-btn" onclick={confirmTotp} disabled={totpLoading || totpCode.trim().length !== 6}>Enable</button>
+            <button class="cs-btn cs-btn-ghost" onclick={cancelTotpSetup} disabled={totpLoading}>Cancel</button>
+          </div>
+        </div>
+      {/if}
+
+      {#if totpEnabled && !totpSetupSecret}
+        <div class="cs-inline">
+          <button class="cs-btn cs-btn-danger" onclick={() => { showTotpDisable = !showTotpDisable; totpDisableCode = ''; }} disabled={totpLoading}>
+            Remove authenticator
+          </button>
+        </div>
+        {#if showTotpDisable}
+          <div class="cs-inline">
+            <input
+              class="cs-input"
+              type="text"
+              inputmode="numeric"
+              maxlength="6"
+              placeholder="Confirm with a code"
+              bind:value={totpDisableCode}
+              onkeydown={(e) => e.key === 'Enter' && disableTotp()}
+              disabled={totpLoading}
+            />
+            <button class="cs-btn cs-btn-danger" onclick={disableTotp} disabled={totpLoading || totpDisableCode.trim().length !== 6}>Confirm remove</button>
+          </div>
+        {/if}
+      {/if}
+
+      {#if totpMsg}
+        <div class="cs-msg" class:cs-msg-bad={!totpMsg.ok}>
+          {#if !totpMsg.ok}<IconAlertTriangle size={14} />{/if}
+          {totpMsg.text}
+        </div>
+      {/if}
+    </div>
+
+    <div class="cs-row cs-row-col">
       <label class="cs-label">Username</label>
       <div class="cs-inline">
         <input class="cs-input" type="text" maxlength="32" bind:value={username} />
@@ -464,4 +636,11 @@
   .pk-edit { display: flex; gap: 6px; align-items: center; }
   .pk-edit-input { flex: 1; min-width: 0; max-width: none; }
   .pk-sub { font-size: 11px; color: var(--text-3); }
+  .totp-setup { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+  .totp-qr { width: 160px; height: 160px; border-radius: 10px; background: #fff; padding: 8px; }
+  .totp-secret {
+    font-family: 'Geist Mono', monospace; font-size: 12px; color: var(--text-2);
+    word-break: break-all; background: var(--bg-3);
+    border: 1px dashed var(--border); border-radius: 8px; padding: 8px 10px;
+  }
 </style>

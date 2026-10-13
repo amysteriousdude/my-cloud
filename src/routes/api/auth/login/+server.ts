@@ -2,9 +2,11 @@
 import type { RequestHandler } from './$types';
 import { getRecordByApiKey, readIndex } from '$lib/telegramStorage';
 import { encrypt } from '$lib/crypto';
+import { loadAuthBlob } from '$lib/passkeys';
+import { verifyTotp } from '$lib/totp';
 
 export const POST: RequestHandler = async ({ request, cookies }) => {
-  const { apiKey } = await request.json();
+  const { apiKey, code } = await request.json();
 
   if (!apiKey)
     return new Response(JSON.stringify({ error: 'Missing apiKey' }), {
@@ -28,6 +30,22 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
     return new Response(JSON.stringify({ error }), {
       status: 403, headers: { 'Content-Type': 'application/json' }
     });
+  }
+
+  if (rec.passkeys?.fileId) {
+    const blob = await loadAuthBlob(rec).catch(() => null);
+    if (blob?.totp) {
+      if (!code) {
+        return new Response(JSON.stringify({ error: 'Authenticator code required', totpRequired: true }), {
+          status: 401, headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      if (!verifyTotp(blob.totp, String(code))) {
+        return new Response(JSON.stringify({ error: 'Wrong authenticator code' }), {
+          status: 403, headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    }
   }
 
   const encrypted = encrypt(apiKey);

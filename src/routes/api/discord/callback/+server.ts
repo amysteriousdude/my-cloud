@@ -1,9 +1,10 @@
 // hello there, tf u doing on my code????
 import type { RequestHandler } from './$types';
 import { generateApiKeyForDiscordId } from '$lib/telegramStorage';
+import { encrypt } from '$lib/crypto';
 import { env } from '$env/dynamic/private';
 
-export const GET: RequestHandler = async ({ url, fetch }) => {
+export const GET: RequestHandler = async ({ url, cookies }) => {
   try {
     const OWNER_ID = env.OWNER_ID;
     const CLIENT_ID = env.DISCORD_CLIENT_ID;
@@ -16,7 +17,12 @@ export const GET: RequestHandler = async ({ url, fetch }) => {
     }
 
     const code = url.searchParams.get('code');
+    const state = url.searchParams.get('state');
+    const expectedState = cookies.get('discord_state');
+    cookies.delete('discord_state', { path: '/' });
+
     if (!code) return json({ error: 'Missing code' }, 400);
+    if (!expectedState || state !== expectedState) return json({ error: 'Invalid state' }, 400);
 
     const redirectUri = `${url.origin}/api/discord/callback`;
 
@@ -62,7 +68,18 @@ export const GET: RequestHandler = async ({ url, fetch }) => {
 
     const rec = await generateApiKeyForDiscordId(user.id, user.username);
 
-    return json({ user, apiKey: rec.apiKey }, 200);
+    cookies.set('session', encrypt(rec.apiKey), {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'strict',
+      path: '/',
+      maxAge: 60 * 60 * 24 * 30
+    });
+
+    return new Response(null, {
+      status: 302,
+      headers: { Location: '/' }
+    });
   } catch (err) {
     return json({ error: 'Discord OAuth failed', message: (err as Error).message }, 500);
   }
