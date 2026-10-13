@@ -9,7 +9,8 @@
 
   let {
     user = null,
-  }: { user?: { username: string; discordId: string; createdAt: string } | null } = $props();
+    apiKey = null,
+  }: { user?: { username: string; discordId: string; createdAt: string } | null; apiKey?: string | null } = $props();
 
   type HistoryEntry = { version: string; platform: string; channel: string; at: string };
 
@@ -230,7 +231,7 @@
     <button class="back-btn" onclick={() => view = 'home'}><IconArrowLeft size={15}/> Utilities</button>
     <h1 class="page-title">{branding.name}'s Cloud</h1>
     <p class="page-sub">How you show up across the app.</p>
-    <CloudSettings {user} />
+    <CloudSettings {user} {apiKey} />
   {/if}
 </div>
 

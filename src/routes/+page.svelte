@@ -232,7 +232,7 @@
       {:else if activeTab === 'fx'}
         <FX {apiKey} />
       {:else if activeTab === 'utility'}
-        <Utilities {user} />
+        <Utilities {user} {apiKey} />
       {/if}
 
       <div class="craft-host" class:craft-show={activeTab === 'draw'}>

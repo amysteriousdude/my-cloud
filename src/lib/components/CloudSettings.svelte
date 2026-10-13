@@ -3,7 +3,7 @@
   import { invalidateAll } from '$app/navigation';
   import { env } from '$env/dynamic/public';
   import {
-    IconCopy, IconCheck, IconTrash, IconRefresh, IconUpload, IconAlertTriangle, IconKey,
+    IconCopy, IconCheck, IconTrash, IconRefresh, IconUpload, IconAlertTriangle, IconKey, IconEye, IconEyeOff,
   } from '@tabler/icons-svelte';
   import { branding, saveBranding } from '$lib/branding.svelte';
   import { CLOUD_ICONS, CLOUD_ICON_KEYS } from '$lib/cloudIcons';
@@ -14,7 +14,8 @@
 
   let {
     user,
-  }: { user: { username: string; discordId: string; createdAt: string } | null } = $props();
+    apiKey = null,
+  }: { user: { username: string; discordId: string; createdAt: string } | null; apiKey?: string | null } = $props();
 
   let displayName = $state(branding.name);
   let username = $state(user?.username ?? '');
@@ -22,6 +23,7 @@
   let busy = $state(false);
   let newToken = $state<string | null>(null);
   let tokenCopied = $state(false);
+  let showToken = $state(false);
 
   type PasskeyInfo = { id: string; label: string; createdAt: string; transports: string[] };
   let passkeys = $state<PasskeyInfo[]>([]);
@@ -244,6 +246,16 @@
     if (!newToken) return;
     try {
       await navigator.clipboard.writeText(newToken);
+      tokenCopied = true;
+      setTimeout(() => (tokenCopied = false), 1500);
+    } catch {
+      /* clipboard blocked */
+    }
+  }
+
+  async function copyText(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
       tokenCopied = true;
       setTimeout(() => (tokenCopied = false), 1500);
     } catch {
@@ -528,6 +540,17 @@
 
     <div class="cs-row cs-row-col">
       <label class="cs-label">Token</label>
+      {#if apiKey}
+        <div class="cs-token">
+          <code class="cs-token-val">{showToken ? apiKey : '•'.repeat(Math.min(apiKey.length, 36))}</code>
+          <button class="cs-btn cs-btn-ghost" onclick={() => showToken = !showToken} title={showToken ? 'Hide' : 'Show'}>
+            {#if showToken}<IconEyeOff size={14} />{:else}<IconEye size={14} />{/if}
+          </button>
+          <button class="cs-btn" onclick={() => copyText(apiKey)} title="Copy">
+            {#if tokenCopied}<IconCheck size={14} />{:else}<IconCopy size={14} />{/if}
+          </button>
+        </div>
+      {/if}
       <div class="cs-inline">
         <button class="cs-btn cs-btn-danger" onclick={resetToken} disabled={busy}>
           <IconRefresh size={14} /> Reset token

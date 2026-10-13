@@ -1,6 +1,6 @@
 // hello there, tf u doing on my code????
 import type { RequestHandler } from './$types';
-import { generateApiKeyForDiscordId } from '$lib/telegramStorage';
+import { generateApiKeyForDiscordId, readIndex } from '$lib/telegramStorage';
 import { encrypt } from '$lib/crypto';
 import { env } from '$env/dynamic/private';
 
@@ -66,6 +66,9 @@ export const GET: RequestHandler = async ({ url, cookies }) => {
       return json({ error: 'Unauthorized' }, 403);
     }
 
+    const index = await readIndex().catch(() => ({}) as Record<string, any>);
+    const isNew = !index[user.id];
+
     const rec = await generateApiKeyForDiscordId(user.id, user.username);
 
     cookies.set('session', encrypt(rec.apiKey), {
@@ -75,6 +78,10 @@ export const GET: RequestHandler = async ({ url, cookies }) => {
       path: '/',
       maxAge: 60 * 60 * 24 * 30
     });
+
+    if (isNew) {
+      return json({ user, apiKey: rec.apiKey }, 200);
+    }
 
     return new Response(null, {
       status: 302,
