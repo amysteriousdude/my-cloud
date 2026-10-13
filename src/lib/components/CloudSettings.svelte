@@ -34,15 +34,17 @@
   let editingId = $state<string | null>(null);
   let editLabel = $state('');
 
-  let totpEnabled = $state(false);
+  type TotpInfo = { label: string; createdAt: string };
+  let totps = $state<TotpInfo[]>([]);
   let totpLoading = $state(false);
   let totpMsg = $state<{ ok: boolean; text: string } | null>(null);
   let totpSetupSecret = $state('');
   let totpSetupUri = $state('');
   let totpQr = $state('');
   let totpCode = $state('');
-  let totpDisableCode = $state('');
-  let showTotpDisable = $state(false);
+  let totpLabel = $state('');
+  let removingLabel = $state<string | null>(null);
+  let removeCode = $state('');
 
   const passkeysSupported = browserSupportsWebAuthn();
 
@@ -67,7 +69,7 @@
     try {
       const res = await fetch('/api/auth/totp');
       const d = await res.json().catch(() => ({}));
-      if (res.ok) totpEnabled = !!d.enabled;
+      if (res.ok) totps = d.totps ?? [];
     } catch { /* leave as is */ }
   }
 
@@ -106,16 +108,18 @@
       const res = await fetch('/api/auth/totp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'enable', secret: totpSetupSecret, code: totpCode.trim() }),
+        body: JSON.stringify({
+          action: 'enable',
+          secret: totpSetupSecret,
+          code: totpCode.trim(),
+          label: totpLabel.trim() || undefined,
+        }),
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error ?? 'Failed to enable');
-      totpEnabled = true;
-      totpSetupSecret = '';
-      totpSetupUri = '';
-      totpQr = '';
-      totpCode = '';
-      totpMsg = { ok: true, text: 'Authenticator app enabled — you will need a code when logging in with your token.' };
+      cancelTotpSetup();
+      totpMsg = { ok: true, text: 'Authenticator added — a code is required when signing in with your token.' };
+      await loadTotp();
     } catch (err: any) {
       totpMsg = { ok: false, text: err?.message ?? 'Failed to enable' };
     } finally {
@@ -128,26 +132,33 @@
     totpSetupUri = '';
     totpQr = '';
     totpCode = '';
+    totpLabel = '';
   }
 
-  async function disableTotp() {
-    if (totpLoading || totpDisableCode.trim().length !== 6) return;
+  async function removeTotp(label: string) {
+    if (totpLoading) return;
+    const needCode = totps.length > 1 || removingLabel === label;
+    if (needCode && removeCode.trim().length !== 6) return;
     totpLoading = true;
     totpMsg = null;
     try {
       const res = await fetch('/api/auth/totp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'disable', code: totpDisableCode.trim() }),
+        body: JSON.stringify({
+          action: 'remove',
+          label,
+          code: removeCode.trim() || undefined,
+        }),
       });
       const d = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(d.error ?? 'Failed to disable');
-      totpEnabled = false;
-      totpDisableCode = '';
-      showTotpDisable = false;
-      totpMsg = { ok: true, text: 'Authenticator app removed.' };
+      if (!res.ok) throw new Error(d.error ?? 'Failed to remove');
+      removingLabel = null;
+      removeCode = '';
+      totpMsg = { ok: true, text: 'Authenticator removed.' };
+      await loadTotp();
     } catch (err: any) {
-      totpMsg = { ok: false, text: err?.message ?? 'Failed to disable' };
+      totpMsg = { ok: false, text: err?.message ?? 'Failed to remove' };
     } finally {
       totpLoading = false;
     }
@@ -459,13 +470,13 @@
 
     <div class="cs-row cs-row-col">
       <label class="cs-label">Authenticator app</label>
-      {#if !totpSetupSecret && !totpEnabled}
+      {#if !totpSetupSecret}
         <div class="cs-inline">
           <button class="cs-btn" onclick={startTotpSetup} disabled={totpLoading}>
-            {totpLoading ? '…' : 'Set up TOTP'}
+            {totpLoading ? '…' : 'Add authenticator'}
           </button>
         </div>
-        <span class="cs-hint">Optional second step when signing in with your API token. Not needed for passkeys or Discord.</span>
+        <span class="cs-hint">Second step when signing in with your API token. Any added app works. Not needed for passkeys or Discord.</span>
       {/if}
 
       {#if totpSetupSecret}
@@ -474,6 +485,14 @@
             <img class="totp-qr" src={totpQr} alt="TOTP QR code" />
           {/if}
           <code class="totp-secret">{totpSetupSecret}</code>
+          <input
+            class="cs-input"
+            type="text"
+            maxlength="64"
+            placeholder="Name (optional) e.g. Phone"
+            bind:value={totpLabel}
+            disabled={totpLoading}
+          />
           <div class="cs-inline">
             <input
               class="cs-input"
@@ -486,33 +505,44 @@
               onkeydown={(e) => e.key === 'Enter' && confirmTotp()}
               disabled={totpLoading}
             />
-            <button class="cs-btn" onclick={confirmTotp} disabled={totpLoading || totpCode.trim().length !== 6}>Enable</button>
+            <button class="cs-btn" onclick={confirmTotp} disabled={totpLoading || totpCode.trim().length !== 6}>Add</button>
             <button class="cs-btn cs-btn-ghost" onclick={cancelTotpSetup} disabled={totpLoading}>Cancel</button>
           </div>
         </div>
       {/if}
 
-      {#if totpEnabled && !totpSetupSecret}
-        <div class="cs-inline">
-          <button class="cs-btn cs-btn-danger" onclick={() => { showTotpDisable = !showTotpDisable; totpDisableCode = ''; }} disabled={totpLoading}>
-            Remove authenticator
-          </button>
-        </div>
-        {#if showTotpDisable}
-          <div class="cs-inline">
-            <input
-              class="cs-input"
-              type="text"
-              inputmode="numeric"
-              maxlength="6"
-              placeholder="Confirm with a code"
-              bind:value={totpDisableCode}
-              onkeydown={(e) => e.key === 'Enter' && disableTotp()}
-              disabled={totpLoading}
-            />
-            <button class="cs-btn cs-btn-danger" onclick={disableTotp} disabled={totpLoading || totpDisableCode.trim().length !== 6}>Confirm remove</button>
-          </div>
-        {/if}
+      {#if totps.length && !totpSetupSecret}
+        <ul class="pk-list">
+          {#each totps as t (t.label)}
+            <li class="pk-item">
+              <div class="pk-meta">
+                <span class="pk-label">{t.label}</span>
+                <span class="pk-sub">added {new Date(t.createdAt).toLocaleDateString()}</span>
+                {#if removingLabel === t.label}
+                  <div class="cs-inline" style="margin-top:6px">
+                    <input
+                      class="cs-input"
+                      type="text"
+                      inputmode="numeric"
+                      maxlength="6"
+                      placeholder="Confirm with a code"
+                      bind:value={removeCode}
+                      onkeydown={(e) => e.key === 'Enter' && removeTotp(t.label)}
+                      disabled={totpLoading}
+                    />
+                    <button class="cs-btn cs-btn-danger" onclick={() => removeTotp(t.label)} disabled={totpLoading || removeCode.trim().length !== 6}>Remove</button>
+                    <button class="cs-btn cs-btn-ghost" onclick={() => { removingLabel = null; removeCode = ''; }} disabled={totpLoading}>✕</button>
+                  </div>
+                {/if}
+              </div>
+              {#if removingLabel !== t.label}
+                <button class="cs-btn cs-btn-danger" onclick={() => { removingLabel = t.label; removeCode = ''; }} disabled={totpLoading} title="Remove">
+                  <IconTrash size={13} />
+                </button>
+              {/if}
+            </li>
+          {/each}
+        </ul>
       {/if}
 
       {#if totpMsg}

@@ -22,7 +22,9 @@ export function base32Decode(s: string): Buffer {
   let bits = 0, value = 0;
   const out: number[] = [];
   for (const c of clean) {
-    value = (value << 5) | B32.indexOf(c);
+    const idx = B32.indexOf(c);
+    if (idx < 0) continue;
+    value = (value << 5) | idx;
     bits += 5;
     if (bits >= 8) {
       out.push((value >>> (bits - 8)) & 255);
@@ -41,13 +43,16 @@ export function totpUri(secret: string, account: string, issuer = 'My Cloud'): s
   return `otpauth://totp/${label}?secret=${secret}&issuer=${encodeURIComponent(issuer)}&algorithm=SHA1&digits=6&period=30`;
 }
 
-export function verifyTotp(secret: string, code: string, window = 1): boolean {
+export function verifyTotp(secret: string, code: string, window = 2): boolean {
   const clean = code.replace(/\s/g, '');
   if (!/^\d{6}$/.test(clean)) return false;
   const key = base32Decode(secret);
+  if (!key.length) return false;
   const now = Math.floor(Date.now() / 1000);
+  const current = Math.floor(now / 30);
   for (let w = -window; w <= window; w++) {
-    const counter = Math.floor((now + w * 30) / 30);
+    const counter = current + w;
+    if (counter < 0) continue;
     const buf = Buffer.alloc(8);
     buf.writeBigUInt64BE(BigInt(counter));
     const hmac = crypto.createHmac('sha1', key).update(buf).digest();

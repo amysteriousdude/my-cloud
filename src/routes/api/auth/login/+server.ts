@@ -34,13 +34,14 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 
   if (rec.passkeys?.fileId) {
     const blob = await loadAuthBlob(rec).catch(() => null);
-    if (blob?.totp) {
+    if (blob?.totps?.length) {
       if (!code) {
         return new Response(JSON.stringify({ error: 'Authenticator code required', totpRequired: true }), {
           status: 401, headers: { 'Content-Type': 'application/json' }
         });
       }
-      if (!verifyTotp(blob.totp, String(code))) {
+      const ok = blob.totps.some((t) => verifyTotp(t.secret, String(code)));
+      if (!ok) {
         return new Response(JSON.stringify({ error: 'Wrong authenticator code' }), {
           status: 403, headers: { 'Content-Type': 'application/json' }
         });

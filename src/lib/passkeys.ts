@@ -44,9 +44,15 @@ export function toStored(
   };
 }
 
+export type TotpSlot = {
+  secret: string;
+  label: string;
+  createdAt: string;
+};
+
 export type AuthBlob = {
   creds: StoredPasskey[];
-  totp?: string;
+  totps?: TotpSlot[];
 };
 
 export async function loadAuthBlob(rec: ApiKeyRecord): Promise<AuthBlob> {
@@ -56,9 +62,16 @@ export async function loadAuthBlob(rec: ApiKeyRecord): Promise<AuthBlob> {
   if (!json) return { creds: [] };
   try {
     const blob = JSON.parse(json);
+    let totps: TotpSlot[] | undefined;
+    if (typeof blob.totp === 'string' && blob.totp) {
+      totps = [{ secret: blob.totp, label: 'Authenticator', createdAt: new Date().toISOString() }];
+    }
+    if (Array.isArray(blob.totps)) {
+      totps = blob.totps.filter((t: any) => t && typeof t.secret === 'string' && t.secret);
+    }
     return {
       creds: Array.isArray(blob.creds) ? blob.creds : [],
-      totp: typeof blob.totp === 'string' && blob.totp ? blob.totp : undefined,
+      totps,
     };
   } catch {
     return { creds: [] };
@@ -67,13 +80,14 @@ export async function loadAuthBlob(rec: ApiKeyRecord): Promise<AuthBlob> {
 
 export async function saveAuthBlob(rec: ApiKeyRecord, blob: AuthBlob): Promise<void> {
   const oldMsgId = rec.passkeys?.messageId;
-  if (!blob.creds.length && !blob.totp) {
+  const totps = (blob.totps ?? []).filter((t) => t && t.secret);
+  if (!blob.creds.length && !totps.length) {
     if (oldMsgId) await deleteTelegramMessage(oldMsgId);
     delete rec.passkeys;
     await saveRecord(rec);
     return;
   }
-  const encrypted = encrypt(JSON.stringify({ creds: blob.creds, totp: blob.totp ?? null }));
+  const encrypted = encrypt(JSON.stringify({ creds: blob.creds, totps }));
   const buf = Buffer.from(encrypted, 'utf8');
   const { message_id, file_id } = await uploadBytesToTelegram(buf, 'passkeys.enc');
   rec.passkeys = { fileId: file_id, messageId: message_id };
@@ -89,7 +103,7 @@ export async function loadPasskeys(rec: ApiKeyRecord): Promise<StoredPasskey[]> 
 
 export async function savePasskeys(rec: ApiKeyRecord, creds: StoredPasskey[]): Promise<void> {
   const blob = await loadAuthBlob(rec).catch(() => ({ creds: [] as StoredPasskey[] }));
-  await saveAuthBlob(rec, { creds, totp: blob.totp });
+  await saveAuthBlob(rec, { creds, totps: blob.totps });
 }
 
 export function setChallenge(cookies: Cookies, challenge: string, type: 'reg' | 'auth'): void {
