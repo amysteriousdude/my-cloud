@@ -11,4 +11,13 @@ export default defineConfig({
 			crypto: 'node:crypto',
 		},
 	},
+	build: {
+		rollupOptions: {
+			output: {
+				manualChunks: {
+					fx: ['src/lib/tabs/FX.svelte'],
+				},
+			},
+		},
+	},
 });

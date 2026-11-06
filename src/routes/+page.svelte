@@ -19,6 +19,7 @@
   import ApiTester  from '$lib/tabs/ApiTester.svelte';
   import Database   from '$lib/tabs/Database.svelte';
   import AiChat     from '$lib/tabs/AiChat.svelte';
+  import FXLazy     from '$lib/tabs/FXLazy.svelte';
   import Utilities  from '$lib/tabs/Utilities.svelte';
   import BottomBar  from '$lib/components/BottomBar.svelte';
   import Toast      from '$lib/components/Toast.svelte';
@@ -229,19 +230,7 @@
       {:else if activeTab === 'database'}
         <Database {apiKey} />
       {:else if activeTab === 'fx'}
-        {#await import('$lib/tabs/FX.svelte')}
-          <div class="fx-lazy-loading">
-            <div class="fx-lazy-spinner"></div>
-            <p>Loading FX...</p>
-          </div>
-        {:then mod}
-          <mod.default {apiKey} />
-        {:catch error}
-          <div class="fx-lazy-error">
-            <p>Failed to load FX: {error instanceof Error ? error.message : 'Unknown error'}</p>
-            <button onclick={() => window.location.reload()}>Reload</button>
-          </div>
-        {/await}
+        <FXLazy {apiKey} active />
       {:else if activeTab === 'utility'}
         <Utilities {user} {apiKey} />
       {/if}
