@@ -9,6 +9,6 @@ export default defineConfig({
 			path: 'node:path',
 			os: 'node:os',
 			crypto: 'node:crypto',
-		}
+		},
 	},
 });

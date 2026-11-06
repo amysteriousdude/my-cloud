@@ -19,7 +19,6 @@
   import ApiTester  from '$lib/tabs/ApiTester.svelte';
   import Database   from '$lib/tabs/Database.svelte';
   import AiChat     from '$lib/tabs/AiChat.svelte';
-  import FXLazy     from '$lib/tabs/FXLazy.svelte';
   import Utilities  from '$lib/tabs/Utilities.svelte';
   import BottomBar  from '$lib/components/BottomBar.svelte';
   import Toast      from '$lib/components/Toast.svelte';
@@ -230,7 +229,19 @@
       {:else if activeTab === 'database'}
         <Database {apiKey} />
       {:else if activeTab === 'fx'}
-        <FXLazy {apiKey} active />
+        {#await import('$lib/tabs/FX.svelte')}
+          <div class="fx-lazy-loading">
+            <div class="fx-lazy-spinner"></div>
+            <p>Loading FX...</p>
+          </div>
+        {:then mod}
+          <mod.default {apiKey} />
+        {:catch error}
+          <div class="fx-lazy-error">
+            <p>Failed to load FX: {error instanceof Error ? error.message : 'Unknown error'}</p>
+            <button onclick={() => window.location.reload()}>Reload</button>
+          </div>
+        {/await}
       {:else if activeTab === 'utility'}
         <Utilities {user} {apiKey} />
       {/if}
@@ -397,5 +408,46 @@
 
   @media (max-width: 600px) {
     .main { margin-left: 0 !important; margin-right: 0 !important; padding-bottom: 80px; }
+  }
+
+  .fx-lazy-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 12px;
+    color: var(--text-3);
+  }
+  .fx-lazy-spinner {
+    width: 28px;
+    height: 28px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: fx-spin 0.8s linear infinite;
+  }
+  @keyframes fx-spin {
+    to { transform: rotate(360deg); }
+  }
+  .fx-lazy-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 10px;
+    color: var(--text-2);
+    text-align: center;
+    padding: 20px;
+  }
+  .fx-lazy-error button {
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-family: inherit;
   }
 </style>
