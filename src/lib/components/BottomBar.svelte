@@ -6,7 +6,7 @@
     IconSun, IconMoon, IconDeviceDesktop, IconLogout,
     IconDots, IconX, IconSettings,
     IconDatabase, IconBrain, IconHistory, IconPlus, IconTrash, IconPlayerStop, IconAdjustments,
-    IconChevronDown, IconWaveSine, IconDownload, IconAi, IconSearch,
+    IconChevronDown, IconWaveSine,
   } from '@tabler/icons-svelte';
   import CloudLogo from '$lib/components/icons/CloudLogo.svelte';
   import Avatar from '$lib/components/Avatar.svelte';
@@ -91,48 +91,36 @@
     onbarenter?: () => void;
   } = $props();
 
-  type TabCategory = 'core' | 'craft' | 'tools' | 'ai';
-
-  const TAB_CATEGORIES = {
-    core:  { label: 'Core',      color: 'var(--accent)' },
-    craft: { label: 'Craft',     color: '#a855f7' },
-    tools: { label: 'Tools',     color: '#0ea5e9' },
-    ai:    { label: 'AI',        color: '#f59e0b' },
-  };
-
-  const ALL_TABS: { id: Tab; icon: any; label: string; category: TabCategory }[] = [
-    { id: 'files',      icon: IconFiles,      label: 'Files',      category: 'core' },
-    { id: 'generators', icon: IconSparkles,    label: 'Generators', category: 'craft' },
-    { id: 'downloader', icon: IconDownload,    label: 'Downloader', category: 'core' },
-    { id: 'draw',       icon: IconPencil,      label: 'Draw',       category: 'craft' },
-    { id: 'pdf',        icon: IconFileText,    label: 'PDF',        category: 'craft' },
-    { id: 'film',       icon: IconMovie,       label: 'Film',       category: 'craft' },
-    { id: 'vector',     icon: IconVector,      label: 'Vector',     category: 'craft' },
-    { id: 'light',      icon: IconSun,         label: 'Light',      category: 'craft' },
-    { id: 'effect',     icon: IconWand,        label: 'Effect',     category: 'craft' },
-    { id: 'design',     icon: IconLayout,      label: 'Design',     category: 'craft' },
-    { id: 'word',       icon: IconTypography,   label: 'Word',       category: 'craft' },
-    { id: 'deck',       icon: IconPresentation, label: 'Deck',      category: 'craft' },
-    { id: 'grid',       icon: IconGridDots,     label: 'Grid',      category: 'craft' },
-    { id: 'sound',      icon: IconMusic,        label: 'Sound',     category: 'craft' },
-    { id: 'stats',      icon: IconChartBar,    label: 'Stats',      category: 'tools' },
-    { id: 'editor',     icon: IconFileText,    label: 'Editor',     category: 'tools' },
-    { id: 'notes',      icon: IconNote,        label: 'Notes',      category: 'tools' },
-    { id: 'vault',      icon: IconLock,        label: 'Vault',      category: 'tools' },
-    { id: 'console',    icon: IconTerminal,    label: 'Console',    category: 'tools' },
-    { id: 'dictionary', icon: IconBook,        label: 'Dictionary', category: 'tools' },
-    { id: 'translator', icon: IconLanguage,    label: 'Translator', category: 'tools' },
-    { id: 'apitester',  icon: IconApi,         label: 'API Tester', category: 'tools' },
-    { id: 'database',   icon: IconDatabase,    label: 'Databases',  category: 'tools' },
-    { id: 'fx',         icon: IconWaveSine,    label: 'FX',         category: 'tools' },
-    { id: 'utility',    icon: IconSettings,    label: 'Utilities',  category: 'tools' },
-    { id: 'ai',         icon: IconAi,         label: 'AI Chat',    category: 'ai' },
+  const ALL_TABS: { id: Tab; icon: any; label: string }[] = [
+    { id: 'files',      icon: IconFiles,      label: 'Files' },
+    { id: 'generators', icon: IconSparkles,    label: 'Generators' },
+    { id: 'draw',       icon: IconPencil,      label: 'Draw' },
+    { id: 'pdf',        icon: IconFileText,    label: 'PDF' },
+    { id: 'film',       icon: IconMovie,       label: 'Film' },
+    { id: 'vector',     icon: IconVector,      label: 'Vector' },
+    { id: 'light',      icon: IconSun,         label: 'Light' },
+    { id: 'effect',     icon: IconWand,        label: 'Effect' },
+    { id: 'design',     icon: IconLayout,      label: 'Design' },
+    { id: 'word',       icon: IconTypography,   label: 'Word' },
+    { id: 'deck',       icon: IconPresentation, label: 'Deck' },
+    { id: 'grid',       icon: IconGridDots,     label: 'Grid' },
+    { id: 'sound',      icon: IconMusic,        label: 'Sound' },
+    { id: 'stats',      icon: IconChartBar,    label: 'Stats' },
+    { id: 'notes',      icon: IconNote,        label: 'Notes' },
+    { id: 'vault',      icon: IconLock,        label: 'Vault' },
+    { id: 'console',    icon: IconTerminal,    label: 'Console' },
+    { id: 'dictionary', icon: IconBook,        label: 'Dictionary' },
+    { id: 'translator', icon: IconLanguage,    label: 'Translator' },
+    { id: 'apitester',  icon: IconApi,         label: 'API Tester' },
+    { id: 'database',  icon: IconDatabase,    label: 'Databases' },
+    { id: 'ai',        icon: IconBrain,       label: 'AI' },
+    { id: 'fx',        icon: IconWaveSine,    label: 'FX' },
+    { id: 'utility',   icon: IconSettings,    label: 'Utilities' },
   ];
 
   let position = $state<'bottom'|'top'|'left'|'right'>('bottom');
   let showMore = $state(false);
   let showUser = $state(false);
-  let moreSearch = $state('');
   let repositioning = $state(false);
   let dragIdx = $state<number>(-1);
   let dragOverIdx = $state<number>(-1);
@@ -145,18 +133,6 @@
 
   let mainTabIds = $state<Tab[]>(['files', 'generators', 'translator', 'draw']);
   let mainTabs = $derived(ALL_TABS.filter(t => mainTabIds.includes(t.id)));
-
-  // All non-dock tabs grouped by category, search-filtered
-  let availableTabs = $derived.by(() => {
-    const q = moreSearch.toLowerCase().trim();
-    const grouped = { core: [], craft: [], tools: [], ai: [] };
-    for (const tab of ALL_TABS) {
-      if (mainTabIds.includes(tab.id)) continue;
-      if (q && !tab.label.toLowerCase().includes(q)) continue;
-      grouped[tab.category].push(tab);
-    }
-    return grouped;
-  });
 
   let hasInput = $derived(!!config?.input);
   let hasButtons = $derived(!!config?.buttons && config!.buttons!.length > 0);
@@ -447,83 +423,42 @@
   </div>
 {/if}
 
-<!-- ── More overlay (All Tabs) ────────────────────────────────────────────── -->
+<!-- ── More overlay ────────────────────────────────────────────── -->
 {#if showMore}
-  <div class="bb-more-overlay" onclick={(e) => { if (e.target === e.currentTarget) showMore = false; }}>
+  <div class="bb-more-overlay">
     <div class="bb-more-panel">
       <div class="bb-more-header">
-        <span class="bb-more-title">All Tabs</span>
-        <div class="bb-more-search">
-          <IconSearch size={14} stroke={1.5} />
-          <input
-            class="bb-more-search-input"
-            bind:value={moreSearch}
-            placeholder="Search tabs…"
-            autocomplete="off"
-            onkeydown={(e) => { if (e.key === 'Escape') showMore = false; }}
-          />
-        </div>
-        <button class="bb-more-close" onclick={() => showMore = false}><IconX size={16} /></button>
+        <span>All Tabs</span>
+        <button class="bb-more-close" onclick={() => showMore = false}><IconX size={16}/></button>
       </div>
-
-      <!-- Pinned tabs (in dock) -->
-      <div class="bb-more-section">
-        <div class="bb-more-section-head">
-          <span class="bb-more-section-title">Pinned in dock</span>
-          <span class="bb-more-section-count">{mainTabs.length}</span>
-        </div>
-        <div class="bb-more-grid">
-          {#each mainTabs as tab, i (tab.id)}
-            {@const active = activeTab === tab.id}
-            <div class="bb-more-card" class:active class:is-main
+      <div class="bb-more-grid">
+        {#each mainTabIds as tabId, i (tabId)}
+          {@const tab = ALL_TABS.find(t => t.id === tabId)}
+          {@const active = activeTab === tabId}
+          {#if tab}
+            <div class="bb-more-card" class:active class:is-main={true}
               class:drag-over={moreDragOverIdx === i}
               draggable="true"
               ondragstart={(e) => onMoreDragStart(e, i)}
               ondragover={(e) => onMoreDragOver(e, i)}
               ondragend={onMoreDragEnd}
               onclick={() => { ontabchange(tab.id); showMore = false; }} role="button" tabindex="0">
-              <div class="bb-more-icon">
-                <tab.icon size={20} stroke={active ? 2.2 : 1.5} />
-                <span class="bb-more-badge" class:active={active}></span>
-              </div>
-              <span class="bb-more-label" class:active={active}>{tab.label}</span>
-              <button class="bb-more-unpin" onclick={(e) => { e.stopPropagation(); removeTabFromMain(tab.id); }} title="Unpin from dock">✕</button>
+              <div class="bb-more-icon"><tab.icon size={22} stroke={1.5}/></div>
+              <span class="bb-more-label">{tab.label}</span>
+              <button class="bb-more-remove" onclick={(e) => { e.stopPropagation(); removeTabFromMain(tab.id); }} title="Remove from dock">✕</button>
             </div>
-          {/each}
-          {#if mainTabs.length === 0}
-            <div class="bb-more-empty">No pinned tabs</div>
           {/if}
-        </div>
-      </div>
-
-      <!-- Available tabs by category -->
-      {#each Object.entries(availableTabs) as [cat, tabs] (cat)}
-        {#if tabs.length > 0}
-          <div class="bb-more-section">
-            <div class="bb-more-section-head">
-              <span class="bb-more-section-title" style="color: {TAB_CATEGORIES[cat].color}">{TAB_CATEGORIES[cat].label}</span>
-              <span class="bb-more-section-count">{tabs.length}</span>
-            </div>
-            <div class="bb-more-grid">
-              {#each tabs as tab (tab.id)}
-                <div class="bb-more-card"
-                  onclick={() => { ontabchange(tab.id); showMore = false; }} role="button" tabindex="0">
-                  <div class="bb-more-icon"><tab.icon size={20} stroke={1.5} /></div>
-                  <span class="bb-more-label">{tab.label}</span>
-                  <button class="bb-more-pin" onclick={(e) => { e.stopPropagation(); addTabToMain(tab.id); }} title="Pin to dock">+</button>
-                </div>
-              {/each}
-            </div>
+        {/each}
+        {#each ALL_TABS.filter(t => !mainTabIds.includes(t.id)) as tab (tab.id)}
+          <div class="bb-more-card"
+            onclick={() => { ontabchange(tab.id); showMore = false; }} role="button" tabindex="0">
+            <div class="bb-more-icon"><tab.icon size={22} stroke={1.5}/></div>
+            <span class="bb-more-label">{tab.label}</span>
+            <button class="bb-more-add" onclick={(e) => { e.stopPropagation(); addTabToMain(tab.id); }} title="Add to dock">+</button>
           </div>
-        {/if}
-      {/each}
-      {#if moreSearch.trim() && Object.values(availableTabs).every(t => t.length === 0)}
-        <div class="bb-more-section">
-          <div class="bb-more-empty">No matching tabs</div>
-        </div>
-      {/if}
-
-      <div class="bb-more-hint">Drag pinned tabs to reorder · + pin to dock · ✕ unpin</div>
+        {/each}
+      </div>
+      <div class="bb-more-hint">Drag tabs to reorder · Click + to add to dock</div>
     </div>
   </div>
 {/if}
@@ -861,64 +796,6 @@
   .bb-more-remove { background: var(--red); color: #fff; }
   .bb-more-remove:hover { opacity: .8; }
   .bb-more-hint { margin-top: 14px; text-align: center; font-size: 11px; color: var(--text-3); }
-
-  /* ── All Tabs search + sections ──────────────────────────────── */
-  .bb-more-search {
-    display: flex; align-items: center; gap: 8px;
-    background: var(--bg-3); border: 1px solid var(--border);
-    border-radius: 10px; padding: 6px 10px; color: var(--text-2);
-    margin-bottom: 14px;
-  }
-  .bb-more-search-input {
-    flex: 1; background: none; border: none; outline: none;
-    color: var(--text-1); font-size: 13px; font-family: inherit;
-  }
-  .bb-more-search-input::placeholder { color: var(--text-3); }
-
-  .bb-more-section { margin-bottom: 16px; }
-  .bb-more-section-head {
-    display: flex; align-items: center; justify-content: space-between;
-    margin-bottom: 10px;
-  }
-  .bb-more-section-title {
-    font-size: 12px; font-weight: 700; letter-spacing: 0.4px;
-    text-transform: uppercase; color: var(--text-2);
-  }
-  .bb-more-section-count {
-    font-size: 11px; color: var(--text-3); background: var(--bg-3);
-    padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border);
-  }
-
-  .bb-more-badge {
-    position: absolute; top: 8px; right: 8px;
-    width: 8px; height: 8px; border-radius: 50%;
-    background: var(--accent); box-shadow: 0 0 0 2px var(--bg-2);
-    opacity: 0; transform: scale(0.8); transition: .15s;
-  }
-  .bb-more-badge.active { opacity: 1; transform: scale(1); }
-
-  .bb-more-unpin, .bb-more-pin {
-    position: absolute; top: 8px; right: 8px;
-    width: 24px; height: 24px; border-radius: 50%;
-    border: none; font-size: 13px; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    background: var(--red); color: #fff; opacity: 0;
-    transition: .15s; z-index: 2;
-  }
-  .bb-more-unpin:hover { opacity: 1; background: #f87171; }
-  .bb-more-pin { background: var(--green); }
-  .bb-more-pin:hover { opacity: 1; background: #4ade80; }
-  .bb-more-card:hover .bb-more-unpin, .bb-more-card:hover .bb-more-pin { opacity: 1; }
-
-  .bb-more-empty {
-    grid-column: 1 / -1; text-align: center; padding: 20px;
-    color: var(--text-3); font-size: 12px; font-style: italic;
-  }
-
-  @media (max-width: 520px) {
-    .bb-more-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
-    .bb-more-panel { padding: 12px; width: 92vw; }
-  }
 
   /* ── User panel ────────────────────────────────────────────────── */
   .bb-user-panel {
