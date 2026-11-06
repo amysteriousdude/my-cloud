@@ -389,7 +389,7 @@
         {#if tabs.length > 0}
           <div class="dock-more-section">
             <div class="dock-more-section-head">
-              <span class="dock-more-section-title" style="color: {TAB_CATEGORIES[cat as TabCategory].color}">{TAB_CATEGORIES[cat as TabCategory].label}</span>
+              <span class="dock-more-section-title" style="color: {TAB_CATEGORIES[cat].color}">{TAB_CATEGORIES[cat].label}</span>
               <span class="dock-more-section-count">{tabs.length}</span>
             </div>
             <div class="dock-more-grid">

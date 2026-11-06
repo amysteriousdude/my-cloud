@@ -501,7 +501,7 @@
         {#if tabs.length > 0}
           <div class="bb-more-section">
             <div class="bb-more-section-head">
-              <span class="bb-more-section-title" style="color: {TAB_CATEGORIES[cat as TabCategory].color}">{TAB_CATEGORIES[cat as TabCategory].label}</span>
+              <span class="bb-more-section-title" style="color: {TAB_CATEGORIES[cat].color}">{TAB_CATEGORIES[cat].label}</span>
               <span class="bb-more-section-count">{tabs.length}</span>
             </div>
             <div class="bb-more-grid">
