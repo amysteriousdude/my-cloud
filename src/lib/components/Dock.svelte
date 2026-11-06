@@ -5,7 +5,7 @@
     IconLock, IconTerminal, IconBook, IconLanguage, IconApi,
     IconSun, IconMoon, IconDeviceDesktop, IconLogout,
     IconDots, IconX, IconSettings,
-    IconDatabase, IconWaveSine, IconDownload, IconBot, IconSearch,
+    IconDatabase, IconWaveSine, IconDownload, IconAi, IconSearch,
   } from '@tabler/icons-svelte';
   import CloudLogo from '$lib/components/icons/CloudLogo.svelte';
   import Avatar from '$lib/components/Avatar.svelte';
@@ -73,7 +73,7 @@
     { id: 'database',   icon: IconDatabase,    label: 'Databases',  category: 'tools' },
     { id: 'fx',         icon: IconWaveSine,    label: 'FX',         category: 'tools' },
     { id: 'utility',    icon: IconSettings,    label: 'Utilities',  category: 'tools' },
-    { id: 'ai',         icon: IconBot,         label: 'AI Chat',    category: 'ai' },
+    { id: 'ai',         icon: IconAi,         label: 'AI Chat',    category: 'ai' },
   ];
 
   let position = $state<'bottom'|'top'|'left'|'right'>('bottom');
