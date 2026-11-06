@@ -5,7 +5,8 @@
   import {
     IconWaveSine, IconPlayerPlay, IconPlayerPause, IconPlayerStop,
     IconUpload, IconTrash, IconDownload, IconEye, IconEyeOff,
-    IconPlus, IconCloud,
+    IconPlus, IconCloud, IconFileMusic, IconSettings, IconX,
+    IconSpeaker, IconHeadphones, IconCog, IconAlertTriangle,
   } from '@tabler/icons-svelte';
 
   type FXType = 'reverb' | 'delay' | 'eq' | 'compressor' | 'distortion' | 'filter' | 'chorus' | 'limiter' | 'flanger' | 'phaser' | 'tremolo' | 'bitcrusher' | 'saturation' | 'speed';
@@ -181,6 +182,12 @@
   let cloudFiles = $state<{ fileName: string; metaFileId: string }[]>([]);
   let cloudLoading = $state(false);
   let cloudSearch = $state('');
+
+  // Export
+  let showExportMenu = $state(false);
+  let exporting = $state(false);
+  let exportProgress = $state(0);
+  let exportFormat = $state<'wav' | 'mp3' | 'ogg' | 'flac'>('mp3');
 
   let analyser: AnalyserNode | null = null;
   let waveformData = $state<number[]>(new Array(64).fill(0));
@@ -725,6 +732,114 @@
     URL.revokeObjectURL(url);
   }
 
+  async function exportAudio() {
+    if (!audioBuffer) return;
+    if (!confirm(`Export as ${exportFormat.toUpperCase()}? This may take a while for long files.`)) return;
+
+    exporting = true;
+    exportProgress = 0;
+
+    try {
+      // First render to WAV using OfflineAudioContext
+      const speedFx = effects.find(f => f.type === 'speed' && f.enabled);
+      const rate = speedFx ? (speedFx.params.rate ?? 1) : 1;
+      const newLength = Math.ceil(audioBuffer.length / rate);
+
+      const offCtx = new OfflineAudioContext(
+        audioBuffer.numberOfChannels,
+        newLength,
+        audioBuffer.sampleRate
+      );
+
+      const src = offCtx.createBufferSource();
+      src.buffer = audioBuffer;
+      src.playbackRate.value = rate;
+
+      let lastNode: AudioNode = src;
+      for (const fx of effects) {
+        if (!fx.enabled || fx.type === 'speed') continue;
+        const node = createOfflineFXNode(offCtx, fx.type, fx.params);
+        if (node) {
+          lastNode.connect(node);
+          lastNode = node;
+        }
+      }
+      lastNode.connect(offCtx.destination);
+      src.start(0);
+
+      exportProgress = 30;
+      const rendered = await offCtx.startRendering();
+      exportProgress = 50;
+
+      // Convert to WAV blob
+      const wavBuffer = audioBufferToWav(rendered);
+      const wavBlob = new Blob([wavBuffer], { type: 'audio/wav' });
+
+      if (exportFormat === 'wav') {
+        exportProgress = 90;
+        const url = URL.createObjectURL(wavBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName.replace(/\.[^.]+$/, '') + '_fx.wav';
+        a.click();
+        URL.revokeObjectURL(url);
+        return;
+      }
+
+      // Use ffmpeg.wasm for other formats
+      const { createFFmpeg, fetchFile } = await import('@ffmpeg/ffmpeg');
+      const { toBlobURL } = await import('@ffmpeg/util');
+
+      exportProgress = 60;
+      const ffmpeg = createFFmpeg({ log: true });
+
+      // Load ffmpeg core
+      const coreURL = await toBlobURL(
+        'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd',
+        'ffmpeg-core.js'
+      );
+      await ffmpeg.load(coreURL);
+      exportProgress = 70;
+
+      const inputName = 'input.wav';
+      const outputName = `output.${exportFormat}`;
+
+      ffmpeg.writeFile(inputName, await fetchFile(wavBlob));
+
+      const args = ['-i', inputName];
+      if (exportFormat === 'mp3') {
+        args.push('-c:a', 'libmp3lame', '-b:a', '192k');
+      } else if (exportFormat === 'ogg') {
+        args.push('-c:a', 'libvorbis', '-q:a', '5');
+      } else if (exportFormat === 'flac') {
+        args.push('-c:a', 'flac', '-compression_level', '5');
+      }
+      args.push(outputName);
+
+      await ffmpeg.exec(args);
+      exportProgress = 85;
+
+      const data = ffmpeg.readFile(outputName);
+      const blob = new Blob([data], { type: `audio/${exportFormat}` });
+      exportProgress = 95;
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName.replace(/\.[^.]+$/, '') + `_fx.${exportFormat}`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+    } catch (err) {
+      console.error('Export failed:', err);
+      alert(`Export failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      exporting = false;
+      exportProgress = 0;
+      showExportMenu = false;
+    }
+  }
+
   function createOfflineFXNode(offCtx: OfflineAudioContext, type: FXType, params: Record<string, number>): AudioNode | null {
     switch (type) {
       case 'filter': {
@@ -935,6 +1050,7 @@
   ondragover={(e) => { e.preventDefault(); draggedOver = true; }}
   ondragleave={() => draggedOver = false}
   ondrop={handleDrop}
+  onclick={() => { showExportMenu = false; showAddMenu = false; }}
   role="application"
 >
   {#if !audioBuffer}
@@ -1269,7 +1385,73 @@
     color: var(--text-3);
     font-family: 'Geist Mono', monospace;
   }
-  .fx-header-actions { display: flex; gap: 2px; }
+  .fx-header-actions { display: flex; gap: 2px; align-items: center; }
+
+  /* Export dropdown */
+  .fx-export-wrap { position: relative; }
+  .fx-export-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 8px;
+    min-width: 240px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+    z-index: 20;
+    animation: fx-menu-in 0.12s ease-out;
+  }
+  @keyframes fx-menu-in {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .fx-export-menu-header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 8px 8px;
+    border-bottom: 1px solid var(--border);
+    font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--text-3);
+  }
+  .fx-export-format-list { display: flex; flex-direction: column; gap: 2px; padding: 4px; }
+  .fx-format-btn {
+    display: flex; align-items: center; gap: 10px;
+    width: 100%; text-align: left;
+    background: none; border: none;
+    padding: 8px 10px; border-radius: 6px;
+    color: var(--text-1); font-size: 12px; font-family: inherit;
+    cursor: pointer; transition: background 0.1s ease;
+  }
+  .fx-format-btn:hover { background: var(--bg-3); }
+  .fx-format-btn.active { background: color-mix(in srgb, var(--accent) 12%, var(--bg-2)); }
+  .fx-format-ext {
+    font-family: 'Geist Mono', monospace;
+    font-weight: 600; font-size: 11px;
+    color: var(--accent);
+    min-width: 44px;
+  }
+  .fx-format-desc {
+    flex: 1; font-size: 10px; color: var(--text-3);
+  }
+  .fx-export-menu-footer {
+    padding-top: 8px; border-top: 1px solid var(--border);
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .fx-export-progress {
+    height: 4px; background: var(--bg-3); border-radius: 2px; overflow: hidden;
+  }
+  .fx-export-bar {
+    height: 100%; background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 70%, white));
+    border-radius: 2px; transition: width 0.1s linear;
+  }
+  .fx-export-status { font-size: 11px; color: var(--text-3); text-align: center; font-family: 'Geist Mono', monospace; }
+  .fx-export-go {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    background: var(--accent); border: none; border-radius: 8px;
+    padding: 8px 12px; color: white; font-size: 12px; font-weight: 500; font-family: inherit;
+    cursor: pointer; transition: filter 0.1s ease, transform 0.1s ease;
+  }
+  .fx-export-go:hover { filter: brightness(1.1); transform: translateY(-1px); }
 
   /* Buttons */
   .fx-btn-ghost {
