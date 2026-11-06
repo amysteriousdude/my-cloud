@@ -1498,9 +1498,9 @@
               <IconCloudDownload size={15} /> ShareX
             </button>
             <span class="count"
-              >{processedFiles.length} file{processedFiles.length !== 1
-                ? "s"
-                : ""}</span
+              >{processedFiles.length} file{processedFiles.length !== 1 ? "s" : ""}
+              {#if currentFolders.length > 0} · {currentFolders.length} folder{currentFolders.length !== 1 ? "s" : ""}{/if}
+              </span
             >
           </div>
         </div>
