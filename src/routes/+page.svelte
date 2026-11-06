@@ -19,7 +19,7 @@
   import ApiTester  from '$lib/tabs/ApiTester.svelte';
   import Database   from '$lib/tabs/Database.svelte';
   import AiChat     from '$lib/tabs/AiChat.svelte';
-  import FX         from '$lib/tabs/FX.svelte';
+  import FXLazy     from '$lib/tabs/FXLazy.svelte';
   import Utilities  from '$lib/tabs/Utilities.svelte';
   import BottomBar  from '$lib/components/BottomBar.svelte';
   import Toast      from '$lib/components/Toast.svelte';
@@ -230,7 +230,7 @@
       {:else if activeTab === 'database'}
         <Database {apiKey} />
       {:else if activeTab === 'fx'}
-        <FX {apiKey} />
+        <FXLazy {apiKey} active />
       {:else if activeTab === 'utility'}
         <Utilities {user} {apiKey} />
       {/if}
