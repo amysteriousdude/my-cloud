@@ -47,18 +47,36 @@ export const GET: RequestHandler = async ({ request, url, cookies }) => {
     // Old duplicate code copied metaFileId, causing Svelte each_key_duplicate crashes.
     let needsWrite = false;
     const seenMetaIds = new Set<string>();
+    const cleaned: Record<string, any> = {};
     for (const [key, item] of Object.entries(registry)) {
-      if (!item || item._type) continue;
+      if (!item || item._type) {
+        cleaned[key] = item;
+        continue;
+      }
       const mid = item.metaFileId;
-      if (!mid) continue;
-      if (seenMetaIds.has(mid)) {
-        item.metaFileId = 'meta:' + crypto.randomUUID();
+      if (!mid || seenMetaIds.has(mid)) {
+        const newMid = 'meta:' + crypto.randomUUID();
+        item.metaFileId = newMid;
+        cleaned[newMid] = item;   // re-key by new metaFileId so delete works
         needsWrite = true;
       } else {
         seenMetaIds.add(mid);
+        cleaned[mid] = item;      // re-key by metaFileId for consistency
+        needsWrite = true;
       }
     }
-    if (needsWrite) await writeRegistry(registry);
+    if (needsWrite) {
+      // re-key entire registry by metaFileId for file entries
+      const final: Record<string, any> = {};
+      for (const [key, item] of Object.entries(cleaned)) {
+        if (item && !item._type && item.metaFileId) {
+          final[item.metaFileId] = item;
+        } else {
+          final[key] = item;
+        }
+      }
+      await writeRegistry(final);
+    }
 
     const folderId = normalizeFolderId(url.searchParams.get('folderId'));
 
