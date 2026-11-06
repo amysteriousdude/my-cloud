@@ -6,7 +6,7 @@
     IconWaveSine, IconPlayerPlay, IconPlayerPause, IconPlayerStop,
     IconUpload, IconTrash, IconDownload, IconEye, IconEyeOff,
     IconPlus, IconCloud, IconFileMusic, IconSettings, IconX,
-    IconSpeaker, IconHeadphones, IconCog, IconAlertTriangle,
+    IconDeviceSpeaker, IconHeadphones, IconSettings2, IconAlertTriangle,
   } from '@tabler/icons-svelte';
 
   type FXType = 'reverb' | 'delay' | 'eq' | 'compressor' | 'distortion' | 'filter' | 'chorus' | 'limiter' | 'flanger' | 'phaser' | 'tremolo' | 'bitcrusher' | 'saturation' | 'speed';
@@ -1050,7 +1050,6 @@
   ondragover={(e) => { e.preventDefault(); draggedOver = true; }}
   ondragleave={() => draggedOver = false}
   ondrop={handleDrop}
-  onclick={() => { showExportMenu = false; showAddMenu = false; }}
   role="application"
 >
   {#if !audioBuffer}
@@ -1385,73 +1384,7 @@
     color: var(--text-3);
     font-family: 'Geist Mono', monospace;
   }
-  .fx-header-actions { display: flex; gap: 2px; align-items: center; }
-
-  /* Export dropdown */
-  .fx-export-wrap { position: relative; }
-  .fx-export-menu {
-    position: absolute;
-    top: calc(100% + 6px);
-    right: 0;
-    background: var(--bg-2);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 8px;
-    min-width: 240px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.25);
-    z-index: 20;
-    animation: fx-menu-in 0.12s ease-out;
-  }
-  @keyframes fx-menu-in {
-    from { opacity: 0; transform: translateY(-6px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-  .fx-export-menu-header {
-    display: flex; align-items: center; gap: 8px;
-    padding: 4px 8px 8px;
-    border-bottom: 1px solid var(--border);
-    font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
-    color: var(--text-3);
-  }
-  .fx-export-format-list { display: flex; flex-direction: column; gap: 2px; padding: 4px; }
-  .fx-format-btn {
-    display: flex; align-items: center; gap: 10px;
-    width: 100%; text-align: left;
-    background: none; border: none;
-    padding: 8px 10px; border-radius: 6px;
-    color: var(--text-1); font-size: 12px; font-family: inherit;
-    cursor: pointer; transition: background 0.1s ease;
-  }
-  .fx-format-btn:hover { background: var(--bg-3); }
-  .fx-format-btn.active { background: color-mix(in srgb, var(--accent) 12%, var(--bg-2)); }
-  .fx-format-ext {
-    font-family: 'Geist Mono', monospace;
-    font-weight: 600; font-size: 11px;
-    color: var(--accent);
-    min-width: 44px;
-  }
-  .fx-format-desc {
-    flex: 1; font-size: 10px; color: var(--text-3);
-  }
-  .fx-export-menu-footer {
-    padding-top: 8px; border-top: 1px solid var(--border);
-    display: flex; flex-direction: column; gap: 8px;
-  }
-  .fx-export-progress {
-    height: 4px; background: var(--bg-3); border-radius: 2px; overflow: hidden;
-  }
-  .fx-export-bar {
-    height: 100%; background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 70%, white));
-    border-radius: 2px; transition: width 0.1s linear;
-  }
-  .fx-export-status { font-size: 11px; color: var(--text-3); text-align: center; font-family: 'Geist Mono', monospace; }
-  .fx-export-go {
-    display: flex; align-items: center; justify-content: center; gap: 6px;
-    background: var(--accent); border: none; border-radius: 8px;
-    padding: 8px 12px; color: white; font-size: 12px; font-weight: 500; font-family: inherit;
-    cursor: pointer; transition: filter 0.1s ease, transform 0.1s ease;
-  }
-  .fx-export-go:hover { filter: brightness(1.1); transform: translateY(-1px); }
+  .fx-header-actions { display: flex; gap: 2px; }
 
   /* Buttons */
   .fx-btn-ghost {
