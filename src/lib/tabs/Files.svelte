@@ -149,6 +149,7 @@
   $effect(() => {
     let _ = currentFolderId;
     selectedIds = new Set();
+    searchQuery = ""; // entering/leaving a folder shouldn't be masked by a stale search
   });
 
   let preview = $state<FileRecord | null>(null);
