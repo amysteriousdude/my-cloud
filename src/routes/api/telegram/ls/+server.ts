@@ -1,7 +1,6 @@
 // hello there, tf u doing on my code????
 import type { RequestHandler } from './$types';
-import { getRecordByApiKey, readRegistry, writeRegistry } from '$lib/telegramStorage';
-import crypto from 'crypto';
+import { getRecordByApiKey, readRegistry } from '$lib/telegramStorage';
 
 function apiKey(req: Request) {
   return (req.headers.get('x-api-key') ?? '').trim();
@@ -42,41 +41,6 @@ export const GET: RequestHandler = async ({ request, url, cookies }) => {
 
     const raw = await readRegistry(true);
     const registry: Record<string, any> = JSON.parse(JSON.stringify(raw));
-
-    // Cleanup: reassign unique metaFileIds to any duplicate entries.
-    // Old duplicate code copied metaFileId, causing Svelte each_key_duplicate crashes.
-    let needsWrite = false;
-    const seenMetaIds = new Set<string>();
-    const cleaned: Record<string, any> = {};
-    for (const [key, item] of Object.entries(registry)) {
-      if (!item || item._type) {
-        cleaned[key] = item;
-        continue;
-      }
-      const mid = item.metaFileId;
-      if (!mid || seenMetaIds.has(mid)) {
-        const newMid = 'meta:' + crypto.randomUUID();
-        item.metaFileId = newMid;
-        cleaned[newMid] = item;   // re-key by new metaFileId so delete works
-        needsWrite = true;
-      } else {
-        seenMetaIds.add(mid);
-        cleaned[mid] = item;      // re-key by metaFileId for consistency
-        needsWrite = true;
-      }
-    }
-    if (needsWrite) {
-      // re-key entire registry by metaFileId for file entries
-      const final: Record<string, any> = {};
-      for (const [key, item] of Object.entries(cleaned)) {
-        if (item && !item._type && item.metaFileId) {
-          final[item.metaFileId] = item;
-        } else {
-          final[key] = item;
-        }
-      }
-      await writeRegistry(final);
-    }
 
     const folderId = normalizeFolderId(url.searchParams.get('folderId'));
 
