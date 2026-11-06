@@ -1,6 +1,7 @@
 // hello there, tf u doing on my code????
 import type { RequestHandler } from './$types';
-import { getRecordByApiKey, readRegistry } from '$lib/telegramStorage';
+import { getRecordByApiKey, readRegistry, writeRegistry } from '$lib/telegramStorage';
+import crypto from 'crypto';
 
 function apiKey(req: Request) {
   return (req.headers.get('x-api-key') ?? '').trim();
@@ -41,6 +42,24 @@ export const GET: RequestHandler = async ({ request, url, cookies }) => {
 
     const raw = await readRegistry(true);
     const registry: Record<string, any> = JSON.parse(JSON.stringify(raw));
+
+    // Cleanup: reassign unique metaFileIds to any duplicate entries.
+    // Old duplicate code copied metaFileId, causing Svelte each_key_duplicate crashes.
+    let needsWrite = false;
+    const seenMetaIds = new Set<string>();
+    for (const [key, item] of Object.entries(registry)) {
+      if (!item || item._type) continue;
+      const mid = item.metaFileId;
+      if (!mid) continue;
+      if (seenMetaIds.has(mid)) {
+        item.metaFileId = 'meta:' + crypto.randomUUID();
+        needsWrite = true;
+      } else {
+        seenMetaIds.add(mid);
+      }
+    }
+    if (needsWrite) await writeRegistry(registry);
+
     const folderId = normalizeFolderId(url.searchParams.get('folderId'));
 
     const files: any[] = [];

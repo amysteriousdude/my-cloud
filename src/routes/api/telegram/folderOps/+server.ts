@@ -210,9 +210,11 @@ export const POST: RequestHandler = async ({ request }) => {
     }
 
     const registryKey = 'dup:' + crypto.randomUUID();
+    const newMetaFileId = 'meta:' + crypto.randomUUID();
 
     registry[registryKey] = {
       ...file,
+      metaFileId: newMetaFileId,
       fileName,
       time: new Date().toISOString(),
       favorite: false,
