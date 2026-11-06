@@ -187,11 +187,33 @@ export const POST: RequestHandler = async ({ request }) => {
       return Response.json({ error: 'Not found' }, { status: 404 });
     }
 
+    const folderId = (file.folderId ?? null);
+    const baseName = body.newName?.trim() || file.fileName;
+    let fileName = baseName;
+
+    // auto-number to avoid same-folder name conflicts: file (1), file (2), ...
+    let n = 1;
+    while (true) {
+      const conflict = Object.values(registry).find((r: any) =>
+        !r._type &&
+        r.fileName === fileName &&
+        (r.folderId ?? null) === folderId &&
+        r.metaFileId !== body.metaFileId
+      );
+      if (!conflict) break;
+      const dot = baseName.lastIndexOf('.');
+      const namePart = dot === -1 ? baseName : baseName.slice(0, dot);
+      const ext = dot === -1 ? '' : baseName.slice(dot);
+      fileName = `${namePart} (${n})${ext}`;
+      n++;
+      if (n > 99) break;
+    }
+
     const registryKey = 'dup:' + crypto.randomUUID();
 
     registry[registryKey] = {
       ...file,
-      fileName: body.newName || `${file.fileName} (copy)`,
+      fileName,
       time: new Date().toISOString(),
       favorite: false,
     };
