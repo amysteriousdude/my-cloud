@@ -189,6 +189,13 @@
   let exportProgress = $state(0);
   let exportFormat = $state<'wav' | 'mp3' | 'ogg' | 'flac'>('mp3');
 
+  const EXPORT_FORMATS: { ext: 'wav' | 'mp3' | 'ogg' | 'flac'; desc: string }[] = [
+    { ext: 'wav', desc: 'Lossless, instant, no extra download' },
+    { ext: 'mp3', desc: '192k, plays everywhere' },
+    { ext: 'ogg', desc: 'Vorbis q5, open source' },
+    { ext: 'flac', desc: 'Lossless, compressed' },
+  ];
+
   let analyser: AnalyserNode | null = null;
   let waveformData = $state<number[]>(new Array(64).fill(0));
   let fileInput: HTMLInputElement;
@@ -1050,6 +1057,7 @@
   ondragover={(e) => { e.preventDefault(); draggedOver = true; }}
   ondragleave={() => draggedOver = false}
   ondrop={handleDrop}
+  onclick={() => { showExportMenu = false; showAddMenu = false; }}
   role="application"
 >
   {#if !audioBuffer}
@@ -1087,9 +1095,44 @@
         <button class="fx-btn-ghost" onclick={() => { audioBuffer = null; fileName = ''; stop(); effects = []; }} title="New file">
           <IconUpload size={14} />
         </button>
-        <button class="fx-btn-ghost" onclick={exportWav} title="Export WAV">
-          <IconDownload size={14} />
-        </button>
+        <div class="fx-export-wrap" onclick={(e) => e.stopPropagation()}>
+          <button class="fx-btn-ghost" onclick={() => showExportMenu = !showExportMenu} title="Export">
+            <IconDownload size={14} />
+          </button>
+          {#if showExportMenu}
+            <div class="fx-export-menu">
+              <div class="fx-export-menu-header">Export as</div>
+              <div class="fx-export-format-list">
+                {#each EXPORT_FORMATS as f}
+                  <button
+                    class="fx-format-btn"
+                    class:active={exportFormat === f.ext}
+                    disabled={exporting}
+                    onclick={() => exportFormat = f.ext}
+                  >
+                    <span class="fx-format-ext">{f.ext.toUpperCase()}</span>
+                    <span class="fx-format-desc">{f.desc}</span>
+                  </button>
+                {/each}
+              </div>
+              <div class="fx-export-menu-footer">
+                {#if exporting}
+                  <div class="fx-export-progress">
+                    <div class="fx-export-bar" style="width: {exportProgress}%"></div>
+                  </div>
+                  <div class="fx-export-status">{exportProgress}%</div>
+                {/if}
+                <button
+                  class="fx-export-go"
+                  disabled={exporting}
+                  onclick={() => exportFormat === 'wav' ? exportWav() : exportAudio()}
+                >
+                  {exporting ? 'Exporting…' : `Export ${exportFormat.toUpperCase()}`}
+                </button>
+              </div>
+            </div>
+          {/if}
+        </div>
       </div>
     </div>
 
@@ -1133,7 +1176,7 @@
       <div class="fx-chain-header">
         <span class="fx-chain-title">Effects</span>
         <div class="fx-add-wrap">
-          <button class="fx-add-btn" onclick={() => showAddMenu = !showAddMenu}>
+          <button class="fx-add-btn" onclick={(e) => { e.stopPropagation(); showAddMenu = !showAddMenu; }}>
             <IconPlus size={13} /> Add
           </button>
           {#if showAddMenu}
@@ -1384,7 +1427,75 @@
     color: var(--text-3);
     font-family: 'Geist Mono', monospace;
   }
-  .fx-header-actions { display: flex; gap: 2px; }
+  .fx-header-actions { display: flex; gap: 2px; align-items: center; }
+
+  /* Export dropdown */
+  .fx-export-wrap { position: relative; }
+  .fx-export-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 8px;
+    min-width: 240px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+    z-index: 20;
+    animation: fx-menu-in 0.12s ease-out;
+  }
+  @keyframes fx-menu-in {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .fx-export-menu-header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 8px 8px;
+    border-bottom: 1px solid var(--border);
+    font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--text-3);
+  }
+  .fx-export-format-list { display: flex; flex-direction: column; gap: 2px; padding: 4px; }
+  .fx-format-btn {
+    display: flex; align-items: center; gap: 10px;
+    width: 100%; text-align: left;
+    background: none; border: none;
+    padding: 8px 10px; border-radius: 6px;
+    color: var(--text-1); font-size: 12px; font-family: inherit;
+    cursor: pointer; transition: background 0.1s ease;
+  }
+  .fx-format-btn:hover:not(:disabled) { background: var(--bg-3); }
+  .fx-format-btn.active { background: color-mix(in srgb, var(--accent) 12%, var(--bg-2)); }
+  .fx-format-btn:disabled { opacity: 0.5; cursor: default; }
+  .fx-format-ext {
+    font-family: 'Geist Mono', monospace;
+    font-weight: 600; font-size: 11px;
+    color: var(--accent);
+    min-width: 44px;
+  }
+  .fx-format-desc {
+    flex: 1; font-size: 10px; color: var(--text-3);
+  }
+  .fx-export-menu-footer {
+    padding-top: 8px; border-top: 1px solid var(--border);
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .fx-export-progress {
+    height: 4px; background: var(--bg-3); border-radius: 2px; overflow: hidden;
+  }
+  .fx-export-bar {
+    height: 100%; background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 70%, white));
+    border-radius: 2px; transition: width 0.1s linear;
+  }
+  .fx-export-status { font-size: 11px; color: var(--text-3); text-align: center; font-family: 'Geist Mono', monospace; }
+  .fx-export-go {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    background: var(--accent); border: none; border-radius: 8px;
+    padding: 8px 12px; color: white; font-size: 12px; font-weight: 500; font-family: inherit;
+    cursor: pointer; transition: filter 0.1s ease, transform 0.1s ease;
+  }
+  .fx-export-go:hover:not(:disabled) { filter: brightness(1.1); transform: translateY(-1px); }
+  .fx-export-go:disabled { opacity: 0.6; cursor: default; }
 
   /* Buttons */
   .fx-btn-ghost {
