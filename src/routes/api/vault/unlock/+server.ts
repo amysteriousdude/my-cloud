@@ -51,6 +51,12 @@ export const POST: RequestHandler = async ({ request, cookies, locals }) => {
   let existing: VaultIndexPlain | null = null;
   let resolvedFileId: string | null = null;
   const passwordHash = await sha256(password);
+  // A pointer can name a perfectly readable index that simply isn't the vault
+  // this password opens (a stale localStorage hint pointing at a vault the bug
+  // minted, for example). That must not abort the search — otherwise one stale
+  // candidate shadows every correct one behind it.
+  let sawReadableIndex = false;
+  let sawRightPasswordDeadRegistry = false;
 
   for (const fileId of candidates) {
     const index = await loadVaultIndex(fileId);
@@ -58,15 +64,17 @@ export const POST: RequestHandler = async ({ request, cookies, locals }) => {
     if (index.userId !== userId) {
       return json({ error: 'Vault belongs to another user' }, 403);
     }
-    // hash is unsalted sha256(password), so a mismatch means a wrong passphrase
-    // rather than a stale pointer — report it instead of falling through.
-    if (index.hash !== passwordHash) {
-      return json({ error: 'Wrong passphrase' }, 401);
-    }
+    sawReadableIndex = true;
+    // hash is unsalted sha256(password), so a mismatch means "not this vault".
+    // Keep looking; the outcome is decided once the whole list is exhausted.
+    if (index.hash !== passwordHash) continue;
     // A pointer can outlive the registry it names (uploads delete the previous
     // one). Reject it and try the next candidate rather than unlocking into a
     // vault whose file list is about to 500.
-    if (!index.registryFileId) continue;
+    if (!index.registryFileId) {
+      sawRightPasswordDeadRegistry = true;
+      continue;
+    }
     try {
       const candidateKey = await deriveVaultKey(
         password,
@@ -74,6 +82,7 @@ export const POST: RequestHandler = async ({ request, cookies, locals }) => {
       );
       await loadVaultRegistry(candidateKey, index.registryFileId);
     } catch {
+      sawRightPasswordDeadRegistry = true;
       continue;
     }
 
@@ -83,6 +92,25 @@ export const POST: RequestHandler = async ({ request, cookies, locals }) => {
   }
 
   if (!existing) {
+    // Password was right but the registry it points at is gone — a data
+    // problem, not an authentication one. Don't report it as a bad password.
+    if (sawRightPasswordDeadRegistry) {
+      return json(
+        {
+          error:
+            'Vault index found, but its registry is missing or unreadable — the files it lists cannot be loaded.',
+          pointer: resolvedFileId ?? hintFileId ?? cookieFileId ?? null
+        },
+        409
+      );
+    }
+    // Readable index, no hash matched: either the passphrase is wrong or the
+    // pointers all name a different vault. Either way creating one would be
+    // destructive, so refuse rather than guess.
+    if (sawReadableIndex) {
+      return json({ error: 'Wrong passphrase' }, 401);
+    }
+
     // A pointer that leads nowhere means an existing vault could not be
     // located — that is NOT the same as "this user never had a vault".
     // Previously this branch always minted a fresh empty one (new salt,
