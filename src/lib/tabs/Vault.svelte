@@ -155,6 +155,20 @@
     return size;
   }
 
+  // Direct children only — folder/*, never folder/**. getFolderSize stays
+  // recursive on purpose (bytes should be the whole subtree), but a badge
+  // saying what's *inside* this folder must not count grandchildren: a
+  // folder holding 4 subfolders and 16 files reads "4 folders, 16 files",
+  // not "16 folders, 60 files".
+  function folderContentsLabel(folderId: string): string {
+    const nFiles = files.filter(f => f.folderId === folderId).length;
+    const nFolders = folders.filter(f => f.parentId === folderId).length;
+    const parts: string[] = [];
+    if (nFolders) parts.push(`${nFolders} folder${nFolders !== 1 ? 's' : ''}`);
+    if (nFiles) parts.push(`${nFiles} file${nFiles !== 1 ? 's' : ''}`);
+    return parts.length ? parts.join(', ') : 'Empty';
+  }
+
   async function loadVault() {
     filesLoading = true;
     error = '';
@@ -595,14 +609,6 @@
         </div>
       {/if}
 
-      <div class="encryption-bar">
-        <IconShield size={13} stroke={2} />
-        <span>{formatBytes(plainTotal)} plain → {formatBytes(encryptedTotal)} encrypted</span>
-        <span class="enc-overhead">+{formatBytes(overheadBytes)} overhead</span>
-        <span>·</span>
-        <span>{totalChunks} chunks</span>
-      </div>
-
       {#if currentPath.length > 0 || currentFolderId}
         <div class="breadcrumb">
           <span class="bc-item bc-root" onclick={() => currentFolderId = undefined}>
@@ -639,7 +645,12 @@
             <button class="check-btn" onclick={toggleSelectAll}>
               {#if allSelected}<IconSquareCheck size={16} />{:else}<IconSquare size={16} />{/if}
             </button>
-            <span class="fh-name">Name</span><span class="fh-size">Size</span><span class="fh-date">Date</span><span class="fh-actions">Actions</span>
+            <span class="fh-grip"></span>
+            <span class="fh-icon"></span>
+            <span class="fh-name">Name</span>
+            <span class="fh-size">Size</span>
+            <span class="fh-date">Date</span>
+            <span class="fh-actions">Actions</span>
           </div>
 
           {#if creatingFolder}
@@ -684,7 +695,7 @@
                   </button>
                 {/if}
                 <div class="ftags">
-                  <span class="ftag folder-tag">{files.filter(f => f.folderId === folder.id).length} items</span>
+                  <span class="ftag folder-tag">{folderContentsLabel(folder.id)}</span>
                 </div>
               </div>
               <span class="fsize">{formatBytes(getFolderSize(folder.id))}</span>
@@ -798,7 +809,7 @@
               </button>
               <button class="grid-preview folder-preview" onclick={() => currentFolderId = folder.id}>
                 <IconFolder size={56} stroke={1.2} color="#fbbf24" />
-                <div class="folder-badge">{files.filter(f => f.folderId === folder.id).length} items</div>
+                <div class="folder-badge">{folderContentsLabel(folder.id)}</div>
               </button>
               <div class="grid-info">
                 <div class="grid-name">
@@ -852,13 +863,17 @@
           {/each}
         </div>
       {/if}
-    </div>
 
-    <footer class="storage-footer">
-      <span>🔒 {files.length} encrypted file{files.length !== 1 ? "s" : ""}</span>
-      <span>·</span>
-      <span>💾 {formatBytes(plainTotal)} plain ({formatBytes(encryptedTotal)} encrypted)</span>
-    </footer>
+      <footer class="storage-footer">
+        <span>🔒 {files.length} encrypted file{files.length !== 1 ? "s" : ""}</span>
+        <span>·</span>
+        <span>💾 {formatBytes(plainTotal)} plain ({formatBytes(encryptedTotal)} encrypted)</span>
+        <span>·</span>
+        <span>+{formatBytes(overheadBytes)} overhead</span>
+        <span>·</span>
+        <span>{totalChunks} chunk{totalChunks !== 1 ? "s" : ""}</span>
+      </footer>
+    </div>
   </div>
 
   {#if showDeleteConfirm}
@@ -966,9 +981,6 @@
   .bulk-btn:hover { background: rgba(255,255,255,0.2); }
   .bulk-btn.danger { background: rgba(248,113,113,0.3); border-color: rgba(248,113,113,0.4); }
 
-  .encryption-bar { display: flex; align-items: center; gap: 8px; padding: 8px 14px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 10px; font-size: 11px; color: var(--text-3); font-family: 'Geist Mono', monospace; }
-  .enc-overhead { opacity: 0.7; }
-
   .breadcrumb { display: flex; align-items: center; gap: 4px; padding: 6px 0; margin-bottom: 6px; font-size: 12px; flex-wrap: wrap; }
   .bc-item { display: inline-flex; align-items: center; gap: 4px; padding: 3px 6px; border-radius: 6px; color: var(--text-3); cursor: pointer; transition: all 0.12s; }
   .bc-item:hover { background: var(--bg-2); color: var(--text-1); }
@@ -1036,7 +1048,10 @@
   .grid-meta { font-size: 11px; color: var(--text-3); font-family: 'Geist Mono', monospace; }
   .grid-actions { display: flex; gap: 2px; padding: 6px 8px 8px; border-top: 1px solid var(--border); justify-content: flex-end; }
 
-  .storage-footer { display: flex; align-items: center; gap: 8px; padding: 12px 24px; font-size: 11px; color: var(--text-3); font-family: 'Geist Mono', monospace; border-top: 1px solid var(--border); }
+  /* Lives inside .content so it inherits the same centred 1100px column as
+     the list. Before it sat outside that column, which is why it hugged the
+     left edge of the viewport instead of sitting under the files. */
+  .storage-footer { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; margin-top: 14px; padding: 12px 24px; font-size: 11px; color: var(--text-3); font-family: 'Geist Mono', monospace; border-top: 1px solid var(--border); }
 
   .modal-overlay { position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; }
   .modal-content { background: var(--bg-2); border: 1px solid var(--border); border-radius: 16px; padding: 24px; max-width: 400px; width: 90%; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,0.4); }
