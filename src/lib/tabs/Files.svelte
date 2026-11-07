@@ -915,14 +915,18 @@
     return size;
   }
 
-  // counts direct files plus every nested file AND every nested folder,
-  // mirroring the recursion getFolderSize already does
-  function getFolderItemCount(folderId: string): number {
-    let count = files.filter(f => f.folderId === folderId).length;
-    for (const sub of folders.filter(f => f.parentId === folderId)) {
-      count += 1 + getFolderItemCount(sub.folderId);
-    }
-    return count;
+  // Direct children only — folder/*, never folder/**. This used to recurse
+  // through every descendant, so a folder holding 4 subfolders and 16 files
+  // advertised "60 items". getFolderSize stays recursive on purpose (bytes
+  // should be the whole subtree), but a badge describing what is *inside*
+  // this folder must only count what's one level down.
+  function folderContentsLabel(folderId: string): string {
+    const nFiles = files.filter(f => f.folderId === folderId).length;
+    const nFolders = folders.filter(f => f.parentId === folderId).length;
+    const parts: string[] = [];
+    if (nFolders) parts.push(`${nFolders} folder${nFolders !== 1 ? 's' : ''}`);
+    if (nFiles) parts.push(`${nFiles} file${nFiles !== 1 ? 's' : ''}`);
+    return parts.length ? parts.join(', ') : 'Empty';
   }
 
   async function updateTags(file: FileRecord, tags: string[]) {
@@ -1658,7 +1662,7 @@
                     </button>
                   {/if}
                   <div class="ftags">
-                    <span class="ftag folder-tag">{getFolderItemCount(folder.folderId)} items</span>
+                    <span class="ftag folder-tag">{folderContentsLabel(folder.folderId)}</span>
                     {#if folder.public}<span class="ftag public-tag"><IconWorld size={10} /> Public</span>{/if}
                   </div>
                 </div>
@@ -1881,7 +1885,7 @@
 
                 <button class="grid-preview folder-preview" onclick={() => (currentFolderId = folder.folderId)}>
                   <IconFolder size={56} stroke={1.2} color="#fbbf24" />
-                  <div class="folder-badge">{getFolderItemCount(folder.folderId)} items</div>
+                  <div class="folder-badge">{folderContentsLabel(folder.folderId)}</div>
                 </button>
                 <div class="grid-info">
                   <div class="grid-name">
