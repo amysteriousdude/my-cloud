@@ -793,25 +793,34 @@
         return;
       }
 
-      // Use ffmpeg.wasm for other formats
-      const { createFFmpeg, fetchFile } = await import('@ffmpeg/ffmpeg');
-      const { toBlobURL } = await import('@ffmpeg/util');
+      // Use ffmpeg.wasm for other formats.
+      // NOTE: @ffmpeg/ffmpeg is 0.12.x — the 0.11 API (createFFmpeg / ffmpeg.load(url)
+      // / ffmpeg.run / ffmpeg.FS) no longer exists, so `createFFmpeg` was undefined
+      // and calling it threw "v is not a function". 0.12 uses the FFmpeg class,
+      // load({coreURL, wasmURL}) and promise-returning writeFile/exec/readFile.
+      const { FFmpeg } = await import('@ffmpeg/ffmpeg');
+      const { fetchFile, toBlobURL } = await import('@ffmpeg/util');
 
       exportProgress = 60;
-      const ffmpeg = createFFmpeg({ log: true });
+      const ffmpeg = new FFmpeg();
 
-      // Load ffmpeg core
-      const coreURL = await toBlobURL(
-        'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd',
-        'ffmpeg-core.js'
-      );
-      await ffmpeg.load(coreURL);
+      ffmpeg.on('progress', ({ progress }) => {
+        if (Number.isFinite(progress)) {
+          exportProgress = Math.min(84, 70 + Math.round(progress * 14));
+        }
+      });
+
+      const CORE_BASE = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+      await ffmpeg.load({
+        coreURL: await toBlobURL(`${CORE_BASE}/ffmpeg-core.js`, 'text/javascript'),
+        wasmURL: await toBlobURL(`${CORE_BASE}/ffmpeg-core.wasm`, 'application/wasm')
+      });
       exportProgress = 70;
 
       const inputName = 'input.wav';
       const outputName = `output.${exportFormat}`;
 
-      ffmpeg.writeFile(inputName, await fetchFile(wavBlob));
+      await ffmpeg.writeFile(inputName, await fetchFile(wavBlob));
 
       const args = ['-i', inputName];
       if (exportFormat === 'mp3') {
@@ -826,8 +835,9 @@
       await ffmpeg.exec(args);
       exportProgress = 85;
 
-      const data = ffmpeg.readFile(outputName);
-      const blob = new Blob([data], { type: `audio/${exportFormat}` });
+      const data = (await ffmpeg.readFile(outputName)) as Uint8Array;
+      // fresh Uint8Array so the BlobPart is ArrayBuffer-backed, not SharedArrayBuffer
+      const blob = new Blob([new Uint8Array(data)], { type: `audio/${exportFormat}` });
       exportProgress = 95;
 
       const url = URL.createObjectURL(blob);
@@ -836,6 +846,8 @@
       a.download = fileName.replace(/\.[^.]+$/, '') + `_fx.${exportFormat}`;
       a.click();
       URL.revokeObjectURL(url);
+
+      await ffmpeg.terminate();
 
     } catch (err) {
       console.error('Export failed:', err);
