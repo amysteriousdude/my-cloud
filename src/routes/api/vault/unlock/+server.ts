@@ -7,8 +7,10 @@ import {
   sha256,
   saveVaultState,
   loadVaultIndex,
+  loadVaultRegistry,
   exportVaultKey,
   getPinnedFileId,
+  getVaultIndexFileIdFromSlot,
   setVaultIndexCookie
 } from '../_vault';
 
@@ -31,14 +33,24 @@ export const POST: RequestHandler = async ({ request, cookies, locals }) => {
 
   const cookieFileId = (cookies.get('vault_index_file_id') ?? '').trim();
 
-  // Most specific pointer first: client hint, then cookie, then the chat pin.
+  // A chat has exactly one pin and writeIndex() takes it on every API-key
+  // save, so the pin alone is not enough. Candidates in order of freshness:
+  // client hint, cookie, the pin itself (it holds the vault index whenever
+  // the vault saved last), then the slot writeIndex() writes when it steals
+  // the pin away from a vault index.
+  const [slotFileId, pinnedFileId] = await Promise.all([
+    getVaultIndexFileIdFromSlot(),
+    getPinnedFileId()
+  ]);
+
   const candidates: string[] = [];
-  for (const c of [hintFileId, cookieFileId, await getPinnedFileId()]) {
+  for (const c of [hintFileId, cookieFileId, pinnedFileId, slotFileId]) {
     if (c && !candidates.includes(c)) candidates.push(c);
   }
 
   let existing: VaultIndexPlain | null = null;
   let resolvedFileId: string | null = null;
+  const passwordHash = await sha256(password);
 
   for (const fileId of candidates) {
     const index = await loadVaultIndex(fileId);
@@ -46,6 +58,25 @@ export const POST: RequestHandler = async ({ request, cookies, locals }) => {
     if (index.userId !== userId) {
       return json({ error: 'Vault belongs to another user' }, 403);
     }
+    // hash is unsalted sha256(password), so a mismatch means a wrong passphrase
+    // rather than a stale pointer — report it instead of falling through.
+    if (index.hash !== passwordHash) {
+      return json({ error: 'Wrong passphrase' }, 401);
+    }
+    // A pointer can outlive the registry it names (uploads delete the previous
+    // one). Reject it and try the next candidate rather than unlocking into a
+    // vault whose file list is about to 500.
+    if (!index.registryFileId) continue;
+    try {
+      const candidateKey = await deriveVaultKey(
+        password,
+        Buffer.from(index.salt, 'base64')
+      );
+      await loadVaultRegistry(candidateKey, index.registryFileId);
+    } catch {
+      continue;
+    }
+
     existing = index;
     resolvedFileId = fileId;
     break;
@@ -70,7 +101,6 @@ export const POST: RequestHandler = async ({ request, cookies, locals }) => {
 
     const salt = randomBytes(16);
     const key = await deriveVaultKey(password, salt);
-    const passwordHash = await sha256(password);
 
     const registry: VaultRegistryPlain = {
       version: 1,
@@ -113,11 +143,6 @@ export const POST: RequestHandler = async ({ request, cookies, locals }) => {
     }
 
     return json({ ok: true, created: true, indexFileId: result?.indexFileId ?? null });
-  }
-
-  const passwordHash = await sha256(password);
-  if (existing.hash !== passwordHash) {
-    return json({ error: 'Wrong passphrase' }, 401);
   }
 
   const salt = Buffer.from(existing.salt, 'base64');

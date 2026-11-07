@@ -107,6 +107,12 @@ type IndexFile = {
   keys: Record<string, ApiKeyRecord>;
   registryFileId?: string;
   registryMessageId?: number;
+  /**
+   * A chat has exactly one pin, and writeIndex() takes it on every save. This
+   * slot records where the vault's own index went when it lost the pin, so the
+   * vault can still be located (src/routes/api/vault/unlock).
+   */
+  vaultIndexFileId?: string;
 };
 
 type CacheData = {
@@ -308,7 +314,15 @@ async function writeIndex(index: Record<string, ApiKeyRecord>, extra?: Partial<I
   const ownLastPinnedId = (await getLocalCache()).pinned_message_id ?? 0;
   const current = await readIndexFile();
   const prevPinned = await getPinnedMessage().catch(() => null);
+  const prevName =
+    typeof prevPinned?.document?.file_name === 'string' ? prevPinned.document.file_name : '';
   const payload: IndexFile = { ...current, ...extra, keys: index };
+
+  // We are about to steal the single pin from a vault index. Record where it
+  // is, otherwise nothing in the chat would point at the vault any more.
+  if (prevName.startsWith('vault_') && prevPinned?.document?.file_id) {
+    payload.vaultIndexFileId = prevPinned.document.file_id;
+  }
 
   const tmp = `/tmp/telegram_index_${Date.now()}.json`;
   await fs.promises.writeFile(tmp, JSON.stringify(payload, null, 2), 'utf8');

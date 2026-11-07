@@ -396,6 +396,33 @@ export async function getPinnedFileId(): Promise<string | null> {
 }
 
 /**
+ * A chat holds exactly one pin, and telegramStorage.writeIndex() takes it on
+ * every API-key save — so the vault index is not reliably pinned. When that
+ * happens writeIndex records the vault index's file_id in its own document's
+ * `vaultIndexFileId` slot; this reads it back out.
+ */
+export async function getVaultIndexFileIdFromSlot(): Promise<string | null> {
+  const pinned = await telegramGetPinnedMessage();
+  const fileId = pinned?.document?.file_id;
+  if (!fileId) return null;
+
+  const name =
+    typeof pinned?.document?.file_name === 'string' ? pinned.document.file_name : '';
+  // Pinned message IS the vault index — no slot needed, callers use it directly.
+  if (name.startsWith('vault_')) return null;
+
+  try {
+    const downloaded = await downloadFileFromTelegram(fileId);
+    const parsed = JSON.parse(downloaded.data.toString('utf8')) as { vaultIndexFileId?: unknown };
+    return typeof parsed?.vaultIndexFileId === 'string' && parsed.vaultIndexFileId
+      ? parsed.vaultIndexFileId
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * The index pointer used to be written with wildly inconsistent lifetimes —
  * unlock() set a 1h cookie, upload/folderOps/delete overwrote it with a
  * session cookie (dies on browser close). Once it expired the next unlock
