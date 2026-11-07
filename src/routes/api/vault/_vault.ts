@@ -43,6 +43,12 @@ export type VaultIndexPlain = {
   registryMessageId: number | null;
   createdAt: number;
   updatedAt: number;
+  /**
+   * file_id of telegramStorage's API-key index at the moment this vault index
+   * took the chat's pin. The pin is a single shared resource; whoever does not
+   * own it must be able to find its own document from the owner's.
+   */
+  apiKeyIndexFileId?: string | null;
 };
 
 export type VaultRegistryPlain = {
@@ -225,6 +231,8 @@ export async function loadVaultIndex(fileId?: string | null): Promise<VaultIndex
       hash: parsed.hash,
       registryFileId: typeof parsed.registryFileId === 'string' ? parsed.registryFileId : null,
       registryMessageId: typeof parsed.registryMessageId === 'number' ? parsed.registryMessageId : null,
+      apiKeyIndexFileId:
+        typeof parsed.apiKeyIndexFileId === 'string' ? parsed.apiKeyIndexFileId : null,
       createdAt: typeof parsed.createdAt === 'number' ? parsed.createdAt : Date.now(),
       updatedAt: typeof parsed.updatedAt === 'number' ? parsed.updatedAt : Date.now()
     };
@@ -254,6 +262,16 @@ export async function saveVaultState(
   let indexUpload: { message_id: number; file_id: string } | null = null;
 
   try {
+    // Capture the API-key index's file_id BEFORE we displace the chat pin.
+    // Without this, a vault save would unpin telegramStorage's only anchor
+    // for its API-key index with nothing to fall back to.
+    const prevPinned = await telegramGetPinnedMessage().catch(() => null);
+    const prevName =
+      typeof prevPinned?.document?.file_name === 'string' ? prevPinned.document.file_name : '';
+    if (prevName.startsWith('index_')) {
+      index.apiKeyIndexFileId = prevPinned.document.file_id;
+    }
+
     const encryptedRegistry = await encryptJson(registry, key);
     registryUpload = await uploadJsonToTelegram(
       encryptedRegistry,
@@ -275,6 +293,31 @@ export async function saveVaultState(
 
     if (!indexUpload?.file_id) {
       throw new Error('Index upload failed');
+    }
+
+    // Pin the vault index so loadVaultIndex() can find it without a cookie.
+    // This used to exist (928862f) and was dropped in 613b9a1, which left the
+    // chat's pin pointing at telegramStorage's API-key index — so a bare
+    // loadVaultIndex() could never resolve a vault and unlock silently
+    // created a fresh empty one. Pin failure rolls the whole save back
+    // rather than leaving an unlocatable index behind.
+    const pinRes = await fetch(
+      `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/pinChatMessage`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: TELEGRAM_CHAT_ID,
+          message_id: indexUpload.message_id,
+          disable_notification: true
+        })
+      }
+    );
+    const pinJson = await pinRes.json().catch(() => null);
+    if (!pinRes.ok || !pinJson?.ok) {
+      throw new Error(
+        `Vault index pin failed: ${pinJson?.description || `HTTP ${pinRes.status}`}`
+      );
     }
 
     await deleteManyMessages([
@@ -350,6 +393,45 @@ export async function decryptVaultFile(
 export async function getPinnedFileId(): Promise<string | null> {
   const pinned = await telegramGetPinnedMessage();
   return pinned?.document?.file_id ?? null;
+}
+
+/**
+ * The index pointer used to be written with wildly inconsistent lifetimes —
+ * unlock() set a 1h cookie, upload/folderOps/delete overwrote it with a
+ * session cookie (dies on browser close). Once it expired the next unlock
+ * had no pointer and minted an empty vault. One helper, 30 days, everywhere.
+ */
+const VAULT_INDEX_COOKIE_MAX_AGE = 60 * 60 * 24 * 30;
+
+type VaultCookieJar = {
+  set(
+    name: string,
+    value: string,
+    options: {
+      path: string;
+      httpOnly: boolean;
+      secure: boolean;
+      sameSite: 'strict';
+      maxAge: number;
+    }
+  ): void;
+};
+
+export function setVaultIndexCookie(
+  cookies: VaultCookieJar,
+  request: Request,
+  fileId: string
+) {
+  const proto = request.headers.get('x-forwarded-proto');
+  const secure = request.url.startsWith('https://') || proto === 'https';
+
+  cookies.set('vault_index_file_id', fileId, {
+    path: '/',
+    httpOnly: true,
+    secure,
+    sameSite: 'strict',
+    maxAge: VAULT_INDEX_COOKIE_MAX_AGE
+  });
 }
 
 export async function getVaultContext(userId: string | undefined, cookies: CookieLike) {

@@ -1,6 +1,6 @@
 // hello there, tf u doing on my code????
 import type { RequestHandler } from './$types';
-import { getVaultContext, loadVaultRegistry, saveVaultState } from '../_vault';
+import { getVaultContext, loadVaultRegistry, saveVaultState, setVaultIndexCookie } from '../_vault';
 
 async function deleteTelegramMessage(message_id: number) {
   await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/deleteMessage`, {
@@ -49,10 +49,10 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
   });
 
   if (result?.indexFileId) {
-    cookies.set('vault_index_file_id', result.indexFileId, { path: '/' });
+    setVaultIndexCookie(cookies, request, result.indexFileId);
   }
 
-  return new Response(JSON.stringify({ ok: true }), {
+  return new Response(JSON.stringify({ ok: true, indexFileId: result?.indexFileId ?? null }), {
     headers: { 'Content-Type': 'application/json' }
   });
 };

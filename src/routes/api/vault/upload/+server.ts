@@ -5,7 +5,8 @@ import {
   loadVaultRegistry,
   uploadVaultFileChunks,
   saveVaultState,
-  randomUUID
+  randomUUID,
+  setVaultIndexCookie
 } from '../_vault';
 
 export const POST: RequestHandler = async ({ request, locals, cookies }) => {
@@ -55,10 +56,10 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
   });
 
   if (result?.indexFileId) {
-    cookies.set('vault_index_file_id', result.indexFileId, { path: '/' });
+    setVaultIndexCookie(cookies, request, result.indexFileId);
   }
 
-  return new Response(JSON.stringify({ ok: true }), {
+  return new Response(JSON.stringify({ ok: true, indexFileId: result?.indexFileId ?? null }), {
     headers: { 'Content-Type': 'application/json' }
   });
 };

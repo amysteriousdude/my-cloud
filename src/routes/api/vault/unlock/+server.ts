@@ -8,32 +8,73 @@ import {
   saveVaultState,
   loadVaultIndex,
   exportVaultKey,
-  getPinnedFileId
+  getPinnedFileId,
+  setVaultIndexCookie
 } from '../_vault';
 
-function cookieSecure(request: Request) {
-  const proto = request.headers.get('x-forwarded-proto');
-  return request.url.startsWith('https://') || proto === 'https';
-}
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' }
+  });
 
 export const POST: RequestHandler = async ({ request, cookies, locals }) => {
   const body = await request.json().catch(() => null);
   const password = String(body?.password ?? '').trim();
   const userId = locals.user?.id || 'default_user';
+  // Client-side pointer (localStorage). Survives cookie expiry / browser restart.
+  const hintFileId = typeof body?.indexFileId === 'string' ? body.indexFileId.trim() : '';
 
   if (!password) {
-    return new Response(JSON.stringify({ error: 'Password required' }), { status: 400 });
+    return json({ error: 'Password required' }, 400);
   }
 
-  const existing = await loadVaultIndex();
+  const cookieFileId = (cookies.get('vault_index_file_id') ?? '').trim();
+
+  // Most specific pointer first: client hint, then cookie, then the chat pin.
+  const candidates: string[] = [];
+  for (const c of [hintFileId, cookieFileId, await getPinnedFileId()]) {
+    if (c && !candidates.includes(c)) candidates.push(c);
+  }
+
+  let existing: VaultIndexPlain | null = null;
+  let resolvedFileId: string | null = null;
+
+  for (const fileId of candidates) {
+    const index = await loadVaultIndex(fileId);
+    if (!index) continue;
+    if (index.userId !== userId) {
+      return json({ error: 'Vault belongs to another user' }, 403);
+    }
+    existing = index;
+    resolvedFileId = fileId;
+    break;
+  }
 
   if (!existing) {
+    // A pointer that leads nowhere means an existing vault could not be
+    // located — that is NOT the same as "this user never had a vault".
+    // Previously this branch always minted a fresh empty one (new salt,
+    // files: []), which is what silently wiped files on every re-unlock
+    // and made a wrong passphrase "succeed". Refuse instead.
+    if (hintFileId || cookieFileId) {
+      return json(
+        {
+          error:
+            'Vault index could not be loaded — its pointer is stale. Refusing to create a new vault over it.',
+          pointer: hintFileId || cookieFileId
+        },
+        409
+      );
+    }
+
     const salt = randomBytes(16);
     const key = await deriveVaultKey(password, salt);
     const passwordHash = await sha256(password);
 
     const registry: VaultRegistryPlain = {
       version: 1,
+      folders: [],
       files: [],
       updatedAt: Date.now()
     };
@@ -54,47 +95,29 @@ export const POST: RequestHandler = async ({ request, cookies, locals }) => {
     cookies.set('vault_session', passwordHash, {
       path: '/',
       httpOnly: true,
-      secure: cookieSecure(request),
+      secure: request.url.startsWith('https://'),
       sameSite: 'strict',
-      maxAge: 3600
+      maxAge: 60 * 60 * 24 * 30
     });
 
     cookies.set('vault_key', await exportVaultKey(key), {
       path: '/',
       httpOnly: true,
-      secure: cookieSecure(request),
+      secure: request.url.startsWith('https://'),
       sameSite: 'strict',
-      maxAge: 3600
+      maxAge: 60 * 60 * 24 * 30
     });
 
     if (result?.indexFileId) {
-      cookies.set('vault_index_file_id', result.indexFileId, {
-        path: '/',
-        httpOnly: true,
-        secure: cookieSecure(request),
-        sameSite: 'strict',
-        maxAge: 3600
-      });
+      setVaultIndexCookie(cookies, request, result.indexFileId);
     }
 
-    return new Response(JSON.stringify({ ok: true, created: true }), {
-      headers: { 'Content-Type': 'application/json' }
-    });
-  }
-
-  if (existing.userId !== userId) {
-    return new Response(JSON.stringify({ error: 'Vault belongs to another user' }), {
-      status: 403,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return json({ ok: true, created: true, indexFileId: result?.indexFileId ?? null });
   }
 
   const passwordHash = await sha256(password);
   if (existing.hash !== passwordHash) {
-    return new Response(JSON.stringify({ error: 'Wrong passphrase' }), {
-      status: 401,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return json({ error: 'Wrong passphrase' }, 401);
   }
 
   const salt = Buffer.from(existing.salt, 'base64');
@@ -103,31 +126,22 @@ export const POST: RequestHandler = async ({ request, cookies, locals }) => {
   cookies.set('vault_session', passwordHash, {
     path: '/',
     httpOnly: true,
-    secure: cookieSecure(request),
+    secure: request.url.startsWith('https://'),
     sameSite: 'strict',
-    maxAge: 3600
+    maxAge: 60 * 60 * 24 * 30
   });
 
   cookies.set('vault_key', await exportVaultKey(key), {
     path: '/',
     httpOnly: true,
-    secure: cookieSecure(request),
+    secure: request.url.startsWith('https://'),
     sameSite: 'strict',
-    maxAge: 3600
+    maxAge: 60 * 60 * 24 * 30
   });
 
-  const pinnedFileId = await getPinnedFileId();
-  if (pinnedFileId) {
-    cookies.set('vault_index_file_id', pinnedFileId, {
-      path: '/',
-      httpOnly: true,
-      secure: cookieSecure(request),
-      sameSite: 'strict',
-      maxAge: 3600
-    });
+  if (resolvedFileId) {
+    setVaultIndexCookie(cookies, request, resolvedFileId);
   }
 
-  return new Response(JSON.stringify({ ok: true, created: false }), {
-    headers: { 'Content-Type': 'application/json' }
-  });
+  return json({ ok: true, created: false, indexFileId: resolvedFileId });
 };

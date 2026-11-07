@@ -188,15 +188,49 @@
       const res = await fetch('/api/vault/unlock', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: password.trim() })
+        body: JSON.stringify({
+          password: password.trim(),
+          indexFileId: readIndexFileIdHint()
+        })
       });
-      const data = await res.json();
-      if (!res.ok) { error = data.error || 'unlock failed'; return; }
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        error = data?.error
+          || (res.status === 401 ? 'wrong passphrase' : 'unlock failed');
+        return;
+      }
+      rememberIndexFileId(data?.indexFileId);
       locked = false;
       password = '';
       await loadVault();
     } catch (e: any) { error = e?.message ?? 'unlock failed'; }
     finally { unlocking = false; }
+  }
+
+  const POINTER_KEY = 'vault_index_file_id';
+
+  // The httpOnly cookie expires; this does not. It is also what lets a
+  // recovered index pointer be restored by hand after data loss.
+  function readIndexFileIdHint(): string {
+    try { return localStorage.getItem(POINTER_KEY) || ''; } catch { return ''; }
+  }
+
+  function rememberIndexFileId(id: unknown) {
+    if (typeof id !== 'string' || !id) return;
+    try { localStorage.setItem(POINTER_KEY, id); } catch {}
+  }
+
+  // Write endpoints rotate the index file_id, so keep the local pointer in
+  // step with them — otherwise it drifts to an index whose registry has since
+  // been replaced, and unlock would resolve a vault that no longer exists.
+  async function vaultFetch(input: string, init?: RequestInit): Promise<Response> {
+    const res = await fetch(input, init);
+    if (res.ok) {
+      res.clone().json()
+        .then((d) => rememberIndexFileId(d?.indexFileId))
+        .catch(() => {});
+    }
+    return res;
   }
 
   async function uploadFilesList(fileList: FileList | File[]) {
@@ -221,7 +255,7 @@
       form.append('name', file.name);
       if (currentFolderId) form.append('folderId', currentFolderId);
       patchJob({ progress: 50 });
-      const res = await fetch('/api/vault/upload', { method: 'POST', body: form });
+      const res = await vaultFetch('/api/vault/upload', { method: 'POST', body: form });
       if (!res.ok) {
         const msg = await res.text().catch(() => 'Upload failed');
         throw new Error(msg || 'Upload failed');
@@ -271,7 +305,7 @@
       folderToDeleteId = null;
       showDeleteConfirm = false;
       try {
-        await fetch('/api/vault/folderOps', {
+        await vaultFetch('/api/vault/folderOps', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'delete', folderId: fid })
         });
@@ -287,7 +321,7 @@
     selectedIds = new Set();
     showDeleteConfirm = false;
     for (const id of ids) {
-      try { await fetch('/api/vault/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }); } catch {}
+      try { await vaultFetch('/api/vault/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }); } catch {}
     }
     await loadVault();
   }
@@ -297,7 +331,7 @@
     newFolderName = '';
     creatingFolder = false;
     try {
-      await fetch('/api/vault/folderOps', {
+      await vaultFetch('/api/vault/folderOps', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'create', name, parentId: currentFolderId })
       });
@@ -309,7 +343,7 @@
     if (!name.trim()) { renamingFolderId = null; return; }
     renamingFolderId = null;
     try {
-      await fetch('/api/vault/folderOps', {
+      await vaultFetch('/api/vault/folderOps', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'rename', folderId: id, name })
       });
@@ -320,7 +354,7 @@
   async function moveFileToFolder(fileId: string, folderId: string | undefined) {
     movingFileId = null;
     try {
-      await fetch('/api/vault/folderOps', {
+      await vaultFetch('/api/vault/folderOps', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'moveFile', fileId, folderId: folderId ?? null })
       });

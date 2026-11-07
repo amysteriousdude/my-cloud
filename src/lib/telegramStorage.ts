@@ -188,6 +188,18 @@ async function readIndexFile(): Promise<IndexFile> {
   return readIndexFileInner(false);
 }
 
+/** True when a pinned document belongs to src/routes/api/vault, not to us. */
+function isVaultIndexDoc(fileName: unknown, parsed: any): boolean {
+  if (typeof fileName === 'string' && fileName.startsWith('vault_')) return true;
+  return !!(
+    parsed &&
+    !parsed.keys &&
+    typeof parsed.salt === 'string' &&
+    typeof parsed.hash === 'string' &&
+    typeof parsed.userId === 'string'
+  );
+}
+
 async function readIndexFileInner(retry: boolean): Promise<IndexFile> {
   if (!TELE_API) throw new Error('Telegram not configured');
 
@@ -207,6 +219,31 @@ async function readIndexFileInner(retry: boolean): Promise<IndexFile> {
   try {
     const text = await downloadFileId(pinned.document.file_id, 'text');
     const parsed = JSON.parse(text);
+
+    if (isVaultIndexDoc(pinned.document.file_name, parsed)) {
+      // The chat's single pin currently belongs to the vault. Never cache a
+      // foreign document as the API-key index — that would silently drop
+      // every API key on the next writeIndex. The vault records where our
+      // index lives (apiKeyIndexFileId), so go get it from there.
+      const anchor =
+        typeof parsed.apiKeyIndexFileId === 'string' ? parsed.apiKeyIndexFileId : '';
+
+      if (anchor) {
+        const anchorParsed = JSON.parse(await downloadFileId(anchor, 'text'));
+        const resolved =
+          anchorParsed && !anchorParsed.keys ? { keys: anchorParsed } : (anchorParsed as IndexFile);
+        // Deliberately NOT recording pinned_message_id: it isn't ours.
+        await updateLocalCache({ indexFile: resolved });
+        return resolved;
+      }
+
+      console.warn(
+        'telegramStorage: chat pin is a vault index with no apiKeyIndexFileId anchor'
+      );
+      const fallback = (await getLocalCache()).indexFile;
+      if (fallback) return fallback;
+      return { keys: {} };
+    }
 
     const result = (parsed && !parsed.keys) ? { keys: parsed } : (parsed as IndexFile);
     await updateLocalCache({ pinned_message_id: pinnedMsgId, indexFile: result });
@@ -267,8 +304,10 @@ export async function revokeApiKey(apiKey: string): Promise<boolean> {
 }
 
 async function writeIndex(index: Record<string, ApiKeyRecord>, extra?: Partial<IndexFile>): Promise<void> {
+  // Read our own last-pinned id BEFORE readIndexFile touches the cache.
+  const ownLastPinnedId = (await getLocalCache()).pinned_message_id ?? 0;
   const current = await readIndexFile();
-  const oldMsgId = (await getPinnedMessage())?.message_id ?? 0;
+  const prevPinned = await getPinnedMessage().catch(() => null);
   const payload: IndexFile = { ...current, ...extra, keys: index };
 
   const tmp = `/tmp/telegram_index_${Date.now()}.json`;
@@ -280,10 +319,20 @@ async function writeIndex(index: Record<string, ApiKeyRecord>, extra?: Partial<I
 
   await fs.promises.unlink(tmp).catch(() => {});
 
-  if (oldMsgId && oldMsgId !== message_id) {
-    await axios.post(`${TELE_API}/deleteMessage`, null, {
-      params: { chat_id: CHAT_ID, message_id: oldMsgId }
-    }).catch(() => {});
+  // Only ever delete a message we can prove is one of ours. The vault pins
+  // its own index into the same chat (src/routes/api/vault/_vault.ts), and
+  // this used to blindly delete whatever was pinned — destroying it.
+  if (prevPinned && prevPinned.message_id && prevPinned.message_id !== message_id) {
+    const prevName =
+      typeof prevPinned.document?.file_name === 'string' ? prevPinned.document.file_name : '';
+    const prevIsOurs = prevName.startsWith('index_');
+    const prevWasPinnedByUs = prevPinned.message_id === ownLastPinnedId;
+
+    if (prevIsOurs || prevWasPinnedByUs) {
+      await axios.post(`${TELE_API}/deleteMessage`, null, {
+        params: { chat_id: CHAT_ID, message_id: prevPinned.message_id }
+      }).catch(() => {});
+    }
   }
 }
 

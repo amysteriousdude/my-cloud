@@ -1,6 +1,6 @@
 // hello there, tf u doing on my code????
 import type { RequestHandler } from './$types';
-import { getVaultContext, loadVaultRegistry, saveVaultState, randomUUID } from '../_vault';
+import { getVaultContext, loadVaultRegistry, saveVaultState, randomUUID, setVaultIndexCookie } from '../_vault';
 
 export const POST: RequestHandler = async ({ request, locals, cookies }) => {
   const userId = locals.user?.id || 'default_user';
@@ -39,9 +39,9 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
       const result = await saveVaultState(ctx.key, ctx.index, registry, {
         previousRegistryMessageId: ctx.index.registryMessageId
       });
-      if (result?.indexFileId) cookies.set('vault_index_file_id', result.indexFileId, { path: '/' });
+      if (result?.indexFileId) setVaultIndexCookie(cookies, request, result.indexFileId);
 
-      return new Response(JSON.stringify({ ok: true, folder }), {
+      return new Response(JSON.stringify({ ok: true, folder, indexFileId: result?.indexFileId ?? null }), {
         headers: { 'Content-Type': 'application/json' }
       });
     }
@@ -65,9 +65,9 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
       const result = await saveVaultState(ctx.key, ctx.index, registry, {
         previousRegistryMessageId: ctx.index.registryMessageId
       });
-      if (result?.indexFileId) cookies.set('vault_index_file_id', result.indexFileId, { path: '/' });
+      if (result?.indexFileId) setVaultIndexCookie(cookies, request, result.indexFileId);
 
-      return new Response(JSON.stringify({ ok: true }), {
+      return new Response(JSON.stringify({ ok: true, indexFileId: result?.indexFileId ?? null }), {
         headers: { 'Content-Type': 'application/json' }
       });
     }
@@ -113,9 +113,9 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
       const result = await saveVaultState(ctx.key, ctx.index, registry, {
         previousRegistryMessageId: ctx.index.registryMessageId
       });
-      if (result?.indexFileId) cookies.set('vault_index_file_id', result.indexFileId, { path: '/' });
+      if (result?.indexFileId) setVaultIndexCookie(cookies, request, result.indexFileId);
 
-      return new Response(JSON.stringify({ ok: true }), {
+      return new Response(JSON.stringify({ ok: true, indexFileId: result?.indexFileId ?? null }), {
         headers: { 'Content-Type': 'application/json' }
       });
     }
@@ -144,9 +144,9 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
       const result = await saveVaultState(ctx.key, ctx.index, registry, {
         previousRegistryMessageId: ctx.index.registryMessageId
       });
-      if (result?.indexFileId) cookies.set('vault_index_file_id', result.indexFileId, { path: '/' });
+      if (result?.indexFileId) setVaultIndexCookie(cookies, request, result.indexFileId);
 
-      return new Response(JSON.stringify({ ok: true }), {
+      return new Response(JSON.stringify({ ok: true, indexFileId: result?.indexFileId ?? null }), {
         headers: { 'Content-Type': 'application/json' }
       });
     }
