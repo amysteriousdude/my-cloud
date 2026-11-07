@@ -915,6 +915,16 @@
     return size;
   }
 
+  // counts direct files plus every nested file AND every nested folder,
+  // mirroring the recursion getFolderSize already does
+  function getFolderItemCount(folderId: string): number {
+    let count = files.filter(f => f.folderId === folderId).length;
+    for (const sub of folders.filter(f => f.parentId === folderId)) {
+      count += 1 + getFolderItemCount(sub.folderId);
+    }
+    return count;
+  }
+
   async function updateTags(file: FileRecord, tags: string[]) {
     await fetch(`${BASE}/api/telegram/fileTags`, {
       method: "POST",
@@ -1498,9 +1508,9 @@
               <IconCloudDownload size={15} /> ShareX
             </button>
             <span class="count"
-              >{processedFiles.length} file{processedFiles.length !== 1 ? "s" : ""}
-              {#if currentFolders.length > 0} · {currentFolders.length} folder{currentFolders.length !== 1 ? "s" : ""}{/if}
-              </span
+              >{processedFiles.length} file{processedFiles.length !== 1
+                ? "s"
+                : ""}</span
             >
           </div>
         </div>
@@ -1648,7 +1658,7 @@
                     </button>
                   {/if}
                   <div class="ftags">
-                    <span class="ftag folder-tag">{files.filter(f => f.folderId === folder.folderId).length} items</span>
+                    <span class="ftag folder-tag">{getFolderItemCount(folder.folderId)} items</span>
                     {#if folder.public}<span class="ftag public-tag"><IconWorld size={10} /> Public</span>{/if}
                   </div>
                 </div>
@@ -1871,7 +1881,7 @@
 
                 <button class="grid-preview folder-preview" onclick={() => (currentFolderId = folder.folderId)}>
                   <IconFolder size={56} stroke={1.2} color="#fbbf24" />
-                  <div class="folder-badge">{files.filter(f => f.folderId === folder.folderId).length} items</div>
+                  <div class="folder-badge">{getFolderItemCount(folder.folderId)} items</div>
                 </button>
                 <div class="grid-info">
                   <div class="grid-name">
