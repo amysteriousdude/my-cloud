@@ -810,7 +810,19 @@
         }
       });
 
-      const CORE_BASE = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+      // MUST be dist/esm, not dist/umd. FFmpeg spawns its worker with
+      // `{ type: "module" }`, so the worker's first move — importScripts(url) —
+      // always throws and it falls back to `await import(url)`. The UMD build
+      // only ever reaches the core through `module.exports` / `define`, and its
+      // top-level `var` is module-scoped under dynamic import, so
+      // `.default` comes back undefined and load() throws
+      // ERROR_IMPORT_FAILURE ("failed to import ffmpeg-core.js"). The ESM build
+      // ends in `export default createFFmpegCore`, which is what the worker
+      // assigns to self.createFFmpegCore.
+      // Note the worker only rewrites /umd/ → /esm/ for its own default URL,
+      // so passing a custom coreURL opts out of that safety net entirely.
+      // Version pinned to the wrapper's CORE_VERSION (0.12.9).
+      const CORE_BASE = 'https://unpkg.com/@ffmpeg/core@0.12.9/dist/esm';
       await ffmpeg.load({
         coreURL: await toBlobURL(`${CORE_BASE}/ffmpeg-core.js`, 'text/javascript'),
         wasmURL: await toBlobURL(`${CORE_BASE}/ffmpeg-core.wasm`, 'application/wasm')
