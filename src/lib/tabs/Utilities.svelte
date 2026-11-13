@@ -1,11 +1,24 @@
 <!-- hello there, tf u doing on my code???? -->
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { IconRefresh, IconHistory, IconCopy, IconCheck, IconArrowLeft, IconDownload } from '@tabler/icons-svelte';
+  import { IconRefresh, IconHistory, IconCopy, IconCheck, IconArrowLeft, IconDownload, IconWorld, IconSearch, IconPlayerStop, IconDice } from '@tabler/icons-svelte';
   import RobloxIcon from '$lib/components/icons/RobloxIcon.svelte';
   import CloudLogo from '$lib/components/icons/CloudLogo.svelte';
   import CloudSettings from '$lib/components/CloudSettings.svelte';
   import { branding } from '$lib/branding.svelte';
+  import {
+    STRUCTURES,
+    JAVA_VERSIONS,
+    BEDROCK_VERSIONS,
+    findStructures,
+    nearestSpot,
+    isStructureAvailable,
+    type Edition,
+    type Dimension,
+    type StructureId,
+    type StructureSpot,
+  } from '$lib/generators/minecraft/structures';
+  import { parseSeedInput, randomSeed } from '$lib/generators/minecraft/rng';
 
   let {
     user = null,
@@ -31,7 +44,7 @@
   };
   const CHANNELS = ['LIVE', 'ZLIVE', 'zcanary', 'zdev'];
 
-  let view = $state<'home' | 'roblox' | 'cloud'>('home');
+  let view = $state<'home' | 'roblox' | 'cloud' | 'minecraft'>('home');
   let platform = $state('windows');
   let channel = $state('LIVE');
   let version = $state<string | null>(null);
@@ -108,6 +121,134 @@
   onMount(() => {
     try { history = JSON.parse(localStorage.getItem('robloxVersionHistory') || '[]'); } catch { history = []; }
   });
+
+  // ── Minecraft seed map ──────────────────────────────────────────
+  const MC_DIMS: { id: Dimension; label: string }[] = [
+    { id: 'overworld', label: 'Overworld' },
+    { id: 'nether', label: 'Nether' },
+    { id: 'end', label: 'End' },
+  ];
+
+  let mcEdition = $state<Edition>('java');
+  let mcVersion = $state(1211);
+  let mcSeed = $state('0');
+  let mcCenterX = $state(0);
+  let mcCenterZ = $state(0);
+  let mcRadius = $state(1024);
+  let mcSelected = $state<StructureId[]>(['village', 'stronghold', 'monument', 'mansion', 'outpost', 'desert_pyramid', 'ancient_city']);
+  let mcResults = $state<StructureSpot[]>([]);
+  let mcError = $state<string | null>(null);
+  let mcRan = $state(false);
+  let mcCopied = $state<string | null>(null);
+
+  let finderStructure = $state<StructureId>('village');
+  let finderRadius = $state(512);
+  let finderMaxSeeds = $state(100000);
+  let finderRunning = $state(false);
+  let finderStop = false;
+  let finderTried = $state(0);
+  let finderMatches = $state<{ seed: bigint; x: number; z: number; distance: number }[]>([]);
+
+  function mcVersionList() {
+    return mcEdition === 'java' ? JAVA_VERSIONS : BEDROCK_VERSIONS;
+  }
+
+  function setMcEdition(edition: Edition) {
+    mcEdition = edition;
+    mcVersion = edition === 'java' ? 1211 : 118;
+    mcResults = [];
+    mcRan = false;
+    mcError = null;
+  }
+
+  function availableStructures(dim: Dimension): { id: StructureId; label: string }[] {
+    return (Object.keys(STRUCTURES) as StructureId[])
+      .filter((id) => STRUCTURES[id].dim === dim && isStructureAvailable(mcEdition, mcVersion, id))
+      .map((id) => ({ id, label: STRUCTURES[id].label }));
+  }
+
+  function toggleMcStructure(id: StructureId) {
+    mcSelected = mcSelected.includes(id) ? mcSelected.filter((x) => x !== id) : [...mcSelected, id];
+  }
+
+  async function copySpot(r: StructureSpot) {
+    await navigator.clipboard.writeText(`${r.x} ${r.z}`);
+    mcCopied = `${r.id}:${r.x}:${r.z}`;
+    setTimeout(() => (mcCopied = null), 1200);
+  }
+
+  function runMcLookup() {
+    const seed = parseSeedInput(mcSeed);
+    if (seed === null) {
+      mcError = 'invalid seed';
+      return;
+    }
+    const structures = mcSelected.filter((id) => isStructureAvailable(mcEdition, mcVersion, id));
+    if (!structures.length) {
+      mcError = 'pick at least one structure';
+      return;
+    }
+    mcError = null;
+    const cx = Number(mcCenterX) || 0;
+    const cz = Number(mcCenterZ) || 0;
+    const radius = Math.max(16, Math.min(Number(mcRadius) || 1024, 5000));
+    const spots = findStructures({ edition: mcEdition, mc: mcVersion, seed, centerX: cx, centerZ: cz, radius, structures });
+    spots.sort((a, b) => Math.hypot(a.x - cx, a.z - cz) - Math.hypot(b.x - cx, b.z - cz));
+    mcResults = spots.slice(0, 400);
+    mcRan = true;
+  }
+
+  function useSeed(seed: bigint) {
+    mcSeed = seed.toString();
+    if (!mcSelected.includes(finderStructure)) mcSelected = [...mcSelected, finderStructure];
+    runMcLookup();
+  }
+
+  async function runSeedFinder() {
+    if (finderRunning) {
+      finderStop = true;
+      return;
+    }
+    const available = (Object.keys(STRUCTURES) as StructureId[]).filter((id) =>
+      isStructureAvailable(mcEdition, mcVersion, id),
+    );
+    if (!available.length) {
+      mcError = 'no structures for this version';
+      return;
+    }
+    if (!available.includes(finderStructure)) finderStructure = available[0];
+
+    const edition = mcEdition;
+    const mc = mcVersion;
+    const structure = finderStructure;
+    const radius = Math.max(64, Math.min(Number(finderRadius) || 512, 2000));
+    const cap = Math.max(1000, Math.min(Number(finderMaxSeeds) || 100000, 5000000));
+    const maxResults = 8;
+
+    finderRunning = true;
+    finderStop = false;
+    finderTried = 0;
+    finderMatches = [];
+    mcError = null;
+
+    try {
+      while (!finderStop && finderTried < cap && finderMatches.length < maxResults) {
+        for (let i = 0; i < 400 && finderTried < cap && finderMatches.length < maxResults; i++) {
+          const seed = randomSeed(edition);
+          finderTried++;
+          const hit = nearestSpot(edition, mc, seed, structure, radius);
+          if (hit) {
+            finderMatches = [...finderMatches, { seed, ...hit }]
+              .sort((a, b) => a.distance - b.distance)
+              .slice(0, maxResults);
+          }
+        }
+        await new Promise((r) => setTimeout(r, 0));
+      }
+    } finally {
+      finderRunning = false;
+    }
+  }
 </script>
 
 <div class="util-root">
@@ -133,6 +274,16 @@
         <div class="card-body">
           <span class="card-title">Cloud</span>
           <span class="card-desc">Display name, logo, profile picture, username and token.</span>
+        </div>
+      </button>
+
+      <button class="card" onclick={() => (view = 'minecraft')}>
+        <div class="card-banner banner-mc">
+          <span class="card-icon"><IconWorld size={44} stroke={1.3} /></span>
+        </div>
+        <div class="card-body">
+          <span class="card-title">Minecraft</span>
+          <span class="card-desc">Seed map for structures in Java &amp; Bedrock, plus a seed finder.</span>
         </div>
       </button>
     </div>
@@ -227,6 +378,148 @@
         </div>
       {/if}
     </div>
+  {:else if view === 'minecraft'}
+    <button class="back-btn" onclick={() => view = 'home'}><IconArrowLeft size={15}/> Utilities</button>
+
+    <div class="util-card">
+      <div class="util-head">
+        <IconWorld size={20} />
+        <div>
+          <h2>Minecraft Seed Map</h2>
+          <p class="util-sub">Structure coordinates from a seed — Java &amp; Bedrock, version aware</p>
+        </div>
+        <button class="util-refresh" onclick={() => { mcSeed = randomSeed(mcEdition).toString(); runMcLookup(); }} title="Random seed">
+          <IconDice size={16} />
+        </button>
+      </div>
+
+      <div class="util-controls">
+        <div class="util-group">
+          <span class="util-label">Edition</span>
+          <div class="util-pills">
+            <button class="util-pill" class:active={mcEdition === 'java'} onclick={() => setMcEdition('java')}>Java</button>
+            <button class="util-pill" class:active={mcEdition === 'bedrock'} onclick={() => setMcEdition('bedrock')}>Bedrock</button>
+          </div>
+        </div>
+        <div class="util-group">
+          <span class="util-label">Version</span>
+          <div class="util-pills">
+            {#each mcVersionList() as v}
+              <button class="util-pill" class:active={mcVersion === v.mc} onclick={() => { mcVersion = v.mc; mcResults = []; mcRan = false; }}>{v.label}</button>
+            {/each}
+          </div>
+        </div>
+        <div class="mc-inputs">
+          <label class="mc-field mc-seed">
+            <span class="util-label">Seed</span>
+            <input class="mc-input" bind:value={mcSeed} placeholder="number or text seed" onkeydown={(e) => e.key === 'Enter' && runMcLookup()} />
+          </label>
+          <label class="mc-field">
+            <span class="util-label">Center X</span>
+            <input class="mc-input" type="number" bind:value={mcCenterX} />
+          </label>
+          <label class="mc-field">
+            <span class="util-label">Center Z</span>
+            <input class="mc-input" type="number" bind:value={mcCenterZ} />
+          </label>
+          <label class="mc-field">
+            <span class="util-label">Radius</span>
+            <input class="mc-input" type="number" min="16" max="5000" bind:value={mcRadius} />
+          </label>
+          <button class="mc-run" onclick={runMcLookup}><IconSearch size={16} /> Find</button>
+        </div>
+      </div>
+
+      <span class="util-label">Structures</span>
+      <div class="mc-chips">
+        {#each MC_DIMS as d}
+          {#each availableStructures(d.id) as s}
+            <button class="mc-chip" class:active={mcSelected.includes(s.id)} onclick={() => toggleMcStructure(s.id)}>
+              <span class="mc-chip-dot {d.id}"></span>{s.label}
+            </button>
+          {/each}
+        {/each}
+      </div>
+
+      {#if mcError}<div class="util-error" style="margin-bottom:10px">{mcError}</div>{/if}
+      <p class="mc-note">Approximate: these are placement candidates. Biome and terrain checks aren't simulated, so a listed structure may not actually generate.</p>
+
+      {#if mcRan}
+        {#if mcResults.length === 0}
+          <div class="util-empty">No candidates in this radius. Try a bigger radius or another version.</div>
+        {:else}
+          <div class="mc-results">
+            {#each mcResults as r}
+              <div class="mc-row">
+                <span class="mc-row-name">{r.label}{r.index ? ` #${r.index}` : ''}</span>
+                <span class="mc-row-coords">X {r.x} · Z {r.z}</span>
+                <span class="mc-row-dim">{r.dim}</span>
+                <span class="mc-row-dist">{Math.round(Math.hypot(r.x - (Number(mcCenterX) || 0), r.z - (Number(mcCenterZ) || 0)))} m</span>
+                <button class="util-copy mc-copy" onclick={() => copySpot(r)} title="Copy coordinates">
+                  {#if mcCopied === `${r.id}:${r.x}:${r.z}`}<IconCheck size={14} />{:else}<IconCopy size={14} />{/if}
+                </button>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      {/if}
+    </div>
+
+    <div class="util-card">
+      <div class="util-head">
+        <IconSearch size={20} />
+        <div>
+          <h2>Seed Finder</h2>
+          <p class="util-sub">Scan random seeds for a structure near 0, 0 (uses the edition &amp; version above)</p>
+        </div>
+      </div>
+
+      <div class="mc-inputs">
+        <label class="mc-field mc-seed">
+          <span class="util-label">Structure</span>
+          <select class="mc-input" bind:value={finderStructure}>
+            {#each MC_DIMS as d}
+              <optgroup label={d.label}>
+                {#each availableStructures(d.id) as s}
+                  <option value={s.id}>{s.label}</option>
+                {/each}
+              </optgroup>
+            {/each}
+          </select>
+        </label>
+        <label class="mc-field">
+          <span class="util-label">Within</span>
+          <input class="mc-input" type="number" min="64" max="2000" bind:value={finderRadius} />
+        </label>
+        <label class="mc-field">
+          <span class="util-label">Max seeds</span>
+          <input class="mc-input" type="number" min="1000" max="5000000" step="1000" bind:value={finderMaxSeeds} />
+        </label>
+        <button class="mc-run" onclick={runSeedFinder}>
+          {#if finderRunning}<IconPlayerStop size={16} /> Stop{:else}<IconSearch size={16} /> Search{/if}
+        </button>
+      </div>
+
+      {#if finderRunning || finderTried > 0}
+        <div class="mc-progress">
+          <div class="mc-progress-bar"><span style={`width:${Math.min(100, (finderTried / Math.min(Number(finderMaxSeeds) || 100000, 5000000)) * 100)}%`}></span></div>
+          <span class="mc-progress-label">{finderTried.toLocaleString()} tried · {finderMatches.length} found</span>
+        </div>
+      {/if}
+
+      {#if finderMatches.length}
+        <div class="mc-results">
+          {#each finderMatches as m}
+            <div class="mc-row">
+              <span class="mc-row-name">{m.seed.toString()}</span>
+              <span class="mc-row-coords">X {m.x} · Z {m.z}</span>
+              <span class="mc-row-dim">{Math.round(m.distance)} m</span>
+              <button class="util-pill" onclick={() => useSeed(m.seed)}>Open</button>
+            </div>
+          {/each}
+        </div>
+      {/if}
+    </div>
   {:else}
     <button class="back-btn" onclick={() => view = 'home'}><IconArrowLeft size={15}/> Utilities</button>
     <h1 class="page-title">{branding.name}'s Cloud</h1>
@@ -299,5 +592,39 @@
   .util-hv { font-family: ui-monospace, monospace; color: var(--text-1); word-break: break-all; }
   .util-hm { color: var(--text-3); font-size: 11px; white-space: nowrap; }
   .util-hd { color: var(--text-3); font-size: 11px; white-space: nowrap; }
+  .banner-mc {
+    background:
+      radial-gradient(circle at 50% 42%, rgba(126,201,111,.22) 0%, transparent 60%),
+      repeating-linear-gradient(45deg, transparent, transparent 14px, rgba(255,255,255,.04) 14px, rgba(255,255,255,.04) 28px),
+      linear-gradient(135deg, #141a14 0%, #0b0e0b 100%);
+  }
+  .mc-inputs { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+  .mc-field { display: flex; flex-direction: column; min-width: 96px; }
+  .mc-field.mc-seed { flex: 1 1 220px; }
+  .mc-input { background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; color: var(--text-1); padding: 8px 10px; font-size: 13px; font-family: ui-monospace, monospace; outline: none; width: 100%; box-sizing: border-box; }
+  .mc-input:focus { border-color: var(--accent); }
+  select.mc-input { font-family: 'Geist', sans-serif; }
+  .mc-run { display: inline-flex; align-items: center; gap: 6px; background: color-mix(in srgb, var(--accent) 18%, transparent); border: 1px solid var(--accent); color: var(--text-1); border-radius: 8px; padding: 9px 14px; font-size: 13px; cursor: pointer; font-family: 'Geist', sans-serif; white-space: nowrap; }
+  .mc-run:hover { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+  .mc-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
+  .mc-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--bg-3); border: 1px solid var(--border); color: var(--text-3); padding: 5px 10px; border-radius: 999px; font-size: 12px; cursor: pointer; font-family: 'Geist', sans-serif; }
+  .mc-chip:hover { color: var(--text-1); border-color: var(--border-hover); }
+  .mc-chip.active { color: var(--text-1); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+  .mc-chip-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); }
+  .mc-chip-dot.overworld { background: #7ec96f; }
+  .mc-chip-dot.nether { background: #e07b5f; }
+  .mc-chip-dot.end { background: #b58fe0; }
+  .mc-note { font-size: 11px; color: var(--text-3); margin: 0 0 14px; line-height: 1.5; }
+  .mc-results { display: flex; flex-direction: column; max-height: 380px; overflow-y: auto; border-top: 1px solid var(--border); margin-top: 6px; }
+  .mc-row { display: flex; align-items: center; gap: 10px; padding: 7px 2px; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+  .mc-row-name { color: var(--text-1); font-weight: 500; min-width: 128px; }
+  .mc-row-coords { font-family: ui-monospace, monospace; color: var(--text-2); flex: 1; }
+  .mc-row-dim { color: var(--text-3); font-size: 10px; text-transform: uppercase; letter-spacing: .06em; }
+  .mc-row-dist { color: var(--text-3); font-family: ui-monospace, monospace; font-size: 11px; }
+  .mc-copy { width: 26px; height: 26px; }
+  .mc-progress { display: flex; align-items: center; gap: 10px; margin: 10px 0; }
+  .mc-progress-bar { flex: 1; height: 5px; background: var(--bg-3); border-radius: 999px; overflow: hidden; }
+  .mc-progress-bar span { display: block; height: 100%; background: var(--accent); }
+  .mc-progress-label { font-size: 11px; color: var(--text-3); white-space: nowrap; }
   @media (max-width: 640px) { .util-root { padding: 14px; } }
 </style>
