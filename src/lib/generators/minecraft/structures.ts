@@ -32,29 +32,54 @@ export type StructureId =
 export interface StructureInfo {
   label: string;
   dim: Dimension;
+  /** marker colour on the map */
+  color: string;
+  /** short glyph used inside map pins / lists */
+  abbr: string;
+  /** label collision priority, higher wins */
+  priority: number;
 }
 
 export const STRUCTURES: Record<StructureId, StructureInfo> = {
-  village: { label: 'Village', dim: 'overworld' },
-  desert_pyramid: { label: 'Desert Pyramid', dim: 'overworld' },
-  jungle_temple: { label: 'Jungle Temple', dim: 'overworld' },
-  witch_hut: { label: 'Witch Hut', dim: 'overworld' },
-  igloo: { label: 'Igloo', dim: 'overworld' },
-  monument: { label: 'Ocean Monument', dim: 'overworld' },
-  mansion: { label: 'Woodland Mansion', dim: 'overworld' },
-  outpost: { label: 'Pillager Outpost', dim: 'overworld' },
-  ocean_ruin: { label: 'Ocean Ruin', dim: 'overworld' },
-  shipwreck: { label: 'Shipwreck', dim: 'overworld' },
-  ruined_portal: { label: 'Ruined Portal', dim: 'overworld' },
-  ancient_city: { label: 'Ancient City', dim: 'overworld' },
-  trail_ruins: { label: 'Trail Ruins', dim: 'overworld' },
-  trial_chambers: { label: 'Trial Chambers', dim: 'overworld' },
-  treasure: { label: 'Buried Treasure', dim: 'overworld' },
-  ruined_portal_nether: { label: 'Ruined Portal (Nether)', dim: 'nether' },
-  fortress: { label: 'Nether Fortress', dim: 'nether' },
-  bastion: { label: 'Bastion Remnant', dim: 'nether' },
-  end_city: { label: 'End City', dim: 'end' },
-  stronghold: { label: 'Stronghold', dim: 'overworld' },
+  village: { label: 'Village', dim: 'overworld', color: '#e8b04b', abbr: 'V', priority: 95 },
+  desert_pyramid: { label: 'Desert Pyramid', dim: 'overworld', color: '#d9a441', abbr: 'D', priority: 55 },
+  jungle_temple: { label: 'Jungle Temple', dim: 'overworld', color: '#3fae6a', abbr: 'J', priority: 58 },
+  witch_hut: { label: 'Witch Hut', dim: 'overworld', color: '#8b6ee0', abbr: 'W', priority: 52 },
+  igloo: { label: 'Igloo', dim: 'overworld', color: '#9fd8ef', abbr: 'I', priority: 45 },
+  monument: { label: 'Ocean Monument', dim: 'overworld', color: '#2fa8c9', abbr: 'M', priority: 88 },
+  mansion: { label: 'Woodland Mansion', dim: 'overworld', color: '#a06a3f', abbr: 'W', priority: 86 },
+  outpost: { label: 'Pillager Outpost', dim: 'overworld', color: '#c04a3e', abbr: 'O', priority: 78 },
+  ocean_ruin: { label: 'Ocean Ruin', dim: 'overworld', color: '#4f9bb0', abbr: 'R', priority: 34 },
+  shipwreck: { label: 'Shipwreck', dim: 'overworld', color: '#8b98ad', abbr: 'S', priority: 38 },
+  ruined_portal: { label: 'Ruined Portal', dim: 'overworld', color: '#a566c7', abbr: 'P', priority: 42 },
+  ancient_city: { label: 'Ancient City', dim: 'overworld', color: '#5b7fd4', abbr: 'A', priority: 82 },
+  trail_ruins: { label: 'Trail Ruins', dim: 'overworld', color: '#c98a4b', abbr: 'T', priority: 48 },
+  trial_chambers: { label: 'Trial Chambers', dim: 'overworld', color: '#d4693f', abbr: 'T', priority: 74 },
+  treasure: { label: 'Buried Treasure', dim: 'overworld', color: '#ddc94a', abbr: '$', priority: 12 },
+  ruined_portal_nether: { label: 'Ruined Portal (Nether)', dim: 'nether', color: '#a566c7', abbr: 'P', priority: 40 },
+  fortress: { label: 'Nether Fortress', dim: 'nether', color: '#d1493f', abbr: 'F', priority: 90 },
+  bastion: { label: 'Bastion Remnant', dim: 'nether', color: '#b05fc4', abbr: 'B', priority: 87 },
+  end_city: { label: 'End City', dim: 'end', color: '#c9a7f0', abbr: 'E', priority: 84 },
+  stronghold: { label: 'Stronghold', dim: 'overworld', color: '#b7bec9', abbr: 'H', priority: 100 },
+};
+
+export const DIMENSIONS: Dimension[] = ['overworld', 'nether', 'end'];
+
+export const DEFAULT_SELECTION: Record<Dimension, StructureId[]> = {
+  overworld: [
+    'village',
+    'stronghold',
+    'monument',
+    'mansion',
+    'outpost',
+    'desert_pyramid',
+    'jungle_temple',
+    'witch_hut',
+    'ancient_city',
+    'trial_chambers',
+  ],
+  nether: ['fortress', 'bastion'],
+  end: ['end_city'],
 };
 
 export interface JavaVersion {
@@ -69,16 +94,23 @@ export interface BedrockVersion {
 // cubiomes-style version ordinals
 export const JAVA_VERSIONS: JavaVersion[] = [
   { mc: 1211, label: '1.21+ (latest)' },
-  { mc: 120, label: '1.19.3 – 1.20' },
-  { mc: 118, label: '1.18 – 1.19.2' },
-  { mc: 117, label: '1.16 – 1.17' },
-  { mc: 115, label: '1.14 – 1.15' },
+  { mc: 120, label: '1.20' },
+  { mc: 1193, label: '1.19.3 – 1.19.4' },
+  { mc: 119, label: '1.19 – 1.19.2' },
+  { mc: 118, label: '1.18' },
+  { mc: 117, label: '1.17' },
+  { mc: 116, label: '1.16' },
+  { mc: 115, label: '1.15' },
+  { mc: 114, label: '1.14' },
   { mc: 113, label: '1.13' },
   { mc: 112, label: '1.9 – 1.12' },
 ];
 
 export const BEDROCK_VERSIONS: BedrockVersion[] = [
-  { mc: 118, label: '1.18+ (latest)' },
+  { mc: 121, label: '1.21+ (latest)' },
+  { mc: 120, label: '1.20' },
+  { mc: 119, label: '1.19' },
+  { mc: 118, label: '1.18' },
   { mc: 117, label: '1.17' },
   { mc: 116, label: '1.16' },
   { mc: 111, label: '1.11 – 1.15' },
@@ -164,7 +196,7 @@ function javaConf(mc: number, id: StructureId): Conf | null {
             kind: 'feature',
           };
     case 'ancient_city':
-      return mc < 1192 ? null : { salt: 20083232, spacing: 24, cr: 16, kind: 'feature' };
+      return mc < 119 ? null : { salt: 20083232, spacing: 24, cr: 16, kind: 'feature' };
     case 'trail_ruins':
       return mc < 120 ? null : { salt: 83469867, spacing: 34, cr: 26, kind: 'feature' };
     case 'trial_chambers':
@@ -494,6 +526,15 @@ export function isStructureAvailable(edition: Edition, mc: number, id: Structure
   return !!(edition === 'java' ? javaConf(mc, id) : bedrockConf(mc, id));
 }
 
+/** Java slime chunk test — exact vanilla formula. Bedrock doesn't use this scheme. */
+export function isSlimeChunk(seed: bigint, chunkX: number, chunkZ: number): boolean {
+  const x = BigInt(chunkX);
+  const z = BigInt(chunkZ);
+  let s = BigInt.asIntN(64, seed + x * x * 4987142n + x * 5947611n + z * z * 4392871n + z * 389711n);
+  s = BigInt.asIntN(64, s ^ 987234911n);
+  return new JavaRandom(s).nextInt(10) === 0;
+}
+
 export interface FindOptions {
   edition: Edition;
   mc: number;
@@ -505,7 +546,7 @@ export interface FindOptions {
 }
 
 export function findStructures(opts: FindOptions): StructureSpot[] {
-  const radius = Math.max(16, Math.min(opts.radius, 5000));
+  const radius = Math.max(16, Math.min(opts.radius, 12000));
   const out: StructureSpot[] = [];
   const inside = (x: number, z: number) =>
     Math.hypot(x - opts.centerX, z - opts.centerZ) <= radius;
