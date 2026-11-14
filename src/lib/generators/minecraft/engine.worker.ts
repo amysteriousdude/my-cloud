@@ -1,13 +1,19 @@
 /// <reference lib="webworker" />
 /*
- * Minecraft Java worldgen worker.
- * Biome sampling and structure viability come from the cubiomes engine
- * (MIT, https://github.com/Cubitect/cubiomes) compiled to WebAssembly.
- * The wasm bundle is served from /mc/seed_engine.js + /mc/seed_engine.wasm.
+ * Minecraft worldgen worker.
+ *
+ * Java:    cubiomes (MIT) compiled to WebAssembly.
+ * Bedrock: cubiomes-bedrock (MIT) compiled to wasm32-wasi.
+ *
+ * Bundles are served from /mc/seed_engine.js and /mc/seed_engine_bedrock.js.
+ * Both expose the same C API, so the scan logic below is shared.
  */
 
 import { STRUCTURES, findStructures, type StructureId } from './structures';
+import { versionKey } from './versions';
 import type { BiomeRequest, EngineScanRequest } from './engine.types';
+
+type Edition = 'java' | 'bedrock';
 
 type EngineModule = {
   HEAP32: Int32Array;
@@ -50,6 +56,20 @@ type EngineModule = {
 
 type ScanMessage = EngineScanRequest & { id: number };
 
+interface EngineState {
+  mod: EngineModule;
+  palette: Uint32Array | null;
+  structureTypes: Record<string, number>;
+  ctxHandle: number;
+  ctxKey: string;
+  versionCache: Map<string, number>;
+}
+
+const ENGINE_URL: Record<Edition, string> = {
+  java: '/mc/seed_engine.js',
+  bedrock: '/mc/seed_engine_bedrock.js',
+};
+
 const CUBIOMES_STRUCTURE: Partial<Record<StructureId, string>> = {
   village: 'village',
   desert_pyramid: 'desert_pyramid',
@@ -72,25 +92,16 @@ const CUBIOMES_STRUCTURE: Partial<Record<StructureId, string>> = {
   end_city: 'end_city',
 };
 
-const ENGINE_URL = '/mc/seed_engine.js';
+const engines = new Map<Edition, EngineState>();
+const loading = new Map<Edition, Promise<EngineState>>();
 
-let modPromise: Promise<EngineModule> | null = null;
-let mod: EngineModule | null = null;
-let palette: Uint32Array | null = null;
-let structureTypes: Record<string, number> = {};
-let ctxHandle = 0;
-let ctxKey = '';
-const versionCache = new Map<string, number>();
+async function createEngine(edition: Edition): Promise<EngineState> {
+  const imported = (await import(/* @vite-ignore */ ENGINE_URL[edition])) as {
+    default: () => Promise<EngineModule>;
+  };
+  const mod = await imported.default();
 
-async function loadEngine(): Promise<EngineModule> {
-  if (mod) return mod;
-  if (!modPromise) {
-    modPromise = import(/* @vite-ignore */ ENGINE_URL).then(
-      (m: { default: () => Promise<EngineModule> }) => m.default(),
-    );
-  }
-  mod = await modPromise;
-
+  const structureTypes: Record<string, number> = {};
   const count = mod._wasm_structure_type_count();
   for (let i = 0; i < count; i++) {
     const len = mod._wasm_structure_name_length(i);
@@ -99,6 +110,7 @@ async function loadEngine(): Promise<EngineModule> {
     if (name && !(name in structureTypes)) structureTypes[name] = i;
   }
 
+  let palette: Uint32Array | null = null;
   const ptr = mod._malloc(768);
   try {
     if (mod._wasm_biome_colors(ptr) === 0) {
@@ -115,62 +127,68 @@ async function loadEngine(): Promise<EngineModule> {
     mod._free(ptr);
   }
 
-  return mod;
+  const state: EngineState = {
+    mod,
+    palette,
+    structureTypes,
+    ctxHandle: 0,
+    ctxKey: '',
+    versionCache: new Map(),
+  };
+  engines.set(edition, state);
+  return state;
 }
 
-function versionEnum(label: string): number {
-  if (!mod) return 0;
-  if (label === 'newest') return mod._wasm_version_newest();
-  const cached = versionCache.get(label);
+async function loadEngine(edition: Edition): Promise<EngineState> {
+  const ready = engines.get(edition);
+  if (ready) return ready;
+  let pending = loading.get(edition);
+  if (!pending) {
+    pending = createEngine(edition).finally(() => loading.delete(edition));
+    loading.set(edition, pending);
+  }
+  return pending;
+}
+
+function versionEnum(state: EngineState, edition: Edition, mc: number): number {
+  if (edition === 'java' && mc >= 1211) return state.mod._wasm_version_newest();
+  const label = versionKey(edition, mc);
+  if (label === 'newest') return state.mod._wasm_version_newest();
+  const cached = state.versionCache.get(label);
   if (cached !== undefined) return cached;
-  const ptr = mod._malloc(32);
+
+  const ptr = state.mod._malloc(32);
   let value = -1;
   try {
-    mod.stringToUTF8(label, ptr, 32);
-    value = mod._wasm_version_from_string(ptr);
+    state.mod.stringToUTF8(label, ptr, 32);
+    value = state.mod._wasm_version_from_string(ptr);
   } finally {
-    mod._free(ptr);
+    state.mod._free(ptr);
   }
-  if (value < 0) value = mod._wasm_version_newest();
-  versionCache.set(label, value);
+  if (value < 0) value = state.mod._wasm_version_newest();
+  state.versionCache.set(label, value);
   return value;
 }
 
-/** Mirror of cubiomesVersionKey in the main thread. */
-function versionKey(mc: number): string {
-  if (mc >= 1211) return 'newest';
-  if (mc >= 120) return '1.20';
-  if (mc >= 1193) return '1.19.4';
-  if (mc >= 119) return '1.19.2';
-  if (mc >= 118) return '1.18';
-  if (mc >= 117) return '1.17';
-  if (mc >= 116) return '1.16';
-  if (mc >= 115) return '1.15';
-  if (mc >= 114) return '1.14';
-  if (mc >= 113) return '1.13';
-  if (mc >= 112) return '1.12';
-  return '1.12';
-}
-
-function ensureContext(mcEnum: number, dim: number, lo: number, hi: number) {
-  if (!mod) throw new Error('engine not loaded');
+function ensureContext(state: EngineState, mcEnum: number, dim: number, lo: number, hi: number) {
   const key = `${mcEnum}|${dim}|${lo}|${hi}`;
-  if (key === ctxKey && ctxHandle) return ctxHandle;
-  if (ctxHandle) mod._wasm_destroy(ctxHandle);
-  ctxHandle = mod._wasm_create(mcEnum, dim, lo, hi);
-  ctxKey = key;
-  if (!ctxHandle) throw new Error('engine context allocation failed');
-  return ctxHandle;
+  if (key === state.ctxKey && state.ctxHandle) return state.ctxHandle;
+  if (state.ctxHandle) state.mod._wasm_destroy(state.ctxHandle);
+  state.ctxHandle = state.mod._wasm_create(mcEnum, dim, lo, hi);
+  state.ctxKey = key;
+  if (!state.ctxHandle) throw new Error('worldgen context allocation failed');
+  return state.ctxHandle;
 }
 
-function generateBiomes(req: BiomeRequest): Uint32Array {
-  if (!mod || !palette) throw new Error('engine not loaded');
+function generateBiomes(state: EngineState, req: BiomeRequest): Uint32Array | null {
+  const { mod, palette } = state;
+  if (!palette) return null;
   const count = req.width * req.height;
   const ptr = mod._malloc(count * 4);
   if (!ptr) throw new Error('biome buffer allocation failed');
   try {
     const rc = mod._wasm_ctx_generate_biomes(
-      ctxHandle,
+      state.ctxHandle,
       req.x,
       req.z,
       req.width,
@@ -179,7 +197,7 @@ function generateBiomes(req: BiomeRequest): Uint32Array {
       63,
       ptr,
     );
-    if (rc !== 0) throw new Error(`generateBiomes failed: ${rc}`);
+    if (rc !== 0) return null;
     const ids = new Int32Array(mod.HEAP32.buffer, ptr, count);
     const rgba = new Uint32Array(count);
     const fallback = palette[0] ?? 0xff000000;
@@ -193,8 +211,14 @@ function generateBiomes(req: BiomeRequest): Uint32Array {
   }
 }
 
-function scanStructures(msg: ScanMessage, mcEnum: number, lo: number, hi: number) {
-  if (!mod) throw new Error('engine not loaded');
+function scanStructures(
+  state: EngineState,
+  msg: ScanMessage,
+  mcEnum: number,
+  lo: number,
+  hi: number,
+) {
+  const { mod, structureTypes } = state;
   const out: { id: StructureId; label: string; dim: string; x: number; z: number; index?: number }[] = [];
   const seen = new Set<string>();
   const posPtr = mod._malloc(8);
@@ -208,7 +232,7 @@ function scanStructures(msg: ScanMessage, mcEnum: number, lo: number, hi: number
       if (id === 'stronghold') {
         const seed = (BigInt(hi) << 32n) | BigInt(lo);
         const spots = findStructures({
-          edition: 'java',
+          edition: msg.edition,
           mc: msg.mc,
           seed,
           centerX: msg.cx,
@@ -240,7 +264,7 @@ function scanStructures(msg: ScanMessage, mcEnum: number, lo: number, hi: number
           const dx = x - msg.cx;
           const dz = z - msg.cz;
           if (dx * dx + dz * dz > r2) continue;
-          if (mod._wasm_ctx_structure_viable(ctxHandle, type, x, z) === 0) continue;
+          if (mod._wasm_ctx_structure_viable(state.ctxHandle, type, x, z) === 0) continue;
           const key = `${id}:${x}:${z}`;
           if (seen.has(key)) continue;
           seen.add(key);
@@ -256,19 +280,21 @@ function scanStructures(msg: ScanMessage, mcEnum: number, lo: number, hi: number
 }
 
 async function handleScan(msg: ScanMessage) {
-  await loadEngine();
-  const mcEnum = versionEnum(versionKey(msg.mc));
-  ensureContext(mcEnum, msg.dim, msg.seedLo, msg.seedHi);
+  const state = await loadEngine(msg.edition);
+  const mcEnum = versionEnum(state, msg.edition, msg.mc);
+  ensureContext(state, mcEnum, msg.dim, msg.seedLo, msg.seedHi);
 
   let biomePixels: ArrayBuffer | null = null;
   let biomeMeta: BiomeRequest | null = null;
   if (msg.biome && msg.biome.width > 1 && msg.biome.height > 1) {
-    const rgba = generateBiomes(msg.biome);
-    biomePixels = rgba.buffer;
-    biomeMeta = { ...msg.biome };
+    const rgba = generateBiomes(state, msg.biome);
+    if (rgba) {
+      biomePixels = rgba.buffer;
+      biomeMeta = { ...msg.biome };
+    }
   }
 
-  const spots = scanStructures(msg, mcEnum, msg.seedLo, msg.seedHi);
+  const spots = scanStructures(state, msg, mcEnum, msg.seedLo, msg.seedHi);
   (self as unknown as Worker).postMessage(
     { id: msg.id, ok: true, spots, biomePixels, biomeMeta },
     biomePixels ? [biomePixels] : [],

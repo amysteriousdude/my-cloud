@@ -20,7 +20,7 @@
     type StructureId,
     type StructureSpot,
   } from '$lib/generators/minecraft/structures';
-  import { scanJavaWorld, disposeEngine } from '$lib/generators/minecraft/engineClient';
+  import { scanWorld, disposeEngine } from '$lib/generators/minecraft/engineClient';
   import type { BiomeRequest } from '$lib/generators/minecraft/engine.types';
 
   interface Props {
@@ -151,7 +151,7 @@
     const worldW = Math.max(64, (width / scale) * margin);
     const worldH = Math.max(64, (height / scale) * margin);
     const longest = Math.max(worldW, worldH);
-    const scales = [4, 16, 64, 256, 1024];
+    const scales = [4, 16, 64, 256];
     let sampleScale = scales[scales.length - 1];
     for (const s of scales) {
       if (longest / s <= BIOME_SAMPLES) {
@@ -209,30 +209,27 @@
     scanning = true;
     onstatus(true);
     try {
-      if (edition === 'java') {
-        const fullSeed = BigInt.asUintN(64, seed);
-        try {
-          const result = await scanJavaWorld({
-            seedLo: Number(BigInt.asUintN(32, fullSeed)),
-            seedHi: Number(BigInt.asUintN(32, fullSeed >> 32n)),
-            mc,
-            dim: engineDim(),
-            cx,
-            cz,
-            radius,
-            structures,
-            biome: buildBiomeRequest(),
-          });
-          if (token !== scanToken) return;
-          spots = result.spots.length > 30000 ? result.spots.slice(0, 30000) : result.spots;
-          if (result.biomePixels && result.biomeMeta) applyBiome(result.biomePixels, result.biomeMeta);
-          engineFailed = false;
-        } catch {
-          if (token !== scanToken) return;
-          engineFailed = true;
-          spots = legacyScan(radius);
-        }
-      } else {
+      const fullSeed = BigInt.asUintN(64, seed);
+      try {
+        const result = await scanWorld({
+          edition,
+          seedLo: Number(BigInt.asUintN(32, fullSeed)),
+          seedHi: Number(BigInt.asUintN(32, fullSeed >> 32n)),
+          mc,
+          dim: engineDim(),
+          cx,
+          cz,
+          radius,
+          structures,
+          biome: buildBiomeRequest(),
+        });
+        if (token !== scanToken) return;
+        spots = result.spots.length > 30000 ? result.spots.slice(0, 30000) : result.spots;
+        if (result.biomePixels && result.biomeMeta) applyBiome(result.biomePixels, result.biomeMeta);
+        engineFailed = false;
+      } catch {
+        if (token !== scanToken) return;
+        engineFailed = true;
         spots = legacyScan(radius);
       }
       if (token !== scanToken) return;
@@ -1257,18 +1254,16 @@
     <div class="map-badge">
       {#if scanning}
         <span class="map-spinner"></span>
-        {edition === 'java' && !engineFailed ? 'Generating biomes…' : 'Scanning…'}
+        {engineFailed ? 'Scanning…' : 'Generating biomes…'}
       {:else}
         <span class="map-dot"></span>
         {spots.length.toLocaleString()} structures
       {/if}
       <span class="map-badge-sep"></span>
-      {#if edition === 'java' && !engineFailed}
-        <span class="map-exact">cubiomes · exact</span>
-      {:else if edition === 'java'}
-        <span class="map-approx">fallback · approximate</span>
+      {#if !engineFailed}
+        <span class="map-exact">{edition === 'java' ? 'cubiomes · exact' : 'cubiomes-bedrock · exact'}</span>
       {:else}
-        <span class="map-approx">bedrock · approximate</span>
+        <span class="map-approx">{edition} · approximate</span>
       {/if}
     </div>
 

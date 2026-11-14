@@ -11,6 +11,7 @@ export interface BiomeRequest {
 }
 
 export interface EngineScanRequest {
+  edition: 'java' | 'bedrock';
   seedLo: number;
   seedHi: number;
   /** our internal version number (1211, 120, 1193, ...) */

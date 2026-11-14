@@ -107,13 +107,21 @@ export const JAVA_VERSIONS: JavaVersion[] = [
 ];
 
 export const BEDROCK_VERSIONS: BedrockVersion[] = [
-  { mc: 121, label: '1.21+ (latest)' },
+  { mc: 2660, label: '26.60 (preview)' },
+  { mc: 2650, label: '26.50' },
+  { mc: 2640, label: '26.40 (preview)' },
+  { mc: 2630, label: '26.30 (preview)' },
+  { mc: 2620, label: '26.20' },
+  { mc: 12160, label: '1.21.60' },
+  { mc: 12150, label: '1.21.50' },
+  { mc: 121, label: '1.21' },
   { mc: 120, label: '1.20' },
   { mc: 119, label: '1.19' },
   { mc: 118, label: '1.18' },
   { mc: 117, label: '1.17' },
   { mc: 116, label: '1.16' },
-  { mc: 111, label: '1.11 – 1.15' },
+  { mc: 114, label: '1.14 – 1.15' },
+  { mc: 111, label: '1.11 – 1.13' },
 ];
 
 const RA = 341873128712n;

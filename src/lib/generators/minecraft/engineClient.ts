@@ -2,7 +2,7 @@ import type { EngineScanRequest, EngineScanResult } from './engine.types';
 
 /*
  * Main-thread client for the cubiomes worldgen worker.
- * The worker is created lazily so SSR and non-Java editions never pay for it.
+ * The worker is created lazily so SSR never pays for it.
  */
 
 type WorkerReply =
@@ -52,7 +52,7 @@ function ensureWorker(): Worker {
   return w;
 }
 
-export function scanJavaWorld(request: EngineScanRequest): Promise<EngineScanResult> {
+export function scanWorld(request: EngineScanRequest): Promise<EngineScanResult> {
   const w = ensureWorker();
   const id = ++seq;
   return new Promise<EngineScanResult>((resolve, reject) => {
