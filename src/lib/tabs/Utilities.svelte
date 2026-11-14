@@ -1,6 +1,6 @@
 <!-- hello there, tf u doing on my code???? -->
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { IconRefresh, IconHistory, IconCopy, IconCheck, IconArrowLeft, IconDownload, IconWorld } from '@tabler/icons-svelte';
   import RobloxIcon from '$lib/components/icons/RobloxIcon.svelte';
   import CloudLogo from '$lib/components/icons/CloudLogo.svelte';
@@ -11,7 +11,18 @@
   let {
     user = null,
     apiKey = null,
-  }: { user?: { username: string; discordId: string; createdAt: string } | null; apiKey?: string | null } = $props();
+    onimmersive,
+  }: {
+    user?: { username: string; discordId: string; createdAt: string } | null;
+    apiKey?: string | null;
+    onimmersive?: (on: boolean) => void;
+  } = $props();
+
+  $effect(() => {
+    onimmersive?.(view === 'minecraft');
+  });
+
+  onDestroy(() => onimmersive?.(false));
 
   type HistoryEntry = { version: string; platform: string; channel: string; at: string };
 
@@ -251,7 +262,7 @@
 
 <style>
   .util-root { padding: 32px 40px; max-width: 900px; margin: 0 auto; height: 100%; overflow-y: auto; }
-  .util-root.wide { max-width: none; padding: 16px 20px; }
+  .util-root.wide { max-width: none; padding: 0; height: 100%; overflow: hidden; }
   .page-title { font-size: 22px; font-weight: 700; color: var(--text-1); margin: 0 0 6px; letter-spacing: -.4px; }
   .page-sub { color: var(--text-3); font-size: 13px; margin: 0 0 28px; }
 
@@ -320,5 +331,5 @@
       repeating-linear-gradient(45deg, transparent, transparent 14px, rgba(255,255,255,.04) 14px, rgba(255,255,255,.04) 28px),
       linear-gradient(135deg, #141a14 0%, #0b0e0b 100%);
   }
-  @media (max-width: 640px) { .util-root { padding: 14px; } .util-root.wide { padding: 8px; } }
+  @media (max-width: 640px) { .util-root { padding: 14px; } .util-root.wide { padding: 0; } }
 </style>

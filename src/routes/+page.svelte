@@ -126,7 +126,9 @@
   let dockHovered = $state(false);
   let dockHoverTimeout: ReturnType<typeof setTimeout> | null = null;
   let isCraftTab = $derived(['draw', 'pdf', 'film', 'vector', 'light', 'effect', 'design', 'word', 'deck', 'grid', 'sound'].includes(activeTab));
-  let dockAutoHide = $derived(isCraftTab && dockMode === 'dock');
+  let mcImmersive = $state(false);
+  let isImmersive = $derived(isCraftTab || (activeTab === 'utility' && mcImmersive));
+  let dockAutoHide = $derived(isImmersive && dockMode === 'dock');
 
   function onDockHoverZoneEnter() {
     if (dockHoverTimeout) { clearTimeout(dockHoverTimeout); dockHoverTimeout = null; }
@@ -194,7 +196,7 @@
       />
     {/if}
 
-    <main class="main" class:draw-fullscreen={dockAutoHide && !dockHovered} class:craft-mode={isCraftTab} class:ai-active={activeTab === 'ai'}>
+    <main class="main" class:draw-fullscreen={dockAutoHide && !dockHovered} class:craft-mode={isImmersive} class:ai-active={activeTab === 'ai'}>
       {#if activeTab === 'files'}
         <Files
           {user}
@@ -232,7 +234,7 @@
       {:else if activeTab === 'fx'}
         <FXLazy {apiKey} active />
       {:else if activeTab === 'utility'}
-        <Utilities {user} {apiKey} />
+        <Utilities {user} {apiKey} onimmersive={(on) => (mcImmersive = on)} />
       {/if}
 
       <div class="craft-host" class:craft-show={activeTab === 'draw'}>

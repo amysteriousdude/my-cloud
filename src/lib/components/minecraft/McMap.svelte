@@ -20,6 +20,8 @@
     type StructureId,
     type StructureSpot,
   } from '$lib/generators/minecraft/structures';
+  import { scanJavaWorld, disposeEngine } from '$lib/generators/minecraft/engineClient';
+  import type { BiomeRequest } from '$lib/generators/minecraft/engine.types';
 
   interface Props {
     seed: bigint;
@@ -44,7 +46,7 @@
     structures,
     showSlime = false,
     showGrid = true,
-    showLabels = true,
+    showLabels = false,
     onspots = () => {},
     onview = () => {},
     onstatus = () => {},
@@ -53,7 +55,8 @@
 
   const MIN_SCALE = 0.008;
   const MAX_SCALE = 10;
-  const CLUSTER_CELL = 30;
+  const DEFAULT_SCALE = 0.5;
+  const BIOME_SAMPLES = 340;
 
   let wrapEl: HTMLDivElement;
   let canvasEl: HTMLCanvasElement;
@@ -64,15 +67,13 @@
 
   let cx = $state(0);
   let cz = $state(0);
-  let scale = $state(0.25);
+  let scale = $state(DEFAULT_SCALE);
 
   let spots = $state<StructureSpot[]>([]);
   let scanning = $state(false);
   let selected = $state<StructureSpot | null>(null);
   let hover = $state<
-    | { kind: 'spot'; spot: StructureSpot; x: number; y: number; px: number; py: number }
-    | { kind: 'cluster'; count: number; x: number; y: number; px: number; py: number }
-    | null
+    { kind: 'spot'; spot: StructureSpot; x: number; y: number; px: number; py: number } | null
   >(null);
   let cursor = $state<{ x: number; z: number } | null>(null);
   let copied = $state(false);
@@ -83,16 +84,18 @@
   let drag: { id: number; sx: number; sy: number; cx: number; cz: number } | null = null;
   let dragging = false;
 
-  let hitTargets: (
-    | { kind: 'spot'; spot: StructureSpot; x: number; y: number; r: number }
-    | { kind: 'cluster'; count: number; x: number; y: number; r: number; wx: number; wz: number }
-  )[] = [];
+  let hitTargets: { kind: 'spot'; spot: StructureSpot; x: number; y: number; r: number }[] = [];
+
+  let biomeSnap: { canvas: HTMLCanvasElement; meta: BiomeRequest } | null = null;
+  let biomeActive = $state(false);
+  let engineFailed = $state(false);
 
   let drawRaf = 0;
   let scanTimer: ReturnType<typeof setTimeout> | null = null;
   let settleTimer: ReturnType<typeof setTimeout> | null = null;
   let scanArea: { x: number; z: number; radius: number; key: string } | null = null;
   let scanKey = '';
+  let scanToken = 0;
   const slimeCache = new Map<string, boolean>();
 
   const keyOf = (s: StructureSpot) => `${s.id}:${s.x}:${s.z}:${s.index ?? 0}`;
@@ -134,41 +137,121 @@
     return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
   }
 
-  function scanNow() {
+  function dataKey() {
+    return `${seed}|${edition}|${mc}|${dimension}|${structures.join(',')}`;
+  }
+
+  function engineDim(): -1 | 0 | 1 {
+    return dimension === 'nether' ? -1 : dimension === 'end' ? 1 : 0;
+  }
+
+  /** Pick a cubiomes sample scale so a scan stays around 240 samples per axis. */
+  function buildBiomeRequest(): BiomeRequest {
+    const margin = 1.28;
+    const worldW = Math.max(64, (width / scale) * margin);
+    const worldH = Math.max(64, (height / scale) * margin);
+    const longest = Math.max(worldW, worldH);
+    const scales = [4, 16, 64, 256, 1024];
+    let sampleScale = scales[scales.length - 1];
+    for (const s of scales) {
+      if (longest / s <= BIOME_SAMPLES) {
+        sampleScale = s;
+        break;
+      }
+    }
+    const bw = clamp(Math.ceil(worldW / sampleScale), 8, 360);
+    const bh = clamp(Math.ceil(worldH / sampleScale), 8, 360);
+    return {
+      x: Math.round(cx / sampleScale - bw / 2),
+      z: Math.round(cz / sampleScale - bh / 2),
+      width: bw,
+      height: bh,
+      scale: sampleScale,
+    };
+  }
+
+  function applyBiome(pixels: ArrayBuffer, meta: BiomeRequest) {
+    if (meta.width < 2 || meta.height < 2) return;
+    const off = document.createElement('canvas');
+    off.width = meta.width;
+    off.height = meta.height;
+    const cg = off.getContext('2d');
+    if (!cg) return;
+    try {
+      cg.putImageData(new ImageData(new Uint8ClampedArray(pixels), meta.width, meta.height), 0, 0);
+    } catch {
+      return;
+    }
+    biomeSnap = { canvas: off, meta: { ...meta } };
+    biomeActive = true;
+    requestDraw();
+  }
+
+  function legacyScan(radius: number): StructureSpot[] {
+    if (!structures.length || width <= 20) return [];
+    const result = findStructures({
+      edition,
+      mc,
+      seed,
+      centerX: cx,
+      centerZ: cz,
+      radius,
+      structures,
+    });
+    return result.length > 30000 ? result.slice(0, 30000) : result;
+  }
+
+  async function scanNow() {
+    const token = ++scanToken;
     const radius = clamp(Math.hypot(width / 2 / scale, height / 2 / scale) * 1.2, 640, 9000);
-    const key = `${seed}|${edition}|${mc}|${dimension}|${structures.join(',')}`;
+    const key = dataKey();
     const t0 = performance.now();
     scanning = true;
     onstatus(true);
     try {
-      const result =
-        structures.length && width > 20
-          ? findStructures({
-              edition,
-              mc,
-              seed,
-              centerX: cx,
-              centerZ: cz,
-              radius,
-              structures,
-            })
-          : [];
-      spots = result.length > 30000 ? result.slice(0, 30000) : result;
+      if (edition === 'java') {
+        const fullSeed = BigInt.asUintN(64, seed);
+        try {
+          const result = await scanJavaWorld({
+            seedLo: Number(BigInt.asUintN(32, fullSeed)),
+            seedHi: Number(BigInt.asUintN(32, fullSeed >> 32n)),
+            mc,
+            dim: engineDim(),
+            cx,
+            cz,
+            radius,
+            structures,
+            biome: buildBiomeRequest(),
+          });
+          if (token !== scanToken) return;
+          spots = result.spots.length > 30000 ? result.spots.slice(0, 30000) : result.spots;
+          if (result.biomePixels && result.biomeMeta) applyBiome(result.biomePixels, result.biomeMeta);
+          engineFailed = false;
+        } catch {
+          if (token !== scanToken) return;
+          engineFailed = true;
+          spots = legacyScan(radius);
+        }
+      } else {
+        spots = legacyScan(radius);
+      }
+      if (token !== scanToken) return;
       scanArea = { x: cx, z: cz, radius, key };
       onspots(spots);
       emitView();
     } finally {
-      scanning = false;
-      onstatus(false);
-      if (performance.now() - t0 > 180) requestDraw();
+      if (token === scanToken) {
+        scanning = false;
+        onstatus(false);
+        if (performance.now() - t0 > 180) requestDraw();
+      }
     }
     requestDraw();
   }
 
   function needsScan() {
     if (!scanArea) return true;
-    const key = `${seed}|${edition}|${mc}|${dimension}|${structures.join(',')}`;
-    if (scanArea.key !== key) return true;
+    if (scanArea.key !== dataKey()) return true;
     const halfDiag = Math.hypot(width / 2, height / 2) / scale;
     return Math.hypot(cx - scanArea.x, cz - scanArea.z) + halfDiag > scanArea.radius * 0.98;
   }
@@ -219,11 +302,7 @@
       hover = null;
       return;
     }
-    if (t.kind === 'spot') {
-      hover = { kind: 'spot', spot: t.spot, x: t.x, y: t.y, px: mx, py: my };
-    } else {
-      hover = { kind: 'cluster', count: t.count, x: t.x, y: t.y, px: mx, py: my };
-    }
+    hover = { kind: 'spot', spot: t.spot, x: t.x, y: t.y, px: mx, py: my };
   }
 
   function onPointerDown(e: PointerEvent) {
@@ -268,11 +347,9 @@
       if (!t) {
         selected = null;
         onselect(null);
-      } else if (t.kind === 'spot') {
+      } else {
         selected = t.spot;
         onselect(t.spot);
-      } else {
-        focusOn(t.wx, t.wz, clamp(scale * 2.4, MIN_SCALE, MAX_SCALE));
       }
     } else {
       settleSoon(140);
@@ -308,7 +385,7 @@
   function resetView() {
     cx = 0;
     cz = 0;
-    scale = 0.25;
+    scale = DEFAULT_SCALE;
     selected = null;
     onselect(null);
     hover = null;
@@ -399,11 +476,13 @@
     requestDraw();
 
     return () => {
+      scanToken++;
       ro.disconnect();
       canvasEl.removeEventListener('wheel', wheel);
       if (scanTimer) clearTimeout(scanTimer);
       if (settleTimer) clearTimeout(settleTimer);
       if (drawRaf) cancelAnimationFrame(drawRaf);
+      disposeEngine();
     };
   });
 
@@ -416,6 +495,8 @@
       selected = null;
       slimeCache.clear();
       scanArea = null;
+      biomeSnap = null;
+      biomeActive = false;
       onspots([]);
     }
     scanSoon(0);
@@ -459,31 +540,52 @@
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     // basemap
-    const bg = g.createLinearGradient(0, 0, w, h);
-    bg.addColorStop(0, '#0e1511');
-    bg.addColorStop(0.55, '#0b110e');
-    bg.addColorStop(1, '#080c0a');
-    g.fillStyle = bg;
+    g.fillStyle = '#0a0f0c';
     g.fillRect(0, 0, w, h);
 
-    const vignette = g.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.15, w / 2, h / 2, Math.max(w, h) * 0.75);
-    vignette.addColorStop(0, 'rgba(126,201,111,0.035)');
-    vignette.addColorStop(1, 'rgba(0,0,0,0.28)');
-    g.fillStyle = vignette;
-    g.fillRect(0, 0, w, h);
+    if (biomeSnap) {
+      const bm = biomeSnap.meta;
+      const bx = sx(bm.x * bm.scale);
+      const bz = sy(bm.z * bm.scale);
+      const bw = bm.width * bm.scale * scale;
+      const bh = bm.height * bm.scale * scale;
+      g.imageSmoothingEnabled = bm.scale * scale < 1.5;
+      g.drawImage(biomeSnap.canvas, bx, bz, bw, bh);
+      g.imageSmoothingEnabled = true;
 
-    // subtle region tint (decorative, deterministic by coordinate only)
-    if (showGrid && scale >= 0.024) {
-      const reg = 512;
-      const x0 = Math.floor(wx(0) / reg) - 1;
-      const x1 = Math.floor(wx(w) / reg) + 1;
-      const z0 = Math.floor(wz(0) / reg) - 1;
-      const z1 = Math.floor(wz(h) / reg) + 1;
-      for (let rx = x0; rx <= x1; rx++) {
-        for (let rz = z0; rz <= z1; rz++) {
-          const a = 0.008 + hash2(rx, rz) * 0.022;
-          g.fillStyle = `rgba(126,201,111,${a.toFixed(3)})`;
-          g.fillRect(sx(rx * reg), sy(rz * reg), reg * scale + 1, reg * scale + 1);
+      // gentle corner shading so map chrome stays readable
+      const shade = g.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.35, w / 2, h / 2, Math.max(w, h) * 0.78);
+      shade.addColorStop(0, 'rgba(0,0,0,0)');
+      shade.addColorStop(1, 'rgba(0,0,0,0.22)');
+      g.fillStyle = shade;
+      g.fillRect(0, 0, w, h);
+    } else {
+      const bg = g.createLinearGradient(0, 0, w, h);
+      bg.addColorStop(0, '#0e1511');
+      bg.addColorStop(0.55, '#0b110e');
+      bg.addColorStop(1, '#080c0a');
+      g.fillStyle = bg;
+      g.fillRect(0, 0, w, h);
+
+      const vignette = g.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.15, w / 2, h / 2, Math.max(w, h) * 0.75);
+      vignette.addColorStop(0, 'rgba(126,201,111,0.035)');
+      vignette.addColorStop(1, 'rgba(0,0,0,0.28)');
+      g.fillStyle = vignette;
+      g.fillRect(0, 0, w, h);
+
+      // subtle region tint (decorative, deterministic by coordinate only)
+      if (scale >= 0.024) {
+        const reg = 512;
+        const x0 = Math.floor(wx(0) / reg) - 1;
+        const x1 = Math.floor(wx(w) / reg) + 1;
+        const z0 = Math.floor(wz(0) / reg) - 1;
+        const z1 = Math.floor(wz(h) / reg) + 1;
+        for (let rx = x0; rx <= x1; rx++) {
+          for (let rz = z0; rz <= z1; rz++) {
+            const a = 0.008 + hash2(rx, rz) * 0.022;
+            g.fillStyle = `rgba(126,201,111,${a.toFixed(3)})`;
+            g.fillRect(sx(rx * reg), sy(rz * reg), reg * scale + 1, reg * scale + 1);
+          }
         }
       }
     }
@@ -498,7 +600,7 @@
       const zEnd = wz(h);
 
       g.lineWidth = 1;
-      g.strokeStyle = 'rgba(180,210,190,0.075)';
+      g.strokeStyle = biomeActive ? 'rgba(10,18,12,0.16)' : 'rgba(180,210,190,0.075)';
       g.beginPath();
       for (let x = xStart; x <= xEnd; x += step) {
         const px = Math.round(sx(x)) + 0.5;
@@ -513,7 +615,7 @@
       g.stroke();
 
       if (16 * scale >= 18) {
-        g.strokeStyle = 'rgba(180,210,190,0.035)';
+        g.strokeStyle = biomeActive ? 'rgba(10,18,12,0.08)' : 'rgba(180,210,190,0.035)';
         g.beginPath();
         const c0 = Math.floor(wx(0) / 16) * 16;
         const c1 = wx(w);
@@ -533,7 +635,7 @@
       }
 
       g.font = '10px Geist, ui-sans-serif, sans-serif';
-      g.fillStyle = 'rgba(210,230,214,0.34)';
+      g.fillStyle = biomeActive ? 'rgba(14,24,18,0.52)' : 'rgba(210,230,214,0.34)';
       g.textAlign = 'left';
       for (let x = xStart; x <= xEnd; x += step) {
         const px = sx(x);
@@ -551,7 +653,7 @@
 
     // origin axes
     g.save();
-    g.strokeStyle = 'rgba(255,255,255,0.14)';
+    g.strokeStyle = biomeActive ? 'rgba(12,20,15,0.20)' : 'rgba(255,255,255,0.14)';
     g.setLineDash([5, 6]);
     g.beginPath();
     g.moveTo(Math.round(sx(0)) + 0.5, 0);
@@ -581,13 +683,8 @@
       g.strokeStyle = 'rgba(10,15,12,0.85)';
       g.stroke();
       g.font = '600 10px Geist, sans-serif';
-      g.fillStyle = 'rgba(232,239,233,0.7)';
+      g.fillStyle = biomeActive ? 'rgba(15,25,19,0.75)' : 'rgba(232,239,233,0.7)';
       g.fillText('0, 0', ox + 8, oy - 7);
-    }
-
-    if (scanning) {
-      g.fillStyle = 'rgba(0,0,0,0.25)';
-      g.fillRect(0, 0, w, h);
     }
   }
 
@@ -620,49 +717,38 @@
   function drawMarkers(g: CanvasRenderingContext2D, w: number, h: number) {
     hitTargets = [];
     const pad = 48;
-    const singles: { spot: StructureSpot; x: number; y: number }[] = [];
-    const clusters = new Map<
-      string,
-      { x: number; y: number; n: number; wx: number; wz: number; first: StructureSpot }
-    >();
+    const visible: { spot: StructureSpot; x: number; y: number }[] = [];
 
     for (const spot of spots) {
       if (spot.dim !== dimension) continue;
       const px = sx(spot.x);
       const py = sy(spot.z);
       if (px < -pad || px > w + pad || py < -pad || py > h + pad) continue;
-      const cell = `${Math.floor(px / CLUSTER_CELL)},${Math.floor(py / CLUSTER_CELL)}`;
-      const c = clusters.get(cell);
-      if (c) {
-        c.n++;
-        c.x = (c.x * (c.n - 1) + px) / c.n;
-        c.y = (c.y * (c.n - 1) + py) / c.n;
-        c.wx = (c.wx * (c.n - 1) + spot.x) / c.n;
-        c.wz = (c.wz * (c.n - 1) + spot.z) / c.n;
-      } else {
-        clusters.set(cell, { x: px, y: py, n: 1, wx: spot.x, wz: spot.z, first: spot });
-      }
+      visible.push({ spot, x: px, y: py });
     }
 
-    clusters.forEach((c) => {
-      if (c.n === 1) singles.push({ spot: c.first, x: c.x, y: c.y });
+    // Draw lower-priority markers first so villages/strongholds sit on top.
+    const selKey = selected ? keyOf(selected) : '';
+    visible.sort((a, b) => {
+      const aSel = selKey !== '' && keyOf(a.spot) === selKey ? 1 : 0;
+      const bSel = selKey !== '' && keyOf(b.spot) === selKey ? 1 : 0;
+      if (aSel !== bSel) return aSel - bSel;
+      return (STRUCTURES[a.spot.id]?.priority ?? 0) - (STRUCTURES[b.spot.id]?.priority ?? 0);
     });
+    const MAX_MARKERS = 4000;
+    const list = visible.length > MAX_MARKERS ? visible.slice(visible.length - MAX_MARKERS) : visible;
 
-    singles.sort((a, b) => (STRUCTURES[b.spot.id]?.priority ?? 0) - (STRUCTURES[a.spot.id]?.priority ?? 0));
+    const placed: { x: number; y: number; w: number; h: number }[] = [];
+    const hoverKey = hover?.kind === 'spot' ? keyOf(hover.spot) : '';
 
-    const placed: { x: number; y: number; w: number; h: number }[] = singles.map((s) => ({
-      x: s.x - 10,
-      y: s.y - 20,
-      w: 20,
-      h: 24,
-    }));
-
-    for (const s of singles) {
+    for (const s of list) {
       const info = STRUCTURES[s.spot.id];
       if (!info) continue;
-      const isSel = selected && keyOf(selected) === keyOf(s.spot);
-      drawPin(g, s.x, s.y, info.color, !!isSel);
-      hitTargets.push({ kind: 'spot', spot: s.spot, x: s.x, y: s.y - 8, r: isSel ? 11 : 9 });
+      const isSel = selKey !== '' && selKey === keyOf(s.spot);
+      const isHot = hoverKey !== '' && hoverKey === keyOf(s.spot);
+      drawStructureIcon(g, s.spot.id, s.x, s.y, isSel ? 28 : 24, isSel, isHot);
+      hitTargets.push({ kind: 'spot', spot: s.spot, x: s.x, y: s.y, r: isSel ? 15 : 13 });
+      placed.push({ x: s.x - 14, y: s.y - 14, w: 28, h: 28 });
 
       const threshold = info.priority >= 80 ? 0.055 : info.priority >= 40 ? 0.14 : 0.55;
       const wantLabel = showLabels && (scale >= threshold || isSel);
@@ -673,9 +759,9 @@
       const tw = g.measureText(label).width;
       const lw = tw + 12;
       const lh = 16;
-      let lx = s.x + 12;
-      let ly = s.y - 27;
-      if (lx + lw > w - 6) lx = s.x - lw - 12;
+      let lx = s.x + 13;
+      let ly = s.y - 8;
+      if (lx + lw > w - 6) lx = s.x - lw - 13;
       const hit = placed.some(
         (p) => lx < p.x + p.w && lx + lw > p.x && ly < p.y + p.h && ly + lh > p.y,
       );
@@ -683,80 +769,451 @@
       placed.push({ x: lx, y: ly, w: lw, h: lh });
 
       roundedRect(g, lx, ly, lw, lh, 4);
-      g.fillStyle = isSel ? 'rgba(28,38,31,0.96)' : 'rgba(10,14,11,0.78)';
+      g.fillStyle = isSel ? 'rgba(16,22,18,0.95)' : 'rgba(10,14,11,0.78)';
       g.fill();
-      g.strokeStyle = isSel ? info.color : 'rgba(255,255,255,0.09)';
+      g.strokeStyle = isSel ? info.color : 'rgba(255,255,255,0.1)';
       g.lineWidth = 1;
       g.stroke();
-      g.fillStyle = isSel ? '#ffffff' : 'rgba(224,232,225,0.82)';
+      g.fillStyle = isSel ? '#ffffff' : 'rgba(232,240,233,0.88)';
       g.textAlign = 'left';
       g.textBaseline = 'middle';
       g.fillText(label, lx + 6, ly + lh / 2 + 0.5);
     }
-
-    clusters.forEach((c) => {
-      if (c.n < 2) return;
-      const isHot =
-        hover?.x !== undefined && Math.hypot(c.x - hover.x, c.y - hover.y) < 18;
-      g.save();
-      g.shadowColor = 'rgba(0,0,0,0.5)';
-      g.shadowBlur = 8;
-      g.shadowOffsetY = 2;
-      g.beginPath();
-      g.arc(c.x, c.y, 13, 0, Math.PI * 2);
-      g.fillStyle = isHot ? 'rgba(32,45,37,0.98)' : 'rgba(19,26,21,0.94)';
-      g.fill();
-      g.restore();
-      g.beginPath();
-      g.arc(c.x, c.y, 13, 0, Math.PI * 2);
-      g.lineWidth = 1.5;
-      g.strokeStyle = 'rgba(160,220,175,0.5)';
-      g.stroke();
-      g.beginPath();
-      g.arc(c.x, c.y, 9.5, 0, Math.PI * 2);
-      g.strokeStyle = 'rgba(160,220,175,0.12)';
-      g.lineWidth = 1;
-      g.stroke();
-      g.font = '600 10px Geist, sans-serif';
-      g.fillStyle = '#dce9df';
-      g.textAlign = 'center';
-      g.textBaseline = 'middle';
-      g.fillText(c.n > 99 ? '99+' : String(c.n), c.x, c.y + 0.5);
-      hitTargets.push({ kind: 'cluster', count: c.n, x: c.x, y: c.y, r: 14, wx: c.wx, wz: c.wz });
-    });
     g.textBaseline = 'alphabetic';
   }
 
-  function drawPin(g: CanvasRenderingContext2D, x: number, y: number, color: string, isSelected: boolean) {
-    const r = isSelected ? 9 : 7.5;
-    const cy0 = y - 10;
-    g.save();
-    g.shadowColor = 'rgba(0,0,0,0.55)';
-    g.shadowBlur = 7;
-    g.shadowOffsetY = 2;
-    g.beginPath();
-    g.arc(x, cy0, r, 0, Math.PI * 2);
-    g.fillStyle = color;
-    g.fill();
-    g.beginPath();
-    g.moveTo(x - r * 0.62, cy0 + r * 0.5);
-    g.lineTo(x, y + 1);
-    g.lineTo(x + r * 0.62, cy0 + r * 0.5);
-    g.closePath();
-    g.fill();
-    g.restore();
+  type SpriteDef = { palette: Record<string, string>; rows: string[] };
 
-    g.beginPath();
-    g.arc(x, cy0, r, 0, Math.PI * 2);
-    g.lineWidth = 1.6;
-    g.strokeStyle = isSelected ? '#ffffff' : 'rgba(8,12,9,0.72)';
-    g.stroke();
+  // Hand-drawn 12x12 pixel-art sprites, in the spirit of Chunkbase's icons.
+  const SPRITES: Partial<Record<StructureId, SpriteDef>> = {
+    village: {
+      palette: { r: '#c05a32', w: '#e8d6ad', d: '#5b3a22' },
+      rows: [
+        '............',
+        '....rrrr....',
+        '...rrrrrr...',
+        '..rrrrrrrr..',
+        '.rrrrrrrrrr.',
+        '...wwwwww...',
+        '...wwwwww...',
+        '...wwddww...',
+        '...wwddww...',
+        '...wwddww...',
+        '...wwwwww...',
+        '............',
+      ],
+    },
+    desert_pyramid: {
+      palette: { s: '#d8b45c', t: '#b98f3f' },
+      rows: [
+        '............',
+        '............',
+        '.....ss.....',
+        '....stts....',
+        '....ssss....',
+        '...ssttss...',
+        '...ssssss...',
+        '..ssttttss..',
+        '..ssssssss..',
+        '.ssssssssss.',
+        '.ssssssssss.',
+        '............',
+      ],
+    },
+    jungle_temple: {
+      palette: { g: '#6f8f52', m: '#3f5c36' },
+      rows: [
+        '............',
+        '.....gg.....',
+        '....gggg....',
+        '....gggg....',
+        '...gggggg...',
+        '...gmmggg...',
+        '..gggggggg..',
+        '..ggmmgggg..',
+        '.gggggggggg.',
+        '.gggggggggg.',
+        '............',
+        '............',
+      ],
+    },
+    witch_hut: {
+      palette: { k: '#3a2517', w: '#8a6a45', d: '#1d100a' },
+      rows: [
+        '............',
+        '.....kk.....',
+        '....kkkk....',
+        '...kkkkkk...',
+        '..kkkkkkkk..',
+        '....wwww....',
+        '....wddw....',
+        '....wddw....',
+        '....w..w....',
+        '...w....w...',
+        '............',
+        '............',
+      ],
+    },
+    igloo: {
+      palette: { w: '#e4f2f7', d: '#5f9fc0' },
+      rows: [
+        '............',
+        '............',
+        '....wwww....',
+        '...wwwwww...',
+        '..wwwwwwww..',
+        '..wwwwwwww..',
+        '.wwwwwwwwww.',
+        '.wwwwddwwww.',
+        '.wwwwddwwww.',
+        '.wwwwddwwww.',
+        '............',
+        '............',
+      ],
+    },
+    monument: {
+      palette: { p: '#3aa79b', g: '#1a6d6c' },
+      rows: [
+        '............',
+        '...pppppp...',
+        '..pppppppp..',
+        '..pggppggp..',
+        '..pggppggp..',
+        '..pppppppp..',
+        '...pppppp...',
+        '..pppppppp..',
+        '..pggppggp..',
+        '..pppppppp..',
+        '...pppppp...',
+        '............',
+      ],
+    },
+    mansion: {
+      palette: { r: '#5a3b28', w: '#9a7650', d: '#2b1a10' },
+      rows: [
+        '............',
+        '..rrrrrrrr..',
+        '.rrrrrrrrrr.',
+        '..wwwwwwww..',
+        '..wwwwwwww..',
+        '..wddwwddw..',
+        '..wwwwwwww..',
+        '..wwwwwwww..',
+        '..wwwwwwww..',
+        '..wwwwwwww..',
+        '............',
+        '............',
+      ],
+    },
+    outpost: {
+      palette: { f: '#c0463a', k: '#3a2a1d', d: '#170f09' },
+      rows: [
+        '............',
+        '.....ff.....',
+        '.....ff.....',
+        '....kkkk....',
+        '....kkkk....',
+        '....kddk....',
+        '....kddk....',
+        '....kkkk....',
+        '....kkkk....',
+        '...kkkkkk...',
+        '............',
+        '............',
+      ],
+    },
+    ancient_city: {
+      palette: { d: '#1c2438', p: '#3a5f9c', w: '#63e6e0' },
+      rows: [
+        '............',
+        '...dddddd...',
+        '..dppppppd..',
+        '..dp....pd..',
+        '..dp.ww.pd..',
+        '..dp.ww.pd..',
+        '..dp....pd..',
+        '..dppppppd..',
+        '...dddddd...',
+        '............',
+        '............',
+        '............',
+      ],
+    },
+    trial_chambers: {
+      palette: { c: '#b06a3c', t: '#f0c070' },
+      rows: [
+        '............',
+        '...cccccc...',
+        '..cccccccc..',
+        '..cc.tt.cc..',
+        '..cc.tt.cc..',
+        '..ccttttcc..',
+        '..ccttttcc..',
+        '..cc.tt.cc..',
+        '..cc.tt.cc..',
+        '..cccccccc..',
+        '...cccccc...',
+        '............',
+      ],
+    },
+    stronghold: {
+      palette: { g: '#8b939d', w: '#8fe08a' },
+      rows: [
+        '............',
+        '....gggg....',
+        '...gggggg...',
+        '..gg.ww.gg..',
+        '..g.wwww.g..',
+        '..g.wwww.g..',
+        '..gg.ww.gg..',
+        '...gggggg...',
+        '....gggg....',
+        '............',
+        '............',
+        '............',
+      ],
+    },
+    ocean_ruin: {
+      palette: { g: '#7a8f8a' },
+      rows: [
+        '............',
+        '.gg..gg..gg.',
+        '.gg..gg..gg.',
+        '.gg..gg..gg.',
+        '.g...gg..gg.',
+        '.gg..g...gg.',
+        '.gg..gg..g..',
+        '.gg..gg..gg.',
+        '............',
+        '............',
+        '............',
+        '............',
+      ],
+    },
+    shipwreck: {
+      palette: { m: '#6b4a2f', h: '#9a7650' },
+      rows: [
+        '............',
+        '.....m......',
+        '.....m......',
+        '.....m......',
+        '..h......h..',
+        '..hhhhhhhh..',
+        '...hhhhhh...',
+        '....hhhh....',
+        '............',
+        '............',
+        '............',
+        '............',
+      ],
+    },
+    ruined_portal: {
+      palette: { o: '#563c6b' },
+      rows: [
+        '............',
+        '..oooooooo..',
+        '..o..o...o..',
+        '..o......o..',
+        '..o...o..o..',
+        '..o......o..',
+        '..o..o...o..',
+        '..o......o..',
+        '..o......o..',
+        '............',
+        '............',
+        '............',
+      ],
+    },
+    trail_ruins: {
+      palette: { g: '#9a8a72' },
+      rows: [
+        '............',
+        '....gg......',
+        '...gggg.....',
+        '....gg......',
+        '..gggggg....',
+        '...gggg.....',
+        '..gg..gg....',
+        '.ggg..ggg...',
+        '..g....g....',
+        '............',
+        '............',
+        '............',
+      ],
+    },
+    treasure: {
+      palette: { k: '#4a3220', w: '#b98649', d: '#f2c94c' },
+      rows: [
+        '............',
+        '...kkkkkk...',
+        '..kwwwwwwk..',
+        '..kwwwwwwk..',
+        '..kkkkkkkk..',
+        '..kwwddwwk..',
+        '..kwwddwwk..',
+        '..kwwwwwwk..',
+        '...kkkkkk...',
+        '............',
+        '............',
+        '............',
+      ],
+    },
+    fortress: {
+      palette: { k: '#5a2a2a' },
+      rows: [
+        '............',
+        '..kk....kk..',
+        '..kk....kk..',
+        '..kkkkkkkk..',
+        '..kkkkkkkk..',
+        '..kk....kk..',
+        '..kk....kk..',
+        '..kkkkkkkk..',
+        '..kk....kk..',
+        '............',
+        '............',
+        '............',
+      ],
+    },
+    bastion: {
+      palette: { p: '#6a4a6e' },
+      rows: [
+        '............',
+        '..pp....pp..',
+        '..pppppppp..',
+        '..pppppppp..',
+        '..pp....pp..',
+        '..pp....pp..',
+        '..pppppppp..',
+        '..pp....pp..',
+        '............',
+        '............',
+        '............',
+      ],
+    },
+    end_city: {
+      palette: { p: '#c7b6e6', d: '#4a3a6e' },
+      rows: [
+        '............',
+        '.....pp.....',
+        '....pppp....',
+        '....pppp....',
+        '....pppp....',
+        '....pddp....',
+        '....pddp....',
+        '....pppp....',
+        '...pppppp...',
+        '............',
+        '............',
+        '............',
+      ],
+    },
+  };
 
-    if (isSelected) {
-      g.beginPath();
-      g.arc(x, cy0, r + 4, 0, Math.PI * 2);
+  const SPRITE_SIZE = 12;
+  const spriteCache = new Map<StructureId, HTMLCanvasElement | null>();
+
+  function packColor(hex: string) {
+    const n = Number.parseInt(hex.replace('#', ''), 16);
+    return (255 << 24) | ((n & 0xff) << 16) | (((n >> 8) & 0xff) << 8) | ((n >> 16) & 0xff);
+  }
+
+  function getSprite(id: StructureId): HTMLCanvasElement | null {
+    if (spriteCache.has(id)) return spriteCache.get(id) ?? null;
+    const def = SPRITES[id];
+    if (!def) {
+      spriteCache.set(id, null);
+      return null;
+    }
+    const palette = new Map<string, number>();
+    for (const [key, value] of Object.entries(def.palette)) palette.set(key, packColor(value));
+    const pixels = new Uint32Array(SPRITE_SIZE * SPRITE_SIZE);
+    for (let y = 0; y < SPRITE_SIZE; y++) {
+      const row = def.rows[y] ?? '';
+      for (let x = 0; x < SPRITE_SIZE; x++) {
+        const color = palette.get(row[x] ?? '.');
+        if (color !== undefined) pixels[y * SPRITE_SIZE + x] = color;
+      }
+    }
+
+    // dark 1px outline around the sprite for readability on bright biomes
+    const outlined = new Uint32Array(pixels);
+    const outline = packColor('#16130f');
+    for (let y = 0; y < SPRITE_SIZE; y++) {
+      for (let x = 0; x < SPRITE_SIZE; x++) {
+        if (pixels[y * SPRITE_SIZE + x]) continue;
+        let edge = false;
+        for (let dy = -1; dy <= 1 && !edge; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (!dx && !dy) continue;
+            const nx = x + dx;
+            const ny = y + dy;
+            if (nx < 0 || ny < 0 || nx >= SPRITE_SIZE || ny >= SPRITE_SIZE) continue;
+            if (pixels[ny * SPRITE_SIZE + nx]) {
+              edge = true;
+              break;
+            }
+          }
+        }
+        if (edge) outlined[y * SPRITE_SIZE + x] = outline;
+      }
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = SPRITE_SIZE;
+    canvas.height = SPRITE_SIZE;
+    const cg = canvas.getContext('2d');
+    if (!cg) {
+      spriteCache.set(id, null);
+      return null;
+    }
+    const image = cg.createImageData(SPRITE_SIZE, SPRITE_SIZE);
+    new Uint32Array(image.data.buffer).set(outlined);
+    cg.putImageData(image, 0, 0);
+    spriteCache.set(id, canvas);
+    return canvas;
+  }
+
+  function drawStructureIcon(
+    g: CanvasRenderingContext2D,
+    id: StructureId,
+    x: number,
+    y: number,
+    size: number,
+    isSelected: boolean,
+    isHot: boolean,
+  ) {
+    const half = size / 2;
+    const sprite = getSprite(id);
+    if (!sprite) {
+      const info = STRUCTURES[id];
+      roundedRect(g, x - half, y - half, size, size, 5);
+      g.fillStyle = info?.color ?? '#d8e3db';
+      g.fill();
+      g.lineWidth = 1;
+      g.strokeStyle = 'rgba(8,12,9,0.62)';
+      g.stroke();
+      g.font = '700 9px Geist, sans-serif';
+      g.fillStyle = '#fff';
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.fillText(info?.abbr ?? '?', x, y + 0.5);
+      g.textBaseline = 'alphabetic';
+    } else {
+      g.save();
+      g.shadowColor = 'rgba(0,0,0,0.6)';
+      g.shadowBlur = isSelected ? 7 : 4;
+      g.shadowOffsetY = 1.5;
+      g.imageSmoothingEnabled = false;
+      g.drawImage(sprite, x - half, y - half, size, size);
+      g.restore();
+      g.imageSmoothingEnabled = true;
+    }
+
+    if (isSelected || isHot) {
+      roundedRect(g, x - half - 3, y - half - 3, size + 6, size + 6, 6);
       g.lineWidth = 1.5;
-      g.strokeStyle = 'rgba(255,255,255,0.55)';
+      g.strokeStyle = isSelected ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.55)';
       g.stroke();
     }
   }
@@ -799,13 +1256,20 @@
 
     <div class="map-badge">
       {#if scanning}
-        <span class="map-spinner"></span> Scanning…
+        <span class="map-spinner"></span>
+        {edition === 'java' && !engineFailed ? 'Generating biomes…' : 'Scanning…'}
       {:else}
         <span class="map-dot"></span>
-        {spots.length.toLocaleString()} candidates
+        {spots.length.toLocaleString()} structures
       {/if}
       <span class="map-badge-sep"></span>
-      <span class="map-approx">approximate</span>
+      {#if edition === 'java' && !engineFailed}
+        <span class="map-exact">cubiomes · exact</span>
+      {:else if edition === 'java'}
+        <span class="map-approx">fallback · approximate</span>
+      {:else}
+        <span class="map-approx">bedrock · approximate</span>
+      {/if}
     </div>
 
     <div class="map-zoom">
@@ -855,17 +1319,12 @@
         class="map-tip"
         style={`left:${Math.min(hover.px + 16, width - 210)}px; top:${Math.min(hover.py + 14, height - 80)}px`}
       >
-        {#if hover.kind === 'spot'}
-          <div class="tip-title">
-            <span class="tip-dot" style={`background:${STRUCTURES[hover.spot.id]?.color ?? '#fff'}`}></span>
-            {hover.spot.label}{hover.spot.index ? ` #${hover.spot.index}` : ''}
-          </div>
-          <div class="tip-coords">X {hover.spot.x} · Z {hover.spot.z}</div>
-          <div class="tip-hint">{hover.spot.dim} · click for details</div>
-        {:else}
-          <div class="tip-title">{hover.count} structures here</div>
-          <div class="tip-hint">click to zoom in</div>
-        {/if}
+        <div class="tip-title">
+          <span class="tip-dot" style={`background:${STRUCTURES[hover.spot.id]?.color ?? '#fff'}`}></span>
+          {hover.spot.label}{hover.spot.index ? ` #${hover.spot.index}` : ''}
+        </div>
+        <div class="tip-coords">X {hover.spot.x} · Z {hover.spot.z}</div>
+        <div class="tip-hint">{hover.spot.dim} · click for details</div>
       </div>
     {/if}
   </div>
@@ -879,7 +1338,7 @@
     min-height: 420px;
     overflow: hidden;
     background: #0b110e;
-    border-radius: 12px;
+    border-radius: 0;
     isolation: isolate;
   }
   .map-canvas {
@@ -962,6 +1421,7 @@
   }
   .map-dot { width: 6px; height: 6px; border-radius: 50%; background: #7ec96f; box-shadow: 0 0 8px rgba(126,201,111,.7); }
   .map-badge-sep { width: 1px; height: 10px; background: rgba(255,255,255,.14); }
+  .map-exact { color: #9bdc8f; }
   .map-approx { color: rgba(220, 235, 223, 0.4); }
   .map-spinner {
     width: 9px;
