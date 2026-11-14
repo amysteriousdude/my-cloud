@@ -136,6 +136,7 @@ async function createEngine(edition: Edition): Promise<EngineState> {
     versionCache: new Map(),
   };
   engines.set(edition, state);
+  console.info(`[worldgen] ${edition} engine ready`);
   return state;
 }
 

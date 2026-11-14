@@ -21,6 +21,7 @@
     type StructureSpot,
   } from '$lib/generators/minecraft/structures';
   import { scanWorld, disposeEngine } from '$lib/generators/minecraft/engineClient';
+  import { versionKey } from '$lib/generators/minecraft/versions';
   import type { BiomeRequest } from '$lib/generators/minecraft/engine.types';
 
   interface Props {
@@ -141,6 +142,12 @@
     return `${seed}|${edition}|${mc}|${dimension}|${structures.join(',')}`;
   }
 
+  const engineLabel = $derived(
+    edition === 'java'
+      ? `cubiomes ${mc >= 1211 ? 'latest' : versionKey('java', mc)}`
+      : `cubiomes-bedrock ${versionKey('bedrock', mc)}`,
+  );
+
   function engineDim(): -1 | 0 | 1 {
     return dimension === 'nether' ? -1 : dimension === 'end' ? 1 : 0;
   }
@@ -227,8 +234,9 @@
         spots = result.spots.length > 30000 ? result.spots.slice(0, 30000) : result.spots;
         if (result.biomePixels && result.biomeMeta) applyBiome(result.biomePixels, result.biomeMeta);
         engineFailed = false;
-      } catch {
+      } catch (error) {
         if (token !== scanToken) return;
+        console.warn('[worldgen] engine scan failed, using legacy placement', error);
         engineFailed = true;
         spots = legacyScan(radius);
       }
@@ -1251,7 +1259,16 @@
       <button type="submit" title="Jump to coordinates"><IconSearch size={14} /></button>
     </form>
 
-    <div class="map-badge">
+    <div
+      class="map-badge"
+      title={edition === 'bedrock' && mc >= 118
+        ? 'Bedrock 1.18+ shares biome and terrain generation with Java. Structure placement is edition-specific.'
+        : undefined}
+    >
+      <span class="map-edition" class:bedrock={edition === 'bedrock'}>
+        {edition === 'java' ? 'Java' : 'Bedrock'}
+      </span>
+      <span class="map-badge-sep"></span>
       {#if scanning}
         <span class="map-spinner"></span>
         {engineFailed ? 'Scanning…' : 'Generating biomes…'}
@@ -1261,11 +1278,20 @@
       {/if}
       <span class="map-badge-sep"></span>
       {#if !engineFailed}
-        <span class="map-exact">{edition === 'java' ? 'cubiomes · exact' : 'cubiomes-bedrock · exact'}</span>
+        <span class="map-exact">{engineLabel} · exact</span>
       {:else}
-        <span class="map-approx">{edition} · approximate</span>
+        <span class="map-approx">approximate</span>
       {/if}
     </div>
+
+    {#if edition === 'bedrock' && mc >= 118}
+      <div
+        class="map-parity"
+        title="Since 1.18, Bedrock shares biome and terrain generation with Java. Structure placement is edition-specific."
+      >
+        same biomes as Java 1.18+ · structures differ
+      </div>
+    {/if}
 
     <div class="map-zoom">
       <button onclick={() => zoomBy(1.5)} title="Zoom in"><IconPlus size={16} /></button>
@@ -1415,9 +1441,26 @@
     white-space: nowrap;
   }
   .map-dot { width: 6px; height: 6px; border-radius: 50%; background: #7ec96f; box-shadow: 0 0 8px rgba(126,201,111,.7); }
+  .map-edition { font-weight: 600; letter-spacing: 0.02em; color: #9bdc8f; }
+  .map-edition.bedrock { color: #6fd6c0; }
   .map-badge-sep { width: 1px; height: 10px; background: rgba(255,255,255,.14); }
   .map-exact { color: #9bdc8f; }
   .map-approx { color: rgba(220, 235, 223, 0.4); }
+  .map-parity {
+    position: absolute;
+    top: 46px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: rgba(14, 20, 16, 0.72);
+    border: 1px solid rgba(111, 214, 192, 0.22);
+    color: rgba(180, 235, 225, 0.75);
+    font-size: 10px;
+    white-space: nowrap;
+    backdrop-filter: blur(6px);
+    pointer-events: none;
+  }
   .map-spinner {
     width: 9px;
     height: 9px;
@@ -1572,6 +1615,7 @@
 
   @media (max-width: 720px) {
     .map-badge { display: none; }
+    .map-parity { display: none; }
     .map-jump { top: 8px; left: 8px; }
     .map-jump input { width: 56px; }
     .map-compass { top: 8px; right: 8px; }
