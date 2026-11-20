@@ -19,20 +19,26 @@ function apiKeyFromEvent({ request, url, cookies }: { request: Request; url: URL
 }
 
 export const GET: RequestHandler = async ({ request, url, cookies, platform }) => {
-	const apiKey = apiKeyFromEvent({ request, url, cookies })
-	if (!apiKey || !(await getRecordByApiKey(apiKey))) {
-		return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json' } })
-	}
-
 	const env = platform!.env as Record<string, string | undefined>
 	const store = getGitStore(env)
 	if (!store) {
-		return new Response(JSON.stringify({ error: 'Git server not configured. Set GIT_TELEGRAM_BOT_TOKEN and GIT_TELEGRAM_CHANNEL_ID.' }), { status: 503, headers: { 'Content-Type': 'application/json' } })
+		return new Response(JSON.stringify({ error: 'Git server not configured.' }), { status: 503, headers: { 'Content-Type': 'application/json' } })
 	}
+
+	let isOwner = false
+	try {
+		const apiKey = apiKeyFromEvent({ request, url, cookies })
+		if (apiKey && (await getRecordByApiKey(apiKey))) {
+			isOwner = true
+		}
+	} catch { }
 
 	try {
 		const repos = await store.listRepos()
-		return new Response(JSON.stringify({ repos: repos.map(r => r.meta) }), { headers: { 'Content-Type': 'application/json' } })
+		const filtered = isOwner
+			? repos.map(r => r.meta)
+			: repos.filter(r => r.meta.visibility === 'public').map(r => r.meta)
+		return new Response(JSON.stringify({ repos: filtered }), { headers: { 'Content-Type': 'application/json' } })
 	} catch (e: any) {
 		return new Response(JSON.stringify({ error: e?.message ?? 'failed to list repos' }), { status: 500, headers: { 'Content-Type': 'application/json' } })
 	}
