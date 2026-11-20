@@ -10,6 +10,7 @@
   import Downloader from '$lib/tabs/Downloader.svelte';
   import CraftPane from '$lib/craft/CraftPane.svelte';
   import Editor     from '$lib/tabs/Editor.svelte';
+  import BookEditor from '$lib/tabs/BookEditor.svelte';
   import Stats      from '$lib/tabs/Stats.svelte';
   import Vault	    from '$lib/tabs/Vault.svelte';
   import Notes      from '$lib/tabs/Notes.svelte';
@@ -30,7 +31,7 @@
   let apiKey = $derived(data.apiKey);
   let encryptedApiKey = $derived(data.encryptedApiKey);
 
-  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'pdf' | 'film' | 'vector' | 'light' | 'effect' | 'design' | 'word' | 'deck' | 'grid' | 'sound' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'ai' | 'fx' | 'utility';
+  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'pdf' | 'film' | 'vector' | 'light' | 'effect' | 'design' | 'word' | 'deck' | 'grid' | 'sound' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'ai' | 'fx' | 'utility' | 'book';
   let activeTab = $state<Tab>('files');
   let editorFile = $state<{ metaFileId: string; fileName: string } | null>(null);
   let filesRefreshNonce = $state(0);
@@ -235,6 +236,8 @@
         <FXLazy {apiKey} active />
       {:else if activeTab === 'utility'}
         <Utilities {user} {apiKey} onimmersive={(on) => (mcImmersive = on)} />
+      {:else if activeTab === 'book'}
+        <BookEditor {apiKey} />
       {/if}
 
       <div class="craft-host" class:craft-show={activeTab === 'draw'}>

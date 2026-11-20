@@ -32,7 +32,7 @@
   import CloudLogo from '$lib/components/icons/CloudLogo.svelte';
   import Avatar from '$lib/components/Avatar.svelte';
 
-  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'pdf' | 'film' | 'vector' | 'light' | 'effect' | 'design' | 'word' | 'deck' | 'grid' | 'sound' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'ai' | 'fx' | 'utility';
+  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'pdf' | 'film' | 'vector' | 'light' | 'effect' | 'design' | 'word' | 'deck' | 'grid' | 'sound' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'ai' | 'fx' | 'utility' | 'book';
 
   let {
     user,
@@ -106,8 +106,9 @@
     { id: 'ai',       icon: IconBrain,               label: 'AI' },
     { id: 'fx',       icon: IconWaveSine,             label: 'FX' },
     { id: 'utility',  icon: IconSettings,          label: 'Utilities' },
+    { id: 'book',     icon: IconBook,              label: 'Book' },
   ];
-  const secondaryIds: Tab[] = ['generators', 'downloader', 'console', 'dictionary', 'translator', 'apitester', 'database', 'ai', 'fx', 'utility'];
+  const secondaryIds: Tab[] = ['generators', 'downloader', 'console', 'dictionary', 'translator', 'apitester', 'database', 'ai', 'fx', 'utility', 'book'];
   const secondaryTabs = TABS.filter(t => secondaryIds.includes(t.id));
   const MOB_NAV_IDS: Tab[] = ['files', 'draw', 'stats', 'notes', 'vault'];
   const mobNavTabs = TABS.filter(t => MOB_NAV_IDS.includes(t.id));

@@ -11,7 +11,7 @@
   import CloudLogo from '$lib/components/icons/CloudLogo.svelte';
   import Avatar from '$lib/components/Avatar.svelte';
 
-  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'pdf' | 'film' | 'vector' | 'light' | 'effect' | 'design' | 'word' | 'deck' | 'grid' | 'sound' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'ai' | 'fx' | 'utility';
+  type Tab = 'files' | 'generators' | 'downloader' | 'draw' | 'pdf' | 'film' | 'vector' | 'light' | 'effect' | 'design' | 'word' | 'deck' | 'grid' | 'sound' | 'stats' | 'editor' | 'vault' | 'notes' | 'console' | 'dictionary' | 'translator' | 'apitester' | 'database' | 'ai' | 'fx' | 'utility' | 'book';
 
   type BarButton = {
     icon: any;
@@ -116,6 +116,7 @@
     { id: 'ai',        icon: IconBrain,       label: 'AI' },
     { id: 'fx',        icon: IconWaveSine,    label: 'FX' },
     { id: 'utility',   icon: IconSettings,    label: 'Utilities' },
+    { id: 'book',      icon: IconBook,        label: 'Book' },
   ];
 
   let position = $state<'bottom'|'top'|'left'|'right'>('bottom');
