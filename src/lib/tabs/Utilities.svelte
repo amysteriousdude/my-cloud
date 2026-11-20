@@ -375,7 +375,7 @@
         <div class="util-history">
           {#each gitRepos as r}
             <div class="util-history-row">
-              <span class="util-hv"><a href="/git/{r.name}" target="_blank" rel="noopener" class="repo-link">{r.name}</a></span>
+              <span class="util-hv"><a href="/git/{r.name}" class="repo-link">{r.name}</a></span>
               <span class="util-hm">{r.visibility}</span>
               <span class="util-hd">{new Date(r.updatedAt).toLocaleString()}</span>
               <a href={`https://cloud.omarplayz.eu.org/git/${r.name}`} target="_blank" rel="noopener" class="util-copy" title="Clone URL">
