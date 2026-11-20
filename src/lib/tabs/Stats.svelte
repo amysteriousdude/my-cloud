@@ -20,6 +20,13 @@
   let loading   = $state(true);
   let error     = $state<string | null>(null);
 
+  /* git stats */
+  let gitRepos  = $state<number>(0);
+  let gitCommits = $state<number>(0);
+  let gitBranches = $state<number>(0);
+  let gitActivity = $state<Array<{ repo: string; message: string; author: string; timestamp: number }>>([]);
+  let gitLoading = $state(false);
+
   const totalBytes   = $derived(files.reduce((s, f) => s + (f.totalBytes ?? 0), 0));
   const totalFiles   = $derived(files.length);
 
@@ -271,6 +278,21 @@
     } finally {
       loading = false;
     }
+
+    // git stats (best-effort)
+    try {
+      gitLoading = true;
+      const gres = await fetch(`/api/git/stats?api_key=${encodeURIComponent(apiKey)}`);
+      if (gres.ok) {
+        const gdata = await gres.json();
+        gitRepos     = gdata.repos ?? 0;
+        gitCommits   = gdata.commits ?? 0;
+        gitBranches  = gdata.branches ?? 0;
+        gitActivity  = gdata.recentActivity ?? [];
+      }
+    } catch { } finally {
+      gitLoading = false;
+    }
   });
 
   const chartDays = $derived(uploadsByDay());
@@ -288,6 +310,9 @@
     "Fonts": "#a78bfa",
     "Vaults": "#f87171",
     "Other": "var(--text-3)",
+    "Git Repos": "var(--accent)",
+    "Git Commits": "#818cf8",
+    "Git Branches": "#a78bfa",
   };
 </script>
 
@@ -305,94 +330,123 @@
     <div class="center err">{error}</div>
   {:else}
 
-    <!-- Summary cards -->
-    <div class="cards">
-      <div class="card">
-        <span class="card-val">{totalFiles}</span>
-        <span class="card-label">Total files</span>
+    <!-- Top row: summary cards split two ways -->
+    <div class="top-row">
+      <div class="left-panel">
+        <div class="section">
+          <h2 class="section-title">Cloud storage</h2>
+          <div class="cards compact">
+            <div class="card">
+              <span class="card-val">{totalFiles}</span>
+              <span class="card-label">Files</span>
+            </div>
+            <div class="card">
+              <span class="card-val">{folders}</span>
+              <span class="card-label">Folders</span>
+            </div>
+            <div class="card">
+              <span class="card-val">{fmtBytes(totalBytes)}</span>
+              <span class="card-label">Total size</span>
+            </div>
+            <div class="card">
+              <span class="card-val">{todaySummary().count}</span>
+              <span class="card-label">Today</span>
+            </div>
+            <div class="card">
+              <span class="card-val">{weeklySummary().count}</span>
+              <span class="card-label">This week</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2 class="section-title">Git repositories</h2>
+          <div class="cards compact">
+            <div class="card">
+              <span class="card-val">{gitRepos}</span>
+              <span class="card-label">Repos</span>
+            </div>
+            <div class="card">
+              <span class="card-val">{gitCommits}</span>
+              <span class="card-label">Commits</span>
+            </div>
+            <div class="card">
+              <span class="card-val">{gitBranches}</span>
+              <span class="card-label">Branches</span>
+            </div>
+            <div class="card">
+              <span class="card-val">{gitActivity.length}</span>
+              <span class="card-label">Recent activity</span>
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="card">
-        <span class="card-val">{folders}</span>
-        <span class="card-label">Total folders</span>
-      </div>
-      <div class="card">
-        <span class="card-val">{fmtBytes(totalBytes)}</span>
-        <span class="card-label">Total size</span>
-      </div>
-      <div class="card">
-        <span class="card-val">{todaySummary().count}</span>
-        <span class="card-label">Uploaded today</span>
-      </div>
-      <div class="card">
-        <span class="card-val">{fmtBytes(todaySummary().bytes)}</span>
-        <span class="card-label">Today's bytes</span>
-      </div>
-      <div class="card">
-        <span class="card-val">{weeklySummary().count}</span>
-        <span class="card-label">This week</span>
-      </div>
-      <div class="card">
-        <span class="card-val">{fmtBytes(weeklySummary().bytes)}</span>
-        <span class="card-label">Week's bytes</span>
-      </div>
-      <div class="card">
-        <span class="card-val">{chartDays.filter(d => d.count > 0).length}</span>
-        <span class="card-label">Active days (30d)</span>
-      </div>
-      <div class="card">
-        <span class="card-val">{fmtBytes(chartDays.reduce((s, d) => s + d.bytes, 0))}</span>
-        <span class="card-label">Uploaded (30d)</span>
+
+      <div class="right-panel">
+        <div class="section tall">
+          <h2 class="section-title">Upload heatmap — last 90 days</h2>
+          <div class="heatmap-wrap">
+            <div class="heatmap-grid">
+              <span class="heatmap-day-label" style="grid-column:1;grid-row:2">Mon</span>
+              <span class="heatmap-day-label" style="grid-column:1;grid-row:4">Wed</span>
+              <span class="heatmap-day-label" style="grid-column:1;grid-row:6">Fri</span>
+              {#each heatmapData() as week}
+                {#each week as day}
+                  <div class="heatmap-cell" style="background:{heatmapColor(day.count)};grid-column:{day.col + 2};grid-row:{day.row + 1};" title="{day.count} uploads on {day.day}"></div>
+                {/each}
+              {/each}
+            </div>
+            <div class="heatmap-legend">
+              <span class="heatmap-legend-label">Less</span>
+              <div class="heatmap-cell" style="background:var(--bg-3)"></div>
+              <div class="heatmap-cell" style="background:#1a3a2a"></div>
+              <div class="heatmap-cell" style="background:#22663a"></div>
+              <div class="heatmap-cell" style="background:#2ea44f"></div>
+              <div class="heatmap-cell" style="background:#39d353"></div>
+              <span class="heatmap-legend-label">More</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="section tall">
+          <h2 class="section-title">Recent git activity</h2>
+          <div class="activity-list">
+            {#each gitActivity as a}
+              <div class="activity-item">
+                <span class="activity-repo">{a.repo}</span>
+                <span class="activity-msg">{a.message}</span>
+                <span class="activity-author">{a.author}</span>
+                <span class="activity-time">{new Date(a.timestamp).toLocaleDateString()}</span>
+              </div>
+            {:else}
+              <div class="activity-empty">No recent git activity</div>
+            {/each}
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- Upload heatmap (GitHub-style) -->
-    <section class="section">
-      <h2 class="section-title">Upload heatmap — last 90 days</h2>
-      <div class="heatmap-wrap">
-        <div class="heatmap-grid">
-          <span class="heatmap-day-label" style="grid-column:1;grid-row:2">Mon</span>
-          <span class="heatmap-day-label" style="grid-column:1;grid-row:4">Wed</span>
-          <span class="heatmap-day-label" style="grid-column:1;grid-row:6">Fri</span>
-          {#each heatmapData() as week}
-            {#each week as day}
-              <div class="heatmap-cell" style="background:{heatmapColor(day.count)};grid-column:{day.col + 2};grid-row:{day.row + 1};" title="{day.count} uploads on {day.day}"></div>
-            {/each}
+    <!-- Bottom row: charts side by side -->
+    <div class="bottom-row">
+      <div class="section wide">
+        <h2 class="section-title">Upload activity — last 30 days</h2>
+        <div class="bar-chart">
+          {#each chartDays as day, i}
+            <div class="bar-col">
+              <div class="bar-wrap" title="{day.count} file{day.count !== 1 ? 's' : ''} · {fmtBytes(day.bytes)} on {fmtDate(day.day)}">
+                <div class="bar" style="height:{(day.count / maxCount) * 100}%"></div>
+              </div>
+              {#if i === 0 || i === 14 || i === 29 || day.count === Math.max(...chartDays.map(d => d.count))}
+                <span class="bar-label">{shortDay(day.day)}</span>
+              {:else}
+                <span class="bar-label"></span>
+              {/if}
+            </div>
           {/each}
         </div>
-        <div class="heatmap-legend">
-          <span class="heatmap-legend-label">Less</span>
-          <div class="heatmap-cell" style="background:var(--bg-3)"></div>
-          <div class="heatmap-cell" style="background:#1a3a2a"></div>
-          <div class="heatmap-cell" style="background:#22663a"></div>
-          <div class="heatmap-cell" style="background:#2ea44f"></div>
-          <div class="heatmap-cell" style="background:#39d353"></div>
-          <span class="heatmap-legend-label">More</span>
-        </div>
       </div>
-    </section>
 
-    <!-- Upload activity chart -->
-    <section class="section">
-      <h2 class="section-title">Upload activity — last 30 days</h2>
-      <div class="bar-chart">
-        {#each chartDays as day, i}
-          <div class="bar-col">
-            <div class="bar-wrap" title="{day.count} file{day.count !== 1 ? 's' : ''} · {fmtBytes(day.bytes)} on {fmtDate(day.day)}">
-              <div class="bar" style="height:{(day.count / maxCount) * 100}%"></div>
-            </div>
-            {#if i === 0 || i === 14 || i === 29 || day.count === Math.max(...chartDays.map(d => d.count))}
-              <span class="bar-label">{shortDay(day.day)}</span>
-            {:else}
-              <span class="bar-label"></span>
-            {/if}
-          </div>
-        {/each}
-      </div>
-    </section>
-
-    <div class="two-col">
-      <!-- Storage growth line chart -->
-      <section class="section">
+      <div class="section wide">
         <h2 class="section-title">Storage growth</h2>
         {#if storageGrowth().length > 1}
           {@const growthData = storageGrowth()}
@@ -404,15 +458,12 @@
                 <stop offset="100%" stop-color="var(--accent)" stop-opacity="0.02"/>
               </linearGradient>
             </defs>
-            <!-- Y axis labels -->
             <text x="2" y="12" fill="var(--text-3)" font-size="7" font-family="Geist Mono, monospace">{fmtBytes(maxGrowthBytes)}</text>
             <text x="2" y="60" fill="var(--text-3)" font-size="7" font-family="Geist Mono, monospace">{fmtBytes(maxGrowthBytes / 2)}</text>
             <text x="2" y="110" fill="var(--text-3)" font-size="7" font-family="Geist Mono, monospace">0</text>
-            <!-- Grid lines -->
             <line x1="30" y1="10" x2="395" y2="10" stroke="var(--border)" stroke-width="0.5" opacity="0.5"/>
             <line x1="30" y1="58" x2="395" y2="58" stroke="var(--border)" stroke-width="0.5" opacity="0.5"/>
             <line x1="30" y1="106" x2="395" y2="106" stroke="var(--border)" stroke-width="0.5" opacity="0.5"/>
-            <!-- X axis month labels -->
             {#each growthData as d, i}
               {#if i === 0 || d.day.slice(8,10) === '01' || i === growthData.length - 1}
                 <text x={30 + (i / Math.max(1, growthData.length - 1)) * 365} y="132" fill="var(--text-3)" font-size="7" font-family="Geist Mono, monospace" text-anchor="middle">{d.day.slice(5,7)}/{d.day.slice(8,10)}</text>
@@ -424,10 +475,12 @@
         {:else}
           <div class="chart-empty">Not enough data yet</div>
         {/if}
-      </section>
+      </div>
+    </div>
 
-      <!-- Donut chart for file types -->
-      <section class="section">
+    <!-- Donut + type breakdown side by side -->
+    <div class="bottom-row">
+      <div class="section wide">
         <h2 class="section-title">File type distribution</h2>
         <div class="donut-wrap">
           <svg viewBox="0 0 120 120" class="donut-chart">
@@ -448,30 +501,29 @@
             {/each}
           </div>
         </div>
-      </section>
+      </div>
+
+      <div class="section wide">
+        <h2 class="section-title">File types</h2>
+        <div class="type-list">
+          {#each typeData as t}
+            <div class="type-row">
+              <span class="type-dot" style="background:{TYPE_COLORS[t.cat] ?? 'var(--text-3)'}"></span>
+              <span class="type-name">{t.cat}</span>
+              <span class="type-count">{t.count} file{t.count !== 1 ? 's' : ''}</span>
+              <div class="type-bar-wrap">
+                <div class="type-bar" style="width:{(t.bytes / totalTypeBytes) * 100}%; background:{TYPE_COLORS[t.cat] ?? 'var(--text-3)'}"></div>
+              </div>
+              <span class="type-bytes">{fmtBytes(t.bytes)}</span>
+            </div>
+          {/each}
+        </div>
+      </div>
     </div>
 
-    <!-- Type breakdown bars -->
-    <section class="section">
-      <h2 class="section-title">File types</h2>
-      <div class="type-list">
-        {#each typeData as t}
-          <div class="type-row">
-            <span class="type-dot" style="background:{TYPE_COLORS[t.cat] ?? 'var(--text-3)'}"></span>
-            <span class="type-name">{t.cat}</span>
-            <span class="type-count">{t.count} file{t.count !== 1 ? 's' : ''}</span>
-            <div class="type-bar-wrap">
-              <div class="type-bar" style="width:{(t.bytes / totalTypeBytes) * 100}%; background:{TYPE_COLORS[t.cat] ?? 'var(--text-3)'}"></div>
-            </div>
-            <span class="type-bytes">{fmtBytes(t.bytes)}</span>
-          </div>
-        {/each}
-      </div>
-    </section>
-
-    <div class="two-col">
-      <!-- Biggest files -->
-      <section class="section">
+    <!-- File lists side by side -->
+    <div class="bottom-row">
+      <div class="section wide">
         <h2 class="section-title">Biggest files</h2>
         <div class="file-list">
           {#each biggestFiles as f, i}
@@ -482,10 +534,9 @@
             </div>
           {/each}
         </div>
-      </section>
+      </div>
 
-      <!-- Recent uploads -->
-      <section class="section">
+      <div class="section wide">
         <h2 class="section-title">Recent uploads</h2>
         <div class="file-list">
           {#each recentFiles as f}
@@ -495,11 +546,11 @@
             </div>
           {/each}
         </div>
-      </section>
+      </div>
     </div>
 
     {#if mostAccessed.length > 0}
-      <section class="section">
+      <section class="section wide">
         <h2 class="section-title">Most accessed files</h2>
         <div class="file-list">
           {#each mostAccessed as f, i}
@@ -568,6 +619,47 @@
     font-size: 11px;
     color: var(--text-3);
   }
+
+  /* ── Two-panel rows ── */
+  .top-row, .bottom-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  .left-panel, .right-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .right-panel { align-items: stretch; }
+  .section.tall { height: 340px; }
+  .section.wide { height: auto; }
+
+  .cards.compact {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }
+  .cards.compact .card { padding: 12px; gap: 3px; }
+  .cards.compact .card-val { font-size: 18px; }
+  .cards.compact .card-label { font-size: 10px; }
+
+  /* ── Activity list ── */
+  .activity-list { display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+  .activity-item {
+    display: flex;
+    gap: 10px;
+    padding: 8px 10px;
+    background: var(--bg-3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 12px;
+  }
+  .activity-repo { font-family: ui-monospace, monospace; font-weight: 600; color: var(--text-1); flex-shrink: 0; }
+  .activity-msg { flex: 1; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .activity-author { color: var(--text-3); font-size: 11px; flex-shrink: 0; }
+  .activity-time { color: var(--text-3); font-size: 11px; font-family: ui-monospace, monospace; flex-shrink: 0; }
+  .activity-empty { color: var(--text-3); padding: 20px; text-align: center; }
 
   /* ── Section ── */
   .section {

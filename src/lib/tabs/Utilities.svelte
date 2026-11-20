@@ -1,7 +1,7 @@
 <!-- hello there, tf u doing on my code???? -->
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { IconRefresh, IconHistory, IconCopy, IconCheck, IconArrowLeft, IconDownload, IconWorld } from '@tabler/icons-svelte';
+  import { IconRefresh, IconHistory, IconCopy, IconCheck, IconArrowLeft, IconDownload, IconWorld, IconGitBranch, IconCode } from '@tabler/icons-svelte';
   import RobloxIcon from '$lib/components/icons/RobloxIcon.svelte';
   import CloudLogo from '$lib/components/icons/CloudLogo.svelte';
   import CloudSettings from '$lib/components/CloudSettings.svelte';
@@ -43,7 +43,7 @@
   };
   const CHANNELS = ['LIVE', 'ZLIVE', 'zcanary', 'zdev'];
 
-  let view = $state<'home' | 'roblox' | 'cloud' | 'minecraft'>('home');
+  let view = $state<'home' | 'roblox' | 'cloud' | 'minecraft' | 'git'>('home');
   let platform = $state('windows');
   let channel = $state('LIVE');
   let version = $state<string | null>(null);
@@ -54,6 +54,26 @@
   let lastChecked = $state<string | null>(null);
   let history = $state<HistoryEntry[]>([]);
   let copied = $state(false);
+
+  /* git repos state */
+  let gitRepos = $state<{ name: string; description: string; visibility: string; createdAt: number; updatedAt: number }[]>([]);
+  let gitLoading = $state(false);
+  let gitError = $state<string | null>(null);
+
+  async function fetchGitRepos() {
+    gitLoading = true;
+    gitError = null;
+    try {
+      const res = await fetch(`/api/git/repos?api_key=${encodeURIComponent(apiKey ?? '')}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      gitRepos = data.repos ?? [];
+    } catch (e: any) {
+      gitError = e?.message ?? 'failed to load git repos';
+    } finally {
+      gitLoading = false;
+    }
+  }
 
   async function fetchVersion() {
     loading = true;
@@ -117,6 +137,11 @@
     view = 'cloud';
   }
 
+  function openGit() {
+    view = 'git';
+    fetchGitRepos();
+  }
+
   onMount(() => {
     try { history = JSON.parse(localStorage.getItem('robloxVersionHistory') || '[]'); } catch { history = []; }
   });
@@ -156,6 +181,16 @@
         <div class="card-body">
           <span class="card-title">Minecraft</span>
           <span class="card-desc">Seed map for structures in Java &amp; Bedrock, plus a seed finder.</span>
+        </div>
+      </button>
+
+      <button class="card" onclick={openGit}>
+        <div class="card-banner banner-git">
+          <span class="card-icon"><IconGitBranch size={44} stroke={1.3} /></span>
+        </div>
+        <div class="card-body">
+          <span class="card-title">Git Repositories</span>
+          <span class="card-desc">Personal git server backed by Telegram storage. Clone, push, browse.</span>
         </div>
       </button>
     </div>
@@ -252,6 +287,59 @@
     </div>
   {:else if view === 'minecraft'}
     <MinecraftTool onback={() => (view = 'home')} />
+  {:else if view === 'git'}
+    <button class="back-btn" onclick={() => view = 'home'}><IconArrowLeft size={15}/> Utilities</button>
+
+    <div class="util-card">
+      <div class="util-head">
+        <IconGitBranch size={20} />
+        <div>
+          <h2>Git Repositories</h2>
+          <p class="util-sub">Personal git server. Clone with HTTPS, push with your API key as the password.</p>
+        </div>
+        <button class="util-refresh" onclick={fetchGitRepos} disabled={gitLoading} title="Refresh">
+          <span class="refresh-ico" class:spin={gitLoading}><IconRefresh size={16} /></span>
+        </button>
+      </div>
+
+      {#if gitLoading && gitRepos.length === 0 && !gitError}
+        <div class="util-empty">Loading repositories…</div>
+      {:else if gitError}
+        <div class="util-error">{gitError}</div>
+      {:else if gitRepos.length === 0}
+        <div class="util-empty">No repositories yet. Create one on the <a href="/git" target="_blank" rel="noopener">web UI</a>.</div>
+      {:else}
+        <div class="util-history">
+          {#each gitRepos as r}
+            <div class="util-history-row">
+              <span class="util-hv"><a href="/git/{r.name}" target="_blank" rel="noopener" class="repo-link">{r.name}</a></span>
+              <span class="util-hm">{r.visibility}</span>
+              <span class="util-hd">{new Date(r.updatedAt).toLocaleString()}</span>
+              <a href={`https://cloud.omarplayz.eu.org/git/${r.name}`} target="_blank" rel="noopener" class="util-copy" title="Clone URL">
+                <IconCode size={14} />
+              </a>
+            </div>
+          {/each}
+        </div>
+      {/if}
+
+      <div class="util-card">
+        <div class="util-head">
+          <IconCode size={20} />
+          <div>
+            <h2>Clone a repository</h2>
+            <p class="util-sub">Use your cloud API key as the git password when pushing.</p>
+          </div>
+        </div>
+        <div class="util-empty">
+          <pre class="git-cmd">git clone https://cloud.omarplayz.eu.org/git/&lt;repo-name&gt;
+cd &lt;repo-name&gt;
+# push (password = your API key)
+git push origin main</pre>
+          <p class="util-sub">Public repos can be cloned without auth. Private repos require your API key as the password.</p>
+        </div>
+      </div>
+    </div>
   {:else}
     <button class="back-btn" onclick={() => view = 'home'}><IconArrowLeft size={15}/> Utilities</button>
     <h1 class="page-title">{branding.name}'s Cloud</h1>
@@ -331,5 +419,28 @@
       repeating-linear-gradient(45deg, transparent, transparent 14px, rgba(255,255,255,.04) 14px, rgba(255,255,255,.04) 28px),
       linear-gradient(135deg, #141a14 0%, #0b0e0b 100%);
   }
+  .banner-git {
+    background:
+      radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--accent) 35%, transparent) 0%, transparent 60%),
+      repeating-linear-gradient(45deg, transparent, transparent 14px, rgba(255,255,255,.04) 14px, rgba(255,255,255,.04) 28px),
+      linear-gradient(135deg, #16161c 0%, #0b0b0e 100%);
+  }
+
+  .git-cmd {
+    display: block;
+    text-align: left;
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    font-family: ui-monospace, SFMono-Regular, monospace;
+    font-size: 12px;
+    color: var(--text-1);
+    margin-top: 10px;
+    overflow-x: auto;
+  }
+  .repo-link { color: var(--text-1); text-decoration: none; font-weight: 600; }
+  .repo-link:hover { color: var(--accent); text-decoration: underline; }
+
   @media (max-width: 640px) { .util-root { padding: 14px; } .util-root.wide { padding: 0; } }
 </style>
