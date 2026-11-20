@@ -59,6 +59,11 @@
   let gitRepos = $state<{ name: string; description: string; visibility: string; createdAt: number; updatedAt: number }[]>([]);
   let gitLoading = $state(false);
   let gitError = $state<string | null>(null);
+  let creatingGit = $state(false);
+  let newGitName = $state('');
+  let newGitDesc = $state('');
+  let newGitVis = $state<'public' | 'private'>('public');
+  let createGitError = $state<string | null>(null);
 
   async function fetchGitRepos() {
     gitLoading = true;
@@ -72,6 +77,29 @@
       gitError = e?.message ?? 'failed to load git repos';
     } finally {
       gitLoading = false;
+    }
+  }
+
+  async function createGitRepo() {
+    if (!newGitName.trim()) { createGitError = 'name is required'; return; }
+    creatingGit = true;
+    createGitError = null;
+    try {
+      const res = await fetch('/api/git/create/repo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newGitName.trim(), description: newGitDesc.trim(), visibility: newGitVis }),
+      });
+      const data = await res.json();
+      if (!res.ok) { createGitError = data.error || 'failed'; return; }
+      newGitName = '';
+      newGitDesc = '';
+      newGitVis = 'public';
+      await fetchGitRepos();
+    } catch (e: any) {
+      createGitError = e?.message ?? 'failed to create repo';
+    } finally {
+      creatingGit = false;
     }
   }
 
@@ -302,12 +330,47 @@
         </button>
       </div>
 
+      <div class="util-card">
+        <div class="util-head">
+          <IconCode size={20} />
+          <div>
+            <h2>Create Repository</h2>
+            <p class="util-sub">Create a new git repository on your personal server.</p>
+          </div>
+        </div>
+        {#if createGitError}
+          <div class="util-error">{createGitError}</div>
+        {/if}
+        <form class="create-form" onsubmit={(e) => { e.preventDefault(); createGitRepo(); }}>
+          <div class="util-controls">
+            <div class="util-group">
+              <span class="util-label">Name</span>
+              <input class="util-input" bind:value={newGitName} placeholder="my-repo" required />
+            </div>
+            <div class="util-group">
+              <span class="util-label">Description</span>
+              <input class="util-input" bind:value={newGitDesc} placeholder="optional" />
+            </div>
+            <div class="util-group">
+              <span class="util-label">Visibility</span>
+              <select class="util-input" bind:value={newGitVis}>
+                <option value="public">public</option>
+                <option value="private">private</option>
+              </select>
+            </div>
+            <button class="util-btn util-btn-primary" disabled={creatingGit}>
+              {creatingGit ? 'Creating…' : 'Create repository'}
+            </button>
+          </div>
+        </form>
+      </div>
+
       {#if gitLoading && gitRepos.length === 0 && !gitError}
         <div class="util-empty">Loading repositories…</div>
       {:else if gitError}
         <div class="util-error">{gitError}</div>
       {:else if gitRepos.length === 0}
-        <div class="util-empty">No repositories yet. Create one on the <a href="/git" target="_blank" rel="noopener">web UI</a>.</div>
+        <div class="util-empty">No repositories yet. Create one above.</div>
       {:else}
         <div class="util-history">
           {#each gitRepos as r}
@@ -395,6 +458,15 @@ git push origin main</pre>
   .util-pill { background: var(--bg-3); border: 1px solid var(--border); color: var(--text-2); padding: 6px 12px; border-radius: 999px; font-size: 12px; cursor: pointer; font-family: 'Geist', sans-serif; }
   .util-pill:hover { color: var(--text-1); border-color: var(--border-hover); }
   .util-pill.active { background: color-mix(in srgb, var(--accent) 15%, transparent); border-color: var(--accent); color: var(--text-1); }
+  .util-input { background: var(--bg-3); border: 1px solid var(--border); color: var(--text-1); padding: 8px 12px; border-radius: 8px; font-size: 13px; font-family: inherit; width: 100%; }
+  .util-input::placeholder { color: var(--text-3); }
+  .util-btn { background: var(--bg-3); border: 1px solid var(--border); color: var(--text-1); padding: 8px 16px; border-radius: 8px; font-size: 13px; cursor: pointer; font-family: inherit; }
+  .util-btn:hover { color: var(--text-1); border-color: var(--border-hover); }
+  .util-btn:disabled { opacity: .6; cursor: not-allowed; }
+  .util-btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .util-btn-primary:hover:not(:disabled) { filter: brightness(1.1); }
+  .create-form { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+  .util-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; align-items: end; }
   .util-version-box { background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; padding: 16px; min-height: 76px; }
   .util-version-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .util-version { font-family: ui-monospace, monospace; font-size: 15px; color: var(--text-1); word-break: break-all; }

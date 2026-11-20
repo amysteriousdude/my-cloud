@@ -12,7 +12,7 @@ const HTML_PAGE = `<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ts git repo — cloud.omarplayz.eu.org</title>
 <style>
-  :root { --bg: #0f172a; --bg2: #1e293b; --border: #334155; --text: #f8fafc; --text2: #cbd5e1; --text3: #94a3b8; --accent: #818cf8; --accent-hover: #6366f1; --mono: #a5f3fc; --success: #34d399; }
+  :root { --bg: #0f172a; --bg2: #1e293b; --border: #334155; --text: #f8fafc; --text2: #cbd5e1; --text3: #94a3b8; --accent: #818cf8; --accent-hover: #6366f1; --mono: #a5f3fc; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: var(--bg); color: var(--text); font-family: ui-sans-serif, system-ui, sans-serif; line-height: 1.6; }
   .container { max-width: 700px; margin: 0 auto; padding: 48px 20px; }
@@ -30,21 +30,6 @@ const HTML_PAGE = `<!DOCTYPE html>
   .clone-hint code { color: var(--mono); }
   a { color: var(--accent); text-decoration: none; }
   a:hover { text-decoration: underline; }
-
-  /* create form */
-  .create-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 32px; }
-  .create-card h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: var(--text); }
-  .create-form { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end; }
-  .create-form input[type="text"], .create-form input[type="url"] { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 10px 12px; border-radius: 8px; font-family: ui-monospace, monospace; font-size: 13px; }
-  .create-form select { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 10px 12px; border-radius: 8px; font-size: 13px; }
-  .create-btn { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 10px 20px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
-  .create-btn:hover { background: var(--accent-hover); }
-  .create-result { margin-top: 14px; padding: 12px 16px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; font-family: ui-monospace, monospace; font-size: 12px; color: var(--success); display: none; }
-  .create-result.show { display: block; }
-  .create-error { margin-top: 10px; color: var(--red, #f87171); font-size: 12px; font-family: ui-monospace, monospace; display: none; }
-
-  .clone-hint { margin-top: 32px; color: var(--text3); font-size: 14px; }
-  .clone-hint code { color: var(--mono); }
 </style>
 </head>
 <body>
@@ -52,55 +37,11 @@ const HTML_PAGE = `<!DOCTYPE html>
   <span class="badge">ts · git · cloud</span>
   <h1>ts is my git repo</h1>
   <p class="lead">A personal git server riding on Telegram storage. Clone, push, and browse repositories straight from the cloud.</p>
-
-  <div class="create-card">
-    <h2>Create a new repository</h2>
-    <form class="create-form" id="createForm">
-      <input type="text" name="name" placeholder="repo-name" required minlength="1" maxlength="60" />
-      <input type="text" name="description" placeholder="description (optional)" />
-      <select name="visibility">
-        <option value="public">public</option>
-        <option value="private">private</option>
-      </select>
-      <button type="submit" class="create-btn">Create</button>
-    </form>
-    <div class="create-result" id="createResult"></div>
-    <div class="create-error" id="createError"></div>
-  </div>
-
   <div class="hint">git clone https://cloud.omarplayz.eu.org/git/&lt;repo-name&gt;</div>
   <div class="repos-grid" id="repos"></div>
   <div class="clone-hint">Not in a browser? You're seeing the plain-text endpoint. Open <a href="/git">https://cloud.omarplayz.eu.org/git</a> for the web version.</div>
 </div>
 <script>
-  (async () => {
-    const form = document.getElementById('createForm');
-    const result = document.getElementById('createResult');
-    const error = document.getElementById('createError');
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      result.style.display = 'none';
-      error.style.display = 'none';
-      const fd = new FormData(form);
-      const body = { name: fd.get('name'), description: fd.get('description'), visibility: fd.get('visibility') };
-      try {
-        const res = await fetch('/api/git/create/repo', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
-        const data = await res.json();
-        if (!res.ok) { error.textContent = data.error || 'failed'; error.style.display = 'block'; return; }
-        result.textContent = 'Created ' + data.name + ' — clone: git clone ' + data.cloneUrl;
-        result.style.display = 'block';
-        form.reset();
-      } catch (err) {
-        error.textContent = err.message ?? 'request failed';
-        error.style.display = 'block';
-      }
-    });
-  })();
-
   (async () => {
     try {
       const res = await fetch('/api/git/repos');
