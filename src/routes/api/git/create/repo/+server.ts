@@ -49,7 +49,19 @@ export const POST: RequestHandler = async ({ request, url, cookies, platform }) 
 		return new Response(JSON.stringify({ error: `repo "${name}" already exists` }), { status: 409, headers: { 'Content-Type': 'application/json' } })
 	}
 
-	await store.createRepo(name, body.description ?? '', visibility)
+	try {
+		await store.createRepo(name, body.description ?? '', visibility)
+	} catch (e: any) {
+		// Surface the real failure — a bare "Internal Error" is useless when
+		// debugging storage/pinning issues from the outside.
+		return new Response(
+			JSON.stringify({
+				error: e?.message ?? 'create failed',
+				at: String(e?.stack ?? '').split('\n').slice(0, 5).join(' | ')
+			}),
+			{ status: 500, headers: { 'Content-Type': 'application/json' } }
+		)
+	}
 
 	return new Response(JSON.stringify({ ok: true, name, cloneUrl: `https://cloud.omarplayz.eu.org/git/${name}` }), {
 		status: 201,

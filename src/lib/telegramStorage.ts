@@ -103,10 +103,23 @@ export function releaseMutex(): void {
 
 const CACHE_FILE = path.join(os.tmpdir(), '_telegram_robust_cache.json');
 
+/**
+ * The git server's registry lives INSIDE the API-key index rather than as its
+ * own pinned message. A chat has exactly one pin — two pinners fight over it
+ * and whichever wins silently breaks the other (the index becomes unreadable,
+ * or git repos vanish). Keeping git state here means there is one pinner.
+ */
+export type GitRegistry = {
+  repos: Record<string, string>; // repo name -> TG file_id of RepoIndex
+  sessions?: Record<string, { userId: string; expiresAt: number }>;
+  tokens?: Record<string, { name: string; createdAt: number; lastUsed: number | null }>;
+};
+
 type IndexFile = {
   keys: Record<string, ApiKeyRecord>;
   registryFileId?: string;
   registryMessageId?: number;
+  git?: GitRegistry;
   /**
    * A chat has exactly one pin, and writeIndex() takes it on every save. This
    * slot records where the vault's own index went when it lost the pin, so the
@@ -186,6 +199,39 @@ async function pinChatMessage(message_id: number): Promise<void> {
   await axios.post(`${TELE_API}/pinChatMessage`, null, {
     params: { chat_id: CHAT_ID, message_id, disable_notification: true }
   });
+}
+
+/**
+ * uploadBufferDirect
+ * Upload bytes/string straight from memory. The temp-file route
+ * (`fs.promises.writeFile` + read back) is impossible here: `fs` is an unenv
+ * stub on the Workers runtime and throws "fs.writeFile is not implemented",
+ * which silently broke every index/registry write.
+ */
+async function uploadBufferDirect(
+  data: string | Uint8Array,
+  filename: string
+): Promise<{ message_id: number; file_id: string }> {
+  if (!TELE_API) throw new Error('Telegram not configured');
+
+  const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data;
+  const form = new FormData();
+  form.append('chat_id', CHAT_ID);
+  form.append('document', new Blob([bytes as unknown as BlobPart]), filename);
+
+  const res = await fetch(`${TELE_API}/sendDocument`, { method: 'POST', body: form });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`sendDocument network error: ${res.status} ${res.statusText} ${txt}`);
+  }
+
+  const json = await res.json().catch(() => null);
+  if (!json?.ok) throw new Error('sendDocument failed: ' + JSON.stringify(json));
+
+  return {
+    message_id: json.result.message_id as number,
+    file_id: json.result.document.file_id as string
+  };
 }
 
 /* -------------------- API key index (pinned, read-only after seeding) -------------------- */
@@ -275,6 +321,29 @@ export async function getRecordByApiKey(apiKey: string): Promise<ApiKeyRecord | 
   return null;
 }
 
+/* -------------------- Git registry (stored in the index, never pinned) -------------------- */
+
+export async function readGitRegistry(): Promise<GitRegistry> {
+  try {
+    const idx = await readIndexFile();
+    return idx.git ?? { repos: {} };
+  } catch {
+    return { repos: {} };
+  }
+}
+
+export async function writeGitRegistry(git: GitRegistry): Promise<void> {
+  await acquireMutex();
+  try {
+    const idx = await readIndexFile();
+    // writeIndex re-reads the current index itself; passing keys + the git
+    // patch preserves registryFileId/vaultIndexFileId while swapping git in.
+    await writeIndex(idx.keys, { git });
+  } finally {
+    releaseMutex();
+  }
+}
+
 /* -------------------- API key helpers -------------------- */
 
 export async function generateApiKeyForDiscordId(discordId: string, username?: string): Promise<ApiKeyRecord> {
@@ -324,14 +393,12 @@ async function writeIndex(index: Record<string, ApiKeyRecord>, extra?: Partial<I
     payload.vaultIndexFileId = prevPinned.document.file_id;
   }
 
-  const tmp = `/tmp/telegram_index_${Date.now()}.json`;
-  await fs.promises.writeFile(tmp, JSON.stringify(payload, null, 2), 'utf8');
-
-  const { message_id } = await uploadFileStream(tmp, `index_${Date.now()}.json`);
+  const { message_id } = await uploadBufferDirect(
+    JSON.stringify(payload, null, 2),
+    `index_${Date.now()}.json`
+  );
   await pinChatMessage(message_id);
   await updateLocalCache({ pinned_message_id: message_id, indexFile: payload });
-
-  await fs.promises.unlink(tmp).catch(() => {});
 
   // Only ever delete a message we can prove is one of ours. The vault pins
   // its own index into the same chat (src/routes/api/vault/_vault.ts), and
@@ -411,11 +478,10 @@ export async function writeRegistry(registry: Record<string, any>): Promise<void
 async function writeRegistryInternal(registry: Record<string, any>): Promise<void> {
   const oldPtr = await getRegistryPtr();
 
-  const tmp = `/tmp/_registry_${Date.now()}.json`;
-  await fs.promises.writeFile(tmp, JSON.stringify(registry, null, 2), 'utf8');
-
-  const { file_id, message_id } = await uploadFileStream(tmp, `_registry_${Date.now()}.json`);
-  await fs.promises.unlink(tmp).catch(() => {});
+  const { file_id, message_id } = await uploadBufferDirect(
+    JSON.stringify(registry, null, 2),
+    `_registry_${Date.now()}.json`
+  );
 
   await updateLocalCache({
     registryData: registry,

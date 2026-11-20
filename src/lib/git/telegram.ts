@@ -1,5 +1,5 @@
 import { getSessionToken } from '$lib/crypto.js'
-import { getRecordByApiKey } from '$lib/telegramStorage.js'
+import { getRecordByApiKey, readGitRegistry, writeGitRegistry } from '$lib/telegramStorage.js'
 
 export interface RepoMeta {
 	name: string
@@ -80,27 +80,15 @@ export class GitStore {
 		await this.api('deleteMessage', { chat_id: this.channelId, message_id: messageId }).catch(() => {})
 	}
 
-	// --- Registry (pinned message) ---
+	// --- Registry (stored in the my-cloud API-key index; the chat has exactly
+	// one pin and it belongs to the index, so git never pins anything) ---
 
-	private async getRegistry(): Promise<{ data: Registry; msgId: number | null }> {
-		try {
-			const chat = await this.api('getChat', { chat_id: this.channelId })
-			const pinned = chat?.pinned_message
-			if (!pinned || !pinned.text) return { data: { repos: {} }, msgId: null }
-			return { data: JSON.parse(pinned.text), msgId: pinned.message_id }
-		} catch {
-			return { data: { repos: {} }, msgId: null }
-		}
+	private async getRegistry(): Promise<{ data: Registry; msgId: null }> {
+		return { data: await readGitRegistry(), msgId: null }
 	}
 
-	private async saveRegistry(reg: Registry, msgId: number | null): Promise<void> {
-		const text = JSON.stringify(reg)
-		if (msgId) {
-			await this.api('editMessageText', { chat_id: this.channelId, message_id: msgId, text })
-		} else {
-			const msg = await this.api('sendMessage', { chat_id: this.channelId, text })
-			await this.api('pinChatMessage', { chat_id: this.channelId, message_id: msg.message_id, disable_notification: true })
-		}
+	private async saveRegistry(reg: Registry, _msgId: number | null): Promise<void> {
+		await writeGitRegistry(reg)
 	}
 
 	// --- Repo Index ---
